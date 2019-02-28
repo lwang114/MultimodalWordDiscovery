@@ -1,0 +1,46 @@
+defaults:
+  experiment:
+    model_file: ../exp/feb26_normalize_over_time/output/<EXP>.mod
+    hyp_file: ../exp/feb26_normalize_over_time/output/<EXP>.hyp
+    out_file: ../exp/feb26_normalize_over_time/output/<EXP>.out
+    err_file: ../exp/feb26_normalize_over_time/output/<EXP>.err
+    run_for_epochs: 20
+    eval_metrics: bleu
+  train:
+    default_layer_dim: 512
+    restart_trainer: True
+    trainer: Adam
+    learning_rate: 0.0002
+    lr_decay: 0.5
+    dev_metrics: bleu
+    training_corpus: !BilingualTrainingCorpus
+      train_src: ../../data/flickr30k/phoneme_level/src_flickr30k.txt
+      train_trg: ../../data/flickr30k/phoneme_level/trg_flickr30k.txt
+      dev_src: ../../data/flickr30k/phoneme_level/src_flickr30k.txt
+      dev_trg: ../../data/flickr30k/phoneme_level/trg_flickr30k.txt
+    corpus_parser: !BilingualCorpusParser
+      src_reader: !PlainTextReader {}
+      trg_reader: !PlainTextReader {}
+    model: !DefaultTranslator
+      src_embedder: !SimpleWordEmbedder
+        emb_dim: 512
+      encoder: !LSTMEncoder
+        layers: 1
+      attender: !StandardAttender
+        hidden_dim: 512
+        state_dim: 512
+        input_dim: 512
+      trg_embedder: !SimpleWordEmbedder
+        emb_dim: 512
+      decoder: !MlpSoftmaxDecoder
+        layers: 1
+        mlp_hidden_dim: 512
+  decode:
+    src_file: ../../data/flickr30k/phoneme_level/src_flickr30k.txt
+    report_path: ../exp/feb26_normalize_over_time/output/reports/<EXP>
+  evaluate:
+    ref_file: ../../data/flickr30k/phoneme_level/trg_flickr30k.txt
+
+phoneme_level:
+  train:
+    dropout: 0.1
