@@ -14,10 +14,10 @@ defaults:
     lr_decay: 0.5
     dev_metrics: wer
     training_corpus: !BilingualTrainingCorpus
-      train_src: examples/data/head.ja #train.ja
-      train_trg: examples/data/head.en #train.en
-      dev_src: examples/data/head.ja #dev.ja
-      dev_trg: examples/data/head.en #dev.en
+      train_src: ../../data/flickr30k/word_level/src_flickr30k.txt #train.ja
+      train_trg: ../../data/flickr30k/word_level/trg_flickr30k.txt  #train.en
+      dev_src: ../../data/flickr30k/word_level/src_flickr30k.txt #dev.ja
+      dev_trg: ../../data/flickr30k/word_level/trg_flickr30k.txt    
     corpus_parser: !BilingualCorpusParser
       src_reader: !PlainTextReader {}
       trg_reader: !PlainTextReader {}
@@ -37,12 +37,12 @@ defaults:
         mlp_hidden_dim: 512
       trg_data: !StandardRetrievalDatabase
         reader: !PlainTextReader {}
-        database_file: examples/data/head.en
+        database_file: ../../data/flickr30k/word_level/src_flickr30k.txt
   decode:
-    src_file: examples/data/head.ja #test.ja
-    report_path: examples/output/<EXP>
+    src_file: ../../data/flickr30k/word_level/src_flickr30k.txt #test.ja
+    report_path: ../exp/feb27_word_level_clustering/<EXP>
   evaluate:
-    ref_file: examples/data/head.en #test.en
+    ref_file: ../../data/flickr30k/word_level/flickr30k_alignment.ref #test.en
 
 word_discovery_dropout-0.1:
   train:
