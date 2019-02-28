@@ -26,7 +26,7 @@ from decorators import recursive_assign, recursive
 from lxml import etree
 
 
-DEBUG = True
+DEBUG = False
 class WordDiscoverer(Translator, Serializable, HTMLReportable):
   '''
   A default translator based on attentional sequence-to-sequence models.
@@ -150,12 +150,13 @@ class WordDiscoverer(Translator, Serializable, HTMLReportable):
       # Append output to the outputs
       alignment = np.argmax(attentions.npvalue(), axis=1).tolist()
       output_actions = [str(trg_idx) for trg_idx in alignment] 
-    
+   
+      src_words = [self.src_vocab[w] for w in src_sent]
+      trg_words = [self.trg_vocab[w] for w in trg_sent]
+  
       # In case of reporting  
       start_time = time.time()
       if self.report_path is not None:
-        src_words = [self.src_vocab[w] for w in src_sent]
-        trg_words = [self.trg_vocab[w] for w in trg_sent]
         # TODO: Double check this
         self.set_html_input(idx, src_words, trg_words, attentions)
         self.set_html_path('{}.{}'.format(self.report_path, str(idx)))
@@ -174,37 +175,13 @@ class WordDiscoverer(Translator, Serializable, HTMLReportable):
         data_info.append(sent_info)
         with open(self.report_path + '.json', 'w') as f:
           json.dump(data_info, f, indent=4, sort_keys=True)
-      print('report takes %s to generate', str(start_time - time.time()))
+      if DEBUG:
+        print('report takes %s to generate', str(time.time() - start_time))
       # XXX: A hack to allow alignment to be the output
-      trg_vocab_dict = {str(i): w for i, w in enumerate(trg_words)}
-      outputs.append(TextOutput(output_actions, trg_vocab_dict))
+      trg_sent_dict = {str(i): w for i, w in enumerate(trg_words)}
+      outputs.append(TextOutput(output_actions, trg_sent_dict))
     return outputs
   
-  '''def align(self, src, trg):
-    embeddings = self.src_embedder.embed_sent(src)
-    encodings = self.src_encoder.transduce(embeddings)
-    self.attender.start_sent(src)
-
-    # Convert the list of trg variable-length sequence to a list of fixed-length ref-word sequence,
-    # with each ref-word autobatched
-    if not batcher.is_batched(src):
-      src = batcher.mark_as_batch([src])
-
-    trg_lens = [len(single_trg) for single_trg in trg]
-    maxlen = max(trg_lens)
-    
-    for i in range(maxlen):
-      ref_word = batcher.mark_as_batch([single_trg[i] if i < len(single_trg) else Vocab.ES for single_trg in trg])    
-      trg_embedding = self.trg_embedder.embed_sent(ref_word)   
-      # Generate the attention vectors for each target words
-      self.attender.calc_attention(trg_embedding)
-    
-    # Normalize each attention vector over the target words
-    attentions = self.attender.normalize().values()
-
-    # Save the attention weights
-    '''    
-
   @recursive_assign
   def html_report(self, context=None):
     assert(context is None)
