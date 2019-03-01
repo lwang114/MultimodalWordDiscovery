@@ -1,9 +1,9 @@
 defaults:
   experiment:
-    model_file: ../exp/feb26_normalize_over_time/output/<EXP>.mod
-    hyp_file: ../exp/feb26_normalize_over_time/output/<EXP>.hyp
-    out_file: ../exp/feb26_normalize_over_time/output/<EXP>.out
-    err_file: ../exp/feb26_normalize_over_time/output/<EXP>.err
+    model_file: ../exp/feb26_normalize_over_time/phoneme_level/output/<EXP>.mod
+    hyp_file: ../exp/feb26_normalize_over_time/phoneme_level/output/<EXP>.hyp
+    out_file: ../exp/feb26_normalize_over_time/phoneme_level/output/<EXP>.out
+    err_file: ../exp/feb26_normalize_over_time/phoneme_level/output/<EXP>.err
     run_for_epochs: 20
     eval_metrics: bleu
   train:
@@ -37,7 +37,7 @@ defaults:
         mlp_hidden_dim: 512
   decode:
     src_file: ../../data/flickr30k/phoneme_level/src_flickr30k.txt
-    report_path: ../exp/feb26_normalize_over_time/output/reports/<EXP>
+    report_path: ../exp/feb27_clustering/phoneme_level/output/<EXP>
   evaluate:
     ref_file: ../../data/flickr30k/phoneme_level/trg_flickr30k.txt
 

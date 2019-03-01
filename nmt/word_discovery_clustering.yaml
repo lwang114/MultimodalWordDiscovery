@@ -1,10 +1,10 @@
 defaults:
   experiment:
-    model_file: examples/output/<EXP>.mod
-    hyp_file: examples/output/<EXP>.hyp
-    out_file: examples/output/<EXP>.out
-    err_file: examples/output/<EXP>.err
-    run_for_epochs: 1
+    model_file: ../exp/feb27_word_level_clustering/output/<EXP>.mod
+    hyp_file: ../exp/feb27_word_level_clustering/output/<EXP>.hyp
+    out_file: ../exp/feb27_word_level_clustering/output/<EXP>.out
+    err_file: ../exp/feb27_word_level_clustering/output/<EXP>.err
+    run_for_epochs: 20
     eval_metrics: bleu
   train:
     default_layer_dim: 512
@@ -12,7 +12,7 @@ defaults:
     trainer: Adam
     learning_rate: 0.0002
     lr_decay: 0.5
-    dev_metrics: wer
+    dev_metrics: bleu
     training_corpus: !BilingualTrainingCorpus
       train_src: ../../data/flickr30k/word_level/src_flickr30k.txt #train.ja
       train_trg: ../../data/flickr30k/word_level/trg_flickr30k.txt  #train.en
@@ -37,7 +37,7 @@ defaults:
         mlp_hidden_dim: 512
       trg_data: !StandardRetrievalDatabase
         reader: !PlainTextReader {}
-        database_file: ../../data/flickr30k/word_level/src_flickr30k.txt
+        database_file: ../../data/flickr30k/word_level/trg_flickr30k.txt
   decode:
     src_file: ../../data/flickr30k/word_level/src_flickr30k.txt #test.ja
     report_path: ../exp/feb27_word_level_clustering/<EXP>
