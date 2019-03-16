@@ -4,6 +4,7 @@ import json
 DEBUG = False
 END = '</s>'
 NULL = 'NULL'
+
 class XNMTPostprocessor():
   def __init__(self, input_dir, is_phoneme=True):
     self.input_dir = input_dir
@@ -42,6 +43,9 @@ class XNMTPostprocessor():
     
     with open(out_file, 'w') as fp:
       json.dump(alignments, fp, indent=4, sort_keys=True)
+
+
+#def draw_attention(self, gold_align_file, pred_score_file):
 
 def alignment_to_cluster(ali_file, out_file='cluster.json'):
   def _find_distinct_tokens(data):

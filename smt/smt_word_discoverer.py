@@ -232,13 +232,18 @@ class IBMModel1:
         # Remove the following code (a placeholder return that aligns each foreign word with the null word in position zero of the target sentence)
         ###
         alignment = [0]*len(fSen)
+        alignProbs = []
         for i, fw in enumerate(fSen):
           bestProb = float('-inf')
+          alignProb = []
           for j, tw in enumerate(tSen):
+            alignProb.append(self.trans[tw][fw])
             if self.trans[tw][fw] > bestProb:
               alignment[i] = j
               bestProb = self.trans[tw][fw]
-        return alignment   # Your code above should return the correct alignment instead
+          alignProbs.append(alignProb)
+
+        return alignment, alignProbs   # Your code above should return the correct alignment instead
 
     # Return q(tLength | fLength), the probability of producing an English sentence of length tLength given a non-English sentence of length fLength
     # (Can either return log probability or regular probability)
@@ -293,7 +298,7 @@ class IBMModel1:
       if DEBUG:
         print(len(self.fCorpus))
       for i, (fSen, tSen) in enumerate(zip(self.fCorpus, self.tCorpus)):
-        alignment = self.align(fSen, tSen)
+        alignment, alignProbs = self.align(fSen, tSen)
         #if DEBUG:
         #  print(fSen, tSen)
         #  print(alignment)
@@ -302,6 +307,7 @@ class IBMModel1:
             'image_concepts': tSen, 
             'caption': fSen,
             'alignment': alignment,
+            'align_probs': alignProbs,
             'is_phoneme': is_phoneme
           }
         aligns.append(align_info)
@@ -336,7 +342,7 @@ if __name__ == "__main__":
     #model.computeTranslationLengthProbabilities()
     #model.printModel('after_training')
     #model.printAlignment('mscoco_val_pred_alignment.txt')
-    model.printAlignment('flickr30k_pred_alignment.txt', is_phoneme=True)
+    model.printAlignment('flickr30k_pred_alignment', is_phoneme=True)
 
     # Use model to get an alignment
     #fSen = 'No pierdas el tiempo por el camino .'.split()

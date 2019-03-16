@@ -11,10 +11,10 @@ from PIL import Image
 #from torchvision import transforms
 #from torchvision import models
 
-DEBUG = False
+DEBUG = True
 NULL = 'NULL'
 UNK = 'UNK'
-PUNCT = ['.', ',', '?', '!', '\"', '`', '\'', ';']
+PUNCT = ['.', ',', '?', '!', '`', '\'', ';'] #'\"']
 
 # TODO: Add config options
 '''class MSCOCO_Preprocessor():
@@ -160,6 +160,43 @@ class Flickr_Preprocessor(object):
     with open(out_file, 'w') as f:
       json.dump(pairs, f, indent=4, sort_keys=True)
 
+  def train_test_split(self, in_file, n_test_example, indices=None):
+    with open(in_file, 'r') as f:
+      data = f.read().split('\n')
+
+    test_data = ['%s\n%s\n' % (data[3*i], data[3*i+1]) if not indices else indices[i] for i in range(n_test_example)]
+    train_data = data[3*n_test_example:]
+    with open(in_file+'.train', 'w') as f:
+      f.write('\n'.join(train_data))
+    with open(in_file+'.test', 'w') as f:
+      f.write('\n'.join(test_data))
+
+  def train_test_split_from_file(self, in_file, test_file_list, out_file='flickr30k', indices=None):
+    with open(in_file, 'r') as f:
+      data = json.load(f)
+
+    with open(test_file_list, 'r') as f:
+      test_files = f.read().split('\n')
+
+    train_data = []
+    test_data = []
+    test_ids = [f.split('_')[0] for f in test_files]
+    for pair in data:
+      concepts = [bbox_info[0] for bbox_info in pair['image_concepts']]
+      concepts = ' '.join(sorted(list(set(concepts))))
+      if pair['image_id'] in test_ids:
+        for caption in pair['caption_phonemes']:
+          test_data.append('%s\n%s\n' % (concepts, caption))
+      else:
+        for caption in pair['caption_phonemes']:
+          train_data.append('%s\n%s\n' % (concepts, caption))
+    print('Number of test data: ', len(test_data))
+    with open(out_file+'.train', 'w') as f:
+      f.write('\n'.join(train_data))
+    with open(out_file+'.test', 'w') as f:
+      f.write('\n'.join(test_data))
+
+
   # XXX: Only works for English
   def word_to_phoneme(self, in_file, out_file='phoneme_concept_info.json'):
     with open(in_file, 'r') as f:
@@ -170,7 +207,8 @@ class Flickr_Preprocessor(object):
       data_info[i]['caption_phonemes'] = []
       for sent in sents:
         phn_seqs = []
-        sent = word_tokenize(sent)
+        # XXX: For flickr, this is fine
+        sent = sent.split() #word_tokenize(sent)
         for word in sent: 
           if word in PUNCT:
             continue
@@ -271,7 +309,7 @@ class Flickr_Preprocessor(object):
 
       for sent in sents:
         single_src = sent
-        single_trg = NULL + ' '.join(concepts)
+        single_trg = ' '.join(concepts) #NULL + ' ' + ' '.join(concepts)
         
         src.append(single_src)
         trg.append(single_trg)
@@ -305,8 +343,8 @@ class Flickr_Preprocessor(object):
           concepts.append(c[0])
         concepts = sorted(list(set(concepts)))
         concepts = [NULL] + concepts
-        if DEBUG:
-          print('concepts for alignment', concepts)
+        #if DEBUG:
+        #  print('concepts for alignment', concepts)
       
         concept2pos = {c:i for i, c in enumerate(concepts)}
 
@@ -315,8 +353,9 @@ class Flickr_Preprocessor(object):
           if is_phoneme:
             phrase = self._toPhoneme(phrase)
           start = self._findTokenIdx(sent, phrase) 
-          #if DEBUG:
-          #  print(concept2pos[c[0]])
+          if DEBUG:
+            if i == 1745:
+              print('image concept, start idx: ', sent, phrase, start)
           if start == -1:
             continue
           
@@ -405,8 +444,6 @@ class Flickr_Preprocessor(object):
           clusters[c].append(w)
           clusters[c] = list(set(clusters[c]))
       
- 
-
     with open(cluster_file, 'w') as f:
       json.dump(clusters, f, indent=4, sort_keys=True)
 
@@ -512,7 +549,7 @@ class Flickr_Preprocessor(object):
     if DEBUG:
       print(concept)
     return concept.split('.')[0]
-
+    
 if __name__ == '__main__':
   '''instance_file = 'annotations/instances_val2014.json'
   caption_file = 'annotations/captions_val2014.json'
@@ -528,6 +565,9 @@ if __name__ == '__main__':
   json_file = datapath + 'flickr30k/word_level/flickr30k_info_text_concept.json'
   category_file = datapath + 'imagenet_class_index.json'
   preproc = Flickr_Preprocessor(instance_file, alignment_file, caption_file, category_file=category_file, image_path='../../data/flickr30k/flickr30k-images/')
+  #preproc.train_test_split(datapath+'flickr30k/phoneme_level/flickr30k.txt', 100)
+  preproc.train_test_split_from_file(datapath+'flickr30k/phoneme_level/flickr30k_info_phoneme_concept.json', test_file_list='/Users/liming/research/data/flickr/flickr8k_test.txt')
+
   '''
   preproc.extract_info(json_file)
   preproc.json_to_text(json_file, 'flickr30k.txt')
@@ -542,5 +582,5 @@ if __name__ == '__main__':
   preproc.create_gold_alignment(datapath + 'flickr30k/word_level/flickr30k_info_text_concept.json', datapath + 'flickr30k/word_level/flickr30k_gold_alignment.json')
   preproc.alignment_to_clusters(datapath + 'flickr30k/word_level/flickr30k_gold_alignment.json', datapath + 'flickr30k/word_level/flickr30k_gold_clusters.json')
   preproc.alignment_to_clusters(datapath + 'flickr30k/phoneme_level/flickr30k_gold_alignment.json', datapath + 'data/flickr30k/phoneme_level/flickr30k_gold_clusters.json')'''
-  preproc.alignment_to_clusters('../smt/exp/ibm1_phoneme_level_clustering/flickr30k_pred_alignment.json', '../smt/exp/ibm1_phoneme_level_clustering/flickr30k_pred_clusters.json')
+  #preproc.alignment_to_clusters('../smt/exp/ibm1_phoneme_level_clustering/flickr30k_pred_alignment.json', '../smt/exp/ibm1_phoneme_level_clustering/flickr30k_pred_clusters.json')
    

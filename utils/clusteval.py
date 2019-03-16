@@ -2,8 +2,9 @@ import numpy as np
 import json
 from nltk.metrics import recall, precision, f_measure
 from nltk.metrics.distance import edit_distance
+from sklearn.metrics import roc_curve 
 
-DEBUG = True
+DEBUG = False
 NULL = 'NULL'
 END = '</s>'
 #
@@ -51,7 +52,95 @@ def cluster_purity(pred, gold):
     n += len(set(p))
 
   return cp / n
-   
+
+def boundary_retrieval_metrics(pred, gold, out_file='class_retrieval_scores.txt'):
+  assert len(pred) == len(gold)
+  n = len(pred)
+  prec = 0.
+  rec = 0.
+
+  # Local retrieval metrics
+  for n_ex, (p, g) in enumerate(zip(pred, gold)):
+    p_ali = p['alignment']
+    g_ali = g['alignment']
+    v = len(set(g_ali))
+    confusion = np.zeros((v, v))
+    
+    assert len(p_ali) == len(g_ali)
+    if DEBUG:
+      print('n_ex, v, p_ali, set(g_ali): ', n_ex, v, p_ali, set(g_ali))
+     
+    for a_p, a_g in zip(p_ali, g_ali):
+      confusion[a_g, a_p] += 1
+  
+    for i in range(v):
+      if confusion[i][i] == 0:
+        continue
+      rec += 1 / v * confusion[i][i] / np.sum(confusion[i])   
+      prec += 1 / v * confusion[i][i] / np.sum(confusion[:, i])
+       
+  recall = rec / n
+  precision = prec / n
+  f_measure = 2 / (1 / recall + 1 / precision)
+  print('Local alignment recall: ', recall)
+  print('Local alignment precision: ', precision)
+  print('Local alignment f_measure: ', f_measure)
+
+  '''def _find_distinct_tokens(data):
+    tokens = set()
+    for datum in data:
+      if 'image_concepts' in datum: 
+        tokens = tokens.union(set(datum['image_concepts']))
+      elif 'foreign_sent' in datum:
+        tokens = tokens.union(set(datum['foreign_sent']))
+    return list(tokens)
+  
+  # Retrieval metrics across classes
+  classes = _find_distinct_tokens(gold)
+  class2id = {c:i for i, c in enumerate(classes)}
+  n_c = len(classes)
+  g_confusion = np.zeros((n_c, 2, 2))
+
+  for p, g in zip(pred, gold):
+    p_ali = p['alignment']
+    g_ali = g['alignment']
+    p_concepts = p['image_concepts']
+    g_concepts = g['image_concepts']
+    for a_p, a_g in zip(p_ali, g_ali):
+      for i_c in range(n_c):
+        p_c = p_concepts[a_p]
+        g_c = g_concepts[a_g]
+        g_confusion[class2id[g_c], int(class2id[g_c] == i_c), int(class2id[p_c] == i_c)] += 1
+  
+  class_recall = np.zeros((n_c,))
+  class_precision = np.zeros((n_c,))
+  for i in range(n_c):
+    class_recall[i] = g_confusion[i, 1, 1] / (g_confusion[i, 1, 1] + g_confusion[i, 1, 0])
+    class_precision[i] = g_confusion[i, 1, 1] / (g_confusion[i, 1, 1] + g_confusion[i, 0, 1]) 
+  
+  print('Average class recall: ', class_recall.mean())
+  print('Average class precision: ', class_precision.mean())
+  print('Average class f_measure: ', 2 / (1 / class_recall.mean() + 1 / class_precision.mean()))
+  with open(out_file, 'w') as f:
+    for i in range(n_c):
+      f.write('%s %0.4f %0.4f\n' % (classes[i], class_recall[i], class_precision[i]))
+  '''
+'''def roc(pred, gold):
+  #assert 'scores' in pred.keys()
+  def roc(pred, gold):
+  for p, g in zip(pred, gold):
+    v = len(set(g))
+    confusion = np.zeros((v, v))
+    p_ali = pred['alignment']
+    g_ali = pred['alignment']
+    assert len(p_ali) == len(g_ali)
+    for a_p, a_g in zip(p_ali, g_ali):
+      confusion[a_g, a_p] += 1
+    for i in range(v):
+      tpr += 1 / v * confusion / np.sum(confusion, axis=0)   
+      fpr += 1 / v * confusion[v][v] / np.sum(confusion, axis=0)
+'''
+
 def retrieval_metrics(pred, gold):
   if not hasattr(pred, 'keys') or not hasattr(gold, 'keys'):
     raise TypeError('pred and gold should be dictionaries')
@@ -77,22 +166,15 @@ def retrieval_metrics(pred, gold):
   print('Recall: ', rec / n)
   print('F measure: ', f_mea / n) 
 
-'''class Evaluator():
-  def __init__(self, pred_file, gold_file):
-    self.pred_file = pred_file
-    self.gold_file = gold_file 
-
-  def _tokenize(self):
-    return nltk.word_tokenize()
-'''
 def accuracy(pred, gold):
   assert len(pred) == len(gold)
   acc = 0.
   n = 0.
-  assert len(pred) == len(gold)
-  for p, g in zip(pred, gold):
+  for n_ex, (p, g) in enumerate(zip(pred, gold)):
     ali_p = p['alignment']
     ali_g = g['alignment']
+    if DEBUG:
+      print('i, len(pred caption), len(gold_caption): ', n_ex, len(p['caption']), len(g['caption']))
     assert len(ali_p) == len(ali_g)
     for a_p, a_g in zip(ali_p, ali_g):
       acc += (a_p == a_g)
@@ -147,11 +229,15 @@ def word_IoU(pred, gold):
   iou = 0.
   n = 0.
   for p, g in zip(pred, gold):
+    if DEBUG:
+      print('len caption, len alignment: ', len(p['caption']), len(p['alignment']), p['caption'])
+      print('len caption, len alignment: ', len(g['caption']), len(g['alignment']), g['caption'])
+
     p_words = _findPhraseFromPhoneme(p['caption'], p['alignment'])
     g_words = _findPhraseFromPhoneme(g['caption'], g['alignment'])
-    if DEBUG:
-      print(p_words)
-      print(g_words)
+    #if DEBUG:
+    #  print(p_words)
+    #  print(g_words)
     
     p_words_with_pos = []
     g_words_with_pos = []
@@ -174,7 +260,14 @@ def word_IoU(pred, gold):
       n += 1
   return iou / n
 
+'''class Evaluator():
+  def __init__(self, pred_file, gold_file):
+    self.pred_file = pred_file
+    self.gold_file = gold_file 
 
+  def _tokenize(self):
+    return nltk.word_tokenize()
+'''
 if __name__ == '__main__':
   #clsts = [2, 2, 2, 2, 2, 2, 1, 1, 1, 1, 1, 1, 3, 3, 3, 3, 3]
   #classes = [1, 1, 1, 1, 1, 2, 1, 2, 2, 2, 2, 3, 1, 3, 3, 3, 1]
