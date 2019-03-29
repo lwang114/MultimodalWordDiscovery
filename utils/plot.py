@@ -8,7 +8,7 @@ from postprocess import _findPhraseFromPhoneme
 
 NULL = 'NULL'
 END = '</s>'
-DEBUG = True
+DEBUG = False
 def plot_class_distribution(labels, class_names, cutoff=100, filename=None, normalize=False, draw_plot=True):
   assert type(labels) == list
   n_c = max(labels)
@@ -62,13 +62,22 @@ def plot_attention(src_sent, trg_sent, attention, filename=None, title=None,  no
   
   ax.set_xticklabels(trg_sent)
   ax.set_yticklabels(src_sent)
+  for tick in ax.get_xticklabels():
+    tick.set_fontsize(30)
+    tick.set_rotation(45)
+
+  for tick in ax.get_yticklabels():
+    tick.set_fontsize(14)
+    #tick.set_rotation(45)
 
   if normalize:
     attention = (attention.T / np.sum(attention, axis=1)).T
 
   plt.pcolor(attention, cmap=plt.cm.Blues, vmin=0, vmax=1)
-  plt.colorbar()
-  
+  cbar = plt.colorbar()
+  for tick in cbar.ax.get_yticklabels():
+    tick.set_fontsize(30)
+
   if title:
     plt.title(title)
 
@@ -132,9 +141,9 @@ def plot_word_len_distribution(json_file, out_file='word_len_distribution', cuto
   
   return np.arange(max_len+1), len_dist
 
-def generate_nmt_attention_plots(in_dir, out_dir='', normalize=False):
+def generate_nmt_attention_plots(filenames, out_dir='', normalize=False):
   for f in filenames:
-    fp = open(in_dir + f, 'r')
+    fp = open(f, 'r')
     att_info = json.load(fp)
     fp.close()
 
@@ -296,7 +305,8 @@ def plot_avg_roc(pred_json, gold_json, concept2idx='../data/flickr30k/concept2id
 if __name__ == '__main__':
   labels = []
   #top_classes, _ = plot_img_concept_distribution('../data/flickr30k/phoneme_level/flickr30k_gold_alignment.json', '../data/flickr30k/concept2idx.json', cutoff=30)
-  '''fig, ax = plt.subplots(figsize=(15, 10))
+  '''
+  fig, ax = plt.subplots(figsize=(15, 10))
   top_classes, top_freqs = plot_word_len_distribution('../data/flickr30k/phoneme_level/flickr30k_gold_alignment.json', draw_plot=False)
   plt.plot(top_classes[:50], top_freqs[:50])
   print(np.sum(top_freqs))
@@ -317,27 +327,34 @@ if __name__ == '__main__':
   print(np.sum(top_freqs))
   labels.append('NMT (Norm over time)')
 
-
-  ax.set_xticks(np.arange(0, max(top_classes[:50]), 5)) 
-  plt.xlabel('Word Length', size=30) 
-  plt.ylabel('Normalized Frequency', size=30)
-  plt.legend(labels, prop={'size': 30})  
+  ax.set_xticks(np.arange(0, max(top_classes[:50]), 5))
+  for tick in ax.get_xticklabels():
+    tick.set_fontsize(20)
+  for tick in ax.get_yticklabels():
+    tick.set_fontsize(20)
+  
+  plt.xlabel('Word Length', fontsize=30) 
+  plt.ylabel('Normalized Frequency', fontsize=30)
+  plt.legend(labels, fontsize=30)  
   plt.savefig('word_len_compare.png')
   plt.close()
   '''
   exp_dir = '../../status_report_mar8th/outputs/samples/'
-  pred_json = '../nmt/exp/feb26_normalize_over_time/output/alignment.json' 
-  #'../smt/exp/ibm1_phoneme_level_clustering/flickr30k_pred_alignment.json'
+  pred_json = '../smt/exp/ibm1_phoneme_level_clustering/flickr30k_pred_alignment.json'
+  #'../nmt/exp/feb26_normalize_over_time/output/alignment.json'
   #'../nmt/exp/feb28_phoneme_level_clustering/output/alignment.json' 
   gold_json = '../data/flickr30k/phoneme_level/flickr30k_gold_alignment.json'
-  filenames = os.listdir(exp_dir+'nmt_samples_norm_ov_time/')
-  indices = []
-  for fn in filenames:
-    indices.append(int(fn.split('.')[-2]))
+  trg_idx = 1090
+  filenames_ov_time = [exp_dir+'nmt_samples_norm_ov_time/'+fn for fn in os.listdir(exp_dir+'nmt_samples_norm_ov_time/') if fn.split('.')[-2] == str(trg_idx)]
+  filenames_ov_concept = [exp_dir+'nmt_samples_norm_ov_concept/'+fn for fn in os.listdir(exp_dir+'nmt_samples_norm_ov_concept/') if fn.split('.')[-2] == str(trg_idx)]
+  
+  indices = [trg_idx]
+  #for fn in filenames_ov_time:
+  #  indices.append(fn.split('.')[-2])
 
-  #'../../status_report_mar8th/samples/nmt_samples_norm_ov_concept/'
-  #generate_nmt_attention_plots(exp_dir, exp_dir + '../attention_plots_norm_ov_concept/')
-  generate_nmt_attention_plots(exp_dir+'nmt_samples_norm_ov_time/', exp_dir + 'nmt_over_time_plots/', normalize=True)
-  #generate_smt_alignprob_plots(pred_json, indices, exp_dir + 'smt_alignment_plots/')
-  #generate_gold_alignment_plots(gold_json, indices, exp_dir + 'gold_alignment_plots/')
+  generate_nmt_attention_plots(filenames_ov_concept, 'nmt_ov_concept_')
+  generate_nmt_attention_plots(filenames_ov_time, 'nmt_ov_time_', normalize=True)
+  generate_smt_alignprob_plots(pred_json, indices, 'smt_')
+  generate_gold_alignment_plots(gold_json, indices, 'gold_')
+  
   #plot_avg_roc(pred_json, gold_json, concept2idx='../data/flickr30k/concept2idx.json', out_file='nmt_roc')

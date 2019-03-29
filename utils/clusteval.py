@@ -188,6 +188,8 @@ def accuracy(pred, gold):
   lev = np.zeros((L_pred, L_gold))
 '''
 def word_IoU(pred, gold): 
+  if DEBUG:
+    print(len(pred), len(gold))
   assert len(pred) == len(gold)
   def _IoU(pred, gold):
     p_start, p_end = pred[1], pred[2]

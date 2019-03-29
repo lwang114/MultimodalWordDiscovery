@@ -319,6 +319,35 @@ class Flickr_Preprocessor(object):
     with open('trg_' + text_file, 'w') as f:
       f.write('\n'.join(trg))
 
+  def to_xnmt_text(self, text_file, xnmt_file, database_start_index=None):
+    i = 0
+    fp = open(text_file)
+    trg_sents = []
+    src_sents = []
+    for line in fp:
+      if i % 3 == 0:
+        trg_sents.append(line)
+      elif i % 3 == 1:
+        src_sents.append(line)
+      i += 1
+    fp.close()
+
+    assert len(src_sents) == len(trg_sents)
+    if type(database_start_index) == int:
+      ids = [str(database_start_index + i) for i in range(len(src_sents))]
+      id_fp = open(xnmt_file + '.ids', 'w')
+      id_fp.write('\n'.join(ids))
+      id_fp.close()
+
+    src_fp = open('src_' + xnmt_file, 'w')
+    trg_fp = open('trg_' + xnmt_file, 'w')
+
+    src_fp.write(''.join(src_sents))
+    trg_fp.write(''.join(trg_sents))
+
+    src_fp.close()
+    trg_fp.close()
+
   # Does not allow repeated concept for now
   def create_gold_alignment(self, data_file, out_file='gold_align.json', is_phoneme=True):
     with open(data_file, 'r') as f:
@@ -581,6 +610,8 @@ if __name__ == '__main__':
   preproc.create_gold_alignment(datapath + 'flickr30k/phoneme_level/flickr30k_info_phoneme_concept.json', datapath + 'flickr30k/phoneme_level/flickr30k_gold_alignment.json') 
   preproc.create_gold_alignment(datapath + 'flickr30k/word_level/flickr30k_info_text_concept.json', datapath + 'flickr30k/word_level/flickr30k_gold_alignment.json')
   preproc.alignment_to_clusters(datapath + 'flickr30k/word_level/flickr30k_gold_alignment.json', datapath + 'flickr30k/word_level/flickr30k_gold_clusters.json')
-  preproc.alignment_to_clusters(datapath + 'flickr30k/phoneme_level/flickr30k_gold_alignment.json', datapath + 'data/flickr30k/phoneme_level/flickr30k_gold_clusters.json')'''
-  #preproc.alignment_to_clusters('../smt/exp/ibm1_phoneme_level_clustering/flickr30k_pred_alignment.json', '../smt/exp/ibm1_phoneme_level_clustering/flickr30k_pred_clusters.json')
+  preproc.alignment_to_clusters(datapath + 'flickr30k/phoneme_level/flickr30k_gold_alignment.json', datapath + 'data/flickr30k/phoneme_level/flickr30k_gold_clusters.json')
+  preproc.alignment_to_clusters('../smt/exp/ibm1_phoneme_level_clustering/flickr30k_pred_alignment.json', '../smt/exp/ibm1_phoneme_level_clustering/flickr30k_pred_clusters.json')'''
+  preproc.to_xnmt_text(datapath + 'flickr30k/phoneme_level/flickr30k.train', 'flickr30k.train', database_start_index=0)
+  preproc.to_xnmt_text(datapath + 'flickr30k/phoneme_level/flickr30k.test', 'flickr30k.test', database_start_index=6998)
    
