@@ -1,5 +1,6 @@
 import numpy as np
 import math
+import json
 
 NULL = "NULL"
 DEBUG = False
@@ -271,7 +272,7 @@ class HMMWordDiscoverer:
       if writeModel:
         self.printModel(self.modelName + '_iter='+str(epoch)+'.txt')
     
-  def align(self, eSen, fSen, unkProb=10e-12):
+  def align(self, fSen, eSen, unkProb=10e-12):
     nState = len(eSen)
     T = len(fSen)
     scores = np.zeros((nState,))
@@ -287,12 +288,12 @@ class HMMWordDiscoverer:
       if DEBUG:
         print(scores)
     curState = np.argmax(scores)
-    bestPath = [curState]
-    for t in range(len(sent)-1, 0, -1):
+    bestPath = [int(curState)]
+    for t in range(T-1, 0, -1):
       if DEBUG:
         print('curState: ', curState)
       curState = backPointers[t, curState]
-      bestPath.append(curState)
+      bestPath.append(int(curState))
     return bestPath[::-1], np.max(scores)
       
   def printModel(self, fileName):
@@ -325,9 +326,9 @@ class HMMWordDiscoverer:
       print(len(self.fCorpus))
     for i, (fSen, tSen) in enumerate(zip(self.fCorpus, self.tCorpus)):
       alignment, score = self.align(fSen, tSen)
-      #if DEBUG:
-      #  print(fSen, tSen)
-      #  print(alignment)
+      if DEBUG:
+        print(fSen, tSen)
+        print(type(alignment[1]))
       align_info = {
             'index': i,
             'image_concepts': tSen, 
@@ -345,9 +346,10 @@ class HMMWordDiscoverer:
     f.close()
     
     # Write to a .json file for evaluation
-    with open(file_prefix+'.json', 'w') as f:
+    with open(filePrefix+'.json', 'w') as f:
       json.dump(aligns, f, indent=4, sort_keys=True)            
 
 if __name__ == '__main__':
-  model = HMMWordDiscoverer('test_translation.txt')
-  model.trainUsingEM(writeModel=True)
+  model = HMMWordDiscoverer('../data/flickr30k/phoneme_level/flickr30k.txt')
+  model.trainUsingEM(50, writeModel=True)
+  model.printAlignment('alignment')
