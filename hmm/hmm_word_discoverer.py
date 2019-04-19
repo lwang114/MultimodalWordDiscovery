@@ -9,7 +9,7 @@ DEBUG = False
 # A word discovery model based on Vogel et. al. 1996
 # * The transition matrix is assumed to be Toeplitz 
 class HMMWordDiscoverer:
-  def __init__(self, trainingCorpusFile, modelName='hmm_word_discoverer'):
+  def __init__(self, trainingCorpusFile, initProbFile=None, transProbFile=None, obsProbFile=None, modelName='hmm_word_discoverer'):
     self.modelName = modelName 
     # Initialize data structures for storing training data
     self.fCorpus = []                   # fCorpus is a list of foreign (e.g. Spanish) sentences
@@ -24,6 +24,10 @@ class HMMWordDiscoverer:
      
     # Read the corpus
     self.initialize(trainingCorpusFile);
+    self.initProbFile = initProbFile
+    self.transProbFile = transProbFile
+    self.obsProbFile = obsProbFile
+     
     self.fCorpus = self.fCorpus
     self.tCorpus = self.tCorpus 
   
@@ -59,11 +63,22 @@ class HMMWordDiscoverer:
       self.trans[m] = 1 / m * np.ones((m, m))
   
   # Set initial values for the translation probabilities p(f|e)
-  def initializeWordTranslationProbabilities(self, transProbFile=None):
-    # Implement this method
+  def initializeModel(self):
     self.obs = {}
-    if transProbFile:
-      f = open(transProbFile)
+    if self.initProbFile:
+      f = open(self.initProbFile)
+      for line in f:
+        m, s, prob = line.split()
+        self.init[int(m)][int(s)] = float(prob)
+
+    if self.transProbFile:
+      f = open(self.transProbFile)
+      for line in f:
+        m, cur_s, next_s, prob = line.split()
+        self.trans[int(m)][int(cur_s)][int(next_s)] = float(prob)     
+
+    if self.obsProbFile:
+      f = open(self.obsProbFile)
       for line in f:
         tw, fw, prob = line.strip().split()
         if tw not in self.obs.keys():
@@ -176,7 +191,7 @@ class HMMWordDiscoverer:
       for i in range(nState):
         if w not in newObsCounts[eSen[i]]:
           newObsCounts[eSen[i]][w] = 0.
-        newObsCounts[eSen[i]][w] += statePosteriors[t][i] * self.obs[eSen[i]][w]
+        newObsCounts[eSen[i]][w] += statePosteriors[t][i] #self.obs[eSen[i]][w]
     
     return newObsCounts
 
@@ -217,15 +232,17 @@ class HMMWordDiscoverer:
   def computeAvgLogLikelihood(self):
     ll = 0.
     for tSen, fSen in zip(self.tCorpus, self.fCorpus):
-      forwardProb = np.sum(self.forward(tSen, fSen)[-1])
-      ll += math.log(forwardProb)
+      forwardProb = self.forward(tSen, fSen)
+      #backwardProb = self.backward(tSen, fSen)
+      likelihood = np.sum(forwardProb[-1])
+      ll += math.log(likelihood)
     return ll / len(self.tCorpus)
 
   def trainUsingEM(self, numIterations=10, writeModel=False, convergenceEpsilon=0.01):
     if writeModel:
       self.printModel('initial_model.txt')
  
-    self.initializeWordTranslationProbabilities()
+    self.initializeModel()
     initCounts = {m: np.zeros((m,)) for m in self.lenProb}
     transCounts = {m: np.zeros((m, m)) for m in self.lenProb}
     obsCounts = {tw: {fw: 0. for fw in self.obs[tw]} for tw in self.obs}  
@@ -266,6 +283,7 @@ class HMMWordDiscoverer:
           if DEBUG:
             print('norm factor for the obs is 0: potential bug')
           self.obs[tw][fw] = self.obs[tw][fw]
+
         for fw in obsCounts[tw]:
           self.obs[tw][fw] = obsCounts[tw][fw] / normFactor
 
@@ -299,14 +317,14 @@ class HMMWordDiscoverer:
   def printModel(self, fileName):
     initFile = open(fileName+'_initialprobs.txt', 'w')
     
-    for nState in self.lenProb:
+    for nState in sorted(self.lenProb):
       for i in range(nState):
         initFile.write('%d\t%d\t%f\n' % (nState, i, self.init[nState][i]))
     
     initFile.close()
 
     transFile = open(fileName+'_transitionprobs.txt', 'w')
-    for nState in self.lenProb:
+    for nState in sorted(self.lenProb):
       for i in range(nState):
         for j in range(nState):
           transFile.write('%d\t%d\t%d\t%f\n' % (nState, i, j, self.trans[nState][i][j]))
@@ -314,10 +332,11 @@ class HMMWordDiscoverer:
 
     obsFile = open(fileName+'_observationprobs.txt', 'w')
      
-    for tw in self.obs:
-      for fw in self.obs[tw]:
+    for tw in sorted(self.obs):
+      for fw in sorted(self.obs[tw]):
         obsFile.write('%s\t%s\t%f\n' % (tw, fw, self.obs[tw][fw]))
- 
+    obsFile.close()
+   
   # Write the predicted alignment to file
   def printAlignment(self, filePrefix, isPhoneme=True):
     f = open(filePrefix+'.txt', 'w')
@@ -350,6 +369,16 @@ class HMMWordDiscoverer:
       json.dump(aligns, f, indent=4, sort_keys=True)            
 
 if __name__ == '__main__':
-  model = HMMWordDiscoverer('../data/flickr30k/phoneme_level/flickr30k.txt')
+  trainingCorpusFile = 'test_translation.txt' 
+  #'../data/flickr30k/phoneme_level/flickr30k.txt'
+  initProbFile = 'models/apr18_tiny_hmm_translate/A_iter=9.txt_initialprobs.txt'
+  #'hmm_word_discoverer_iter=9.txt_initialprobs.txt'
+  transProbFile = 'models/apr18_tiny_hmm_translate/A_iter=9.txt_transitionprobs.txt'
+  #'hmm_word_discoverer_iter=9.txt_transitionprobs.txt'
+  obsProbFile = 'models/apr18_tiny_hmm_translate/A_iter=9.txt_observationprobs.txt'
+  #'hmm_word_discoverer_iter=9.txt_observationprobs.txt'
+
+  model = HMMWordDiscoverer(trainingCorpusFile, modelName='A')
+  #model = HMMWordDiscoverer(trainingCorpusFile, initProbFile, transProbFile, obsProbFile, modelName='A')
   model.trainUsingEM(50, writeModel=True)
   model.printAlignment('alignment')
