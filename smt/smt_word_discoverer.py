@@ -8,7 +8,7 @@ NULL = "NULL"
 # Minimum translation probability
 PMIN = 10e-12
 DEBUG = False
-# Your task is to finish implementing IBM Model 1 in this class
+
 class IBMModel1:
 
     def __init__(self, trainingCorpusFile):
