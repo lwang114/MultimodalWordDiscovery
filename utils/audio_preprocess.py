@@ -4,89 +4,23 @@ import os
 import time
 from sklearn.cluster import MiniBatchKMeans
 from nltk.corpus import cmudict
+import scipy.io.wavfile as wavfile
 
-DEBUG = False
+DEBUG = True
 NONWORD = ['$']
+NULL = 'NULL'
 PUNCT = ['.', ',', '?', '!', '`', '\'', ';']
 UNK = 'UNK'
 DELIMITER = '('
    
-'''class WordSegmentationLoader:
-  def __init__(self, word_align_dir, word_align_info_file=None):
-    self.word_align_dir = word_align_dir
-    self.word_align_files = os.listdir(word_align_dir)
-    self.word_align_info = {}
-    if word_align_info_file:
-      with open(word_align_info_file, 'r') as f:
-        self.word_align_info = json.load(f) 
-
-  # Load the phone segmentation into a .txt or .json file
-  # TODO: Make this more general (now works only for articulatory feature alignment)
-  def extract_info(self, out_file='word_alignment.json'):
-    begin = time.time()
-    for f in self.word_align_files:
-      img_id, _, capt_id = f.split('.')[0].split('_')
-      if img_id not in self.word_align_info:
-        self.word_align_info[img_id] = {}
-      self.word_align_info[img_id][capt_id] = []
-      
-      fp = open(word_align_dir + f, 'r')
-      for line in fp:
-        word, st, end = line.strip().split(' ') 
-        if len(set(NONWORD).intersection(set(word))) > 0:
-          continue
-        if DELIMITER in word:
-          word = word.split(DELIMITER)[0]
-        
-        self.word_align_info[img_id][capt_id].append((word, float(st), float(end))) 
-      fp.close()  
-
-      with open(out_file, 'w') as f:
-        json.dump(self.word_align_info, f, indent=4, sort_keys=True)
-      print('Takes %0.5f to extract the word segmentations into json: ', time.time() - begin)
-
-  def extract_info_from_id(self, img_id):
-    word_align_info = {} 
-
-    for f in self.word_align_files:
-      cur_img_id, _, capt_id = f.split('.')[0].split('_')
-      if cur_img_id != img_id:
-        continue
-
-      fp = open(self.word_align_dir + f, 'r')
-      caption_info = []
-      for line in fp:
-        word, st, end = line.strip().split(' ') 
-
-        if len(set(NONWORD).intersection(set(word))) > 0:
-          continue
-        if DELIMITER in word:
-          word = word.split(DELIMITER)[0]
-        caption_info.append((word, float(st), float(end)))
-      fp.close()
-      word_align_info[capt_id] = caption_info 
-        
-    return word_align_info
-      
-  # Create an audio-to-concept alignment from word-to-concept alignment 
-  def generate_gold_audio_concept_alignment(self, word_concept_align_file, feat_info_file, out_file='gold_alignment.json'):
-  '''
-
-class FlickrBottleneckPreprocessor:
+class FlickrAudioPreprocessor:
   def __init__(self, bnf_train_file, bnf_test_file, info_file, word_align_dir, phone_centroids_file=None, caption_seqs_file=None, n_clusters=60, batch_size=100):
     self.bnf_train = np.load(bnf_train_file)
     self.bnf_test = np.load(bnf_test_file)
     self.pronun_dict = cmudict.dict() 
     self.word_align_dir = word_align_dir
-    # Load the .npz file
-    self.cluster_model = MiniBatchKMeans(n_clusters=n_clusters, batch_size=batch_size)
-    self.n_clusters = n_clusters
-    # Cluster features
-    if phone_centroids_file:
-      cluster_centers = np.load(phone_centroids_file)
-      self.cluster_model.cluster_centers_ = cluster_centers
     
-
+    # Load the .npz file 
     with open(info_file, 'r') as f:
       self.data_info = json.load(f)
     
@@ -133,15 +67,17 @@ class FlickrBottleneckPreprocessor:
   
   def _concat_word_bn_seq(self, bn_seq, word_seq):
     nframes = len(bn_seq)
+    if DEBUG:
+      print('nframes: ', nframes)
     tot_time = word_seq[-1][2]
-    concat_seq = ''
+    concat_seq = [NULL]*nframes
     for w in word_seq:
-      st_frame, end_frame = int(float(nframes) * w[1] / tot_time), int(float(nframes) * w[2] / tot_time)
+      st_frame, end_frame = int(float(nframes) * w[1] / tot_time), min(nframes-1, int(float(nframes) * w[2] / tot_time))
       for i in range(st_frame, end_frame):
-        concat_seq += '_'.join([str(bn_seq[i]), w[0]]) + ' '
-    return concat_seq
+        concat_seq[i] = str(w[0])
+    return ' '.join(concat_seq)
 
-  def extract_info(self, out_file='bnf_info.json'):
+  def extract_info(self, out_file='feature_info.json'):
     bnf_data_info = {}
     # TODO: Split the data into training and testing
     if not self.cluster_model.cluster_centers_.all(): 
@@ -150,14 +86,14 @@ class FlickrBottleneckPreprocessor:
     if not self.captions:
       self.label_captions()
     
-    # Loop through all the files in the json info dict
-    for pair in enumerate(sorted(self.data_info, key=lambda x:x['index'])):
+    # Loop through all the files in the word-level metainfo data structure
+    for i, pair in enumerate(sorted(self.data_info, key=lambda x:x['index'])):
       print('Index: ', pair['index'])      
       img_filename = pair['image_filename'] 
       img_id = pair['image_id']
       # Create a new entry for the new json info file
-      # Find the image id, image filename, caption text, caption phonemes, image_concepts from the json info
-      # TODO: Make the file more space-efficient 
+      # Find the image id, image filename, caption text, caption phonemes, image concepts from the word-level metainfo
+      # TODO: Make the file more space-efficient
       if img_id not in bnf_data_info:
         bnf_data_info[img_id] = {}
         bnf_data_info[img_id]['image_filename'] = img_filename
@@ -210,22 +146,21 @@ class FlickrBottleneckPreprocessor:
       # Save the json info file
       json.dump(bnf_data_info, fp, indent=4, sort_keys=True)
   
-  # TODO: create gold alignment from info file
-  #def create_gold_alignment(self):
-
-  def create_gold_alignment(self, data_info_file, word_concept_align_file, out_file='gold_alignment.json'):
+  # TODO: create frame-level gold alignment from word-level gold alignment and word segmentation
+  def create_gold_alignment(self, audio_dir, word_segment_file, word_concept_align_file, out_file='gold_alignment.json'):
     begin = time.time()
     audio_concept_alignments = []
-    with open(data_info_file, 'r') as f:
-      data_info = json.load(f)
+    
+    with open(word_segment_file, 'r') as f:
+      segment_info = json.load(f)
 
     with open(word_concept_align_file, 'r') as f:
       word_concept_align_info = json.load(f)
 
+    i_a = 0
     # Loop through each caption-concept pair in the word-level info database
-    for info in sorted(data_info.values(), key=lambda x: x['index']):
+    for info in sorted(segment_info.values(), key=lambda x: x['index']):
       idx = info['index']
-      print('Processing index:', idx)
       img_id = info['image_filename'].split('.')[0]
       word_concept_align = word_concept_align_info[idx]['alignment']
       img_concepts = word_concept_align_info[idx]['image_concepts']
@@ -235,7 +170,7 @@ class FlickrBottleneckPreprocessor:
       #  print('Image id %s not found' % img_id)
       #  continue
        
-      # Find the corresponding caption in the word alignment dictionary by matching the words with the image concepts
+      # Find the corresponding word alignment dictionary by matching the words with the image concepts
       # TODO: deal with inexact match (flickr30k has only one caption per image while flickr8k has five per image)
       word_aligns = info['caption_texts']
       concepts = [c[0] for c in info['image_concepts']]
@@ -247,15 +182,11 @@ class FlickrBottleneckPreprocessor:
       for capt_id, cur_word_align in word_aligns.items(): 
         cur_sent = [a[0].lower() for a in cur_word_align]
         
-        #if DEBUG:
-        #  print('sent: ', sent)
-        #  print('cur_sent: ', cur_sent)
-        #  print('sent intersect cur_sent', set(cur_sent).intersection(set(sent)))
         cur_IoU = float(len(set(cur_sent).intersection(set(sent)))) / float(len(set(cur_sent).union(set(sent))))
         if cur_IoU > best_IoU:
           best_IoU = cur_IoU
           best_capt_id = capt_id
-      
+         
       if not best_capt_id:
         print('caption not found')
         continue
@@ -263,14 +194,28 @@ class FlickrBottleneckPreprocessor:
       word_align = word_aligns[best_capt_id] 
       cur_sent = [a[0].lower() for a in word_align]
       trg2ref, ref2trg = self._map_transcripts(cur_sent, sent)
-      if DEBUG:
-        print('trg: ', cur_sent)
-        print('ref: ', sent)
-        print('trg2ref', trg2ref)
-        print('ref2trg', ref2trg)
-        
-      # Convert the time stamps to frame numbers
-      nframes = len(info['caption_sequences'][best_capt_id].split()) 
+       
+      # Create audio frame-concept alignment; comment the line below and uncomment the subsequent
+      # lines if dealing with original mbn feature format (train and test in the same npz file)
+      feat = None
+      fead_id = None
+      if info['is_train']:
+        for cur_feat_id in self.bnf_train.keys():
+          cur_img_id, _, cur_capt_id, _ = cur_feat_id.split('_')
+          if cur_img_id == img_id and cur_capt_id == best_capt_id:
+            feat = self.bnf_train[cur_feat_id]
+            feat_id = cur_feat_id
+            break
+      else:
+        for cur_feat_id in self.bnf_test.keys():
+          cur_img_id, _, cur_capt_id, _ = cur_feat_id.split('_')
+          if cur_img_id == img_id and cur_capt_id == best_capt_id:
+            feat = self.bnf_test[cur_feat_id]
+            feat_id = cur_feat_id
+            break
+
+      i_a += 1
+      nframes = feat.shape[0]
 
       T = word_align[-1][-1] 
       audio_concept_align = [0]*nframes 
@@ -280,26 +225,34 @@ class FlickrBottleneckPreprocessor:
         st_frame, end_frame = int(st * float(nframes) / T), int(end * float(nframes) / T) 
         end_frame = min(end_frame, nframes)
         for i_f in range(st_frame, end_frame):
+          # If the target sentence contains a compound word that a reference sentence doesn't have
           if len(trg2ref[pos]) > 1:
             for r_pos in trg2ref[pos]:
               audio_concept_align[i_f] = word_concept_align[r_pos]
-          # Remove this case if compound words only appear in isolation  
+          # If the target sentence compound word does not align to any reference word; remove this case if compound words only appear in isolation  
           elif len(trg2ref[pos]) == 0:
             continue
           else:
             cur_concept = img_concepts[word_concept_align[trg2ref[pos][0]]]
             audio_concept_align[i_f] = concept_order[cur_concept]
+      
+      # Create a mapping between the feature frames and audio frames
+      feat2wav = self.create_feat_to_wav_map(audio_dir, feat_id, nframes)
+
+      print('Create %d alignments after seeing %d examples' % (i_a, idx))
       if DEBUG:
         print('nframes: ', nframes)
-        print('concept indices: ', set(audio_concept_align))
-       
+        #print('concept indices: ', set(audio_concept_align))
+      
       # Create an entry for the current caption-concept pair
       audio_concept_info = {
+          'index': idx,
           'alignment': audio_concept_align,
           'caption_text': sent,
           'image_concepts': sorted(img_concepts),
           'image_id': img_id,
-          'capt_id': best_capt_id
+          'capt_id': '_'.join(feat_id.split('_')[1:3]),
+          'feat2wav': feat2wav
         }
       audio_concept_alignments.append(audio_concept_info)
       with open(out_file, 'w') as f:
@@ -307,39 +260,12 @@ class FlickrBottleneckPreprocessor:
     print('Take %0.5f to generate audio-concept alignment', time.time() - begin)
 
   # TODO: Multiple captions for one image (so do not need to use the gold alignment file)
-  def json_to_xnmt_format(self, bnf_data_info_file, gold_align_file, out_prefix='flickr_bnf', train_test_split=False):
+  def json_to_xnmt_format(self, bnf_data_info_file, gold_align_file, out_prefix='flickr_bnf'):
     bnf_data_info = None
     with open(bnf_data_info_file, 'r') as f:
       bnf_data_info = json.load(f)
     
     if train_test_split:
-      train_trg = open(out_prefix+'_train_trg.txt', 'w')
-      test_trg = open(out_prefix+'_test_trg.txt', 'w')
-    
-      # Generate the image concept (.txt) file
-      for img_id, pair in sorted(bnf_data_info.items(), key=lambda x:x[1]['index']):
-        img_concepts = pair['image_concepts']
-        concept_list = sorted(set([c[0] for c in img_concepts]))
-        #for capt_id in captions:
-        #  caption = ' '.join([str(cluster_id) for cluster_id in captions[capt_id]])
-        print(pair['index'], img_id)
-
-        feat_id = None
-        for cur_feat_id in self.captions.keys():
-          cur_img_id, _, _, _ = cur_feat_id.split('_')
-          if cur_img_id == img_id:
-            feat_id = cur_feat_id
-        print(feat_id) 
-        if not feat_id:
-          continue
-
-        if self.captions[feat_id]['is_train']:
-          train_trg.write('%s\n' % ' '.join(concept_list))
-        else:
-          test_trg.write('%s\n' % ' '.join(concept_list))
-      train_trg.close()
-      test_trg.close()
-    else:
       trg = open(out_prefix+'_all_trg.txt', 'w')
       for img_id, pair in sorted(bnf_data_info.items(), key=lambda x:x[1]['index']):
         img_concepts = pair['image_concepts']
@@ -359,9 +285,7 @@ class FlickrBottleneckPreprocessor:
         
         trg.write('%s\n' % ' '.join(concept_list))
 
-
     # Generate the bottleneck feature (.npz) file 
-    '''
     train_src_dir = out_prefix+'_train/'
     test_src_dir = out_prefix+'_test/'
     
@@ -369,13 +293,15 @@ class FlickrBottleneckPreprocessor:
     align_info = json.load(fp)
     fp.close()
     
+    trg = open(out_prefix+'_all_trg.txt', 'w')  
+
     if not os.path.isdir(train_src_dir):
       os.mkdir(train_src_dir)
       os.mkdir(test_src_dir)
     
+    i_pass = 0
     for img_id, pair in sorted(bnf_data_info.items(), key=lambda x:x[1]['index']):
       # Find the captions that have gold alignment; do not need the outer for-loop if every caption has gold alignment
-      print(img_id)
       for i_a, align in enumerate(align_info):
         if align['image_id'] == img_id:
           capt_id = align['capt_id']
@@ -385,12 +311,104 @@ class FlickrBottleneckPreprocessor:
             if cur_img_id == img_id and cur_capt_id == capt_id:
               feat_id = cur_feat_id
               break
+          print(i_pass, cur_img_id, cur_capt_id)    
+          i_pass += 1
+
+          img_concepts = pair['image_concepts']
+          concept_list = sorted(set([c[0] for c in img_concepts]))
+          trg.write('%s\n' % ' '.join(concept_list))
+
           if feat_id in self.bnf_train:
             np.save(train_src_dir + '_'.join([img_id, capt_id, str(i_a)])+'.npy', self.bnf_train[feat_id])
           else:
             np.save(test_src_dir + '_'.join([img_id, capt_id, str(i_a)])+'.npy', self.bnf_test[feat_id])
-    '''
+  
+  def create_feat_to_wav_map(self, audio_dir, feat_id, feat_len):    
+    # Create a mapping between the feature frames and audio frames
+    audio_file = "{}{}.wav".format(audio_dir, '_'.join(feat_id.split('_')[:-1]))
+    fs, y = wavfile.read(audio_file)
+    wav_len = y.shape[0]
+    downsample_rate = int(feat_len / wav_len)
+    feat2wav = []
+    for i_f in range(feat_len):
+      if (i_f + 1) * downsample_rate <= wav_len:
+        feat2wav.append([i_f * downsample_rate, (i_f + 1) * downsample_rate - 1])
+      else:
+        feat2wav.append([i_f * downsample_rate, wav_len - 1])
+    return feat2wav
+  
+  def create_feat_to_wav_maps(self, audio_dir, alignment_file):
+    with open(alignment_file, 'r') as f:
+      align_info = json.load(f)
+    
+    new_align_info = []
+    for align in align_info:
+      img_id = align['image_id']
+      capt_id = align['capt_id']
+      alignment = align['alignment']
+      feat_len = len(alignment)
+      fead_id = None
+      found = False
+      for cur_feat_id in self.bnf_train.keys():
+        cur_img_id, _, cur_capt_id, _ = cur_feat_id.split('_')
+        if cur_img_id == img_id and cur_capt_id == capt_id:
+          feat_id = cur_feat_id
+          found = True
+          break
 
+      if not found:
+        for cur_feat_id in self.bnf_test.keys():
+          cur_img_id, _, cur_capt_id, _ = cur_feat_id.split('_')
+          if cur_img_id == img_id and cur_capt_id == capt_id:
+            feat_id = cur_feat_id
+            found = True
+            break
+
+      if not found:
+        print("id not found, potential bug")
+        continue
+      
+      print(feat_id)
+      feat2wav = self.create_feat_to_wav_map(audio_dir, feat_id, feat_len) 
+      align['capt_id'] = '_'.join(feat_id.split('_')[1:-1])
+      align['feat_id'] = feat_id
+      align['feat2wav'] = feat2wav
+      
+      new_align_info.append(align)
+    
+    with open(alignment_file+'.2', 'w') as f:
+      json.dump(new_align_info, f)
+
+  def train_test_split(self, bnf_data_info_file, out_prefix='flickr_bnf'):
+    train_trg = open(out_prefix+'_train_trg.txt', 'w')
+    test_trg = open(out_prefix+'_test_trg.txt', 'w')
+    with open(bnf_data_info_file, 'r') as f:
+      bnf_data_info = json.load(f) 
+
+    # Generate the image concept (.txt) file
+    for img_id, pair in sorted(bnf_data_info.items(), key=lambda x:x[1]['index']):
+      img_concepts = pair['image_concepts']
+      concept_list = sorted(set([c[0] for c in img_concepts]))
+      #for capt_id in captions:
+      #  caption = ' '.join([str(cluster_id) for cluster_id in captions[capt_id]])
+      print(pair['index'], img_id)
+
+      feat_id = None
+      for cur_feat_id in self.captions.keys():
+        cur_img_id, _, _, _ = cur_feat_id.split('_')
+        if cur_img_id == img_id:
+          feat_id = cur_feat_id
+      print(feat_id) 
+      if not feat_id:
+        continue
+
+      if self.captions[feat_id]['is_train']:
+        train_trg.write('%s\n' % ' '.join(concept_list))
+      else:
+        test_trg.write('%s\n' % ' '.join(concept_list))
+    train_trg.close()
+    test_trg.close()
+  
   # Map between the two transcripts of the same sentence since the word segmentation and the word-concept alignment are created 
   # with a set of different tokenization rules for compound noun
   def _map_transcripts(self, trg_sent, ref_sent):
@@ -446,10 +464,12 @@ if __name__ == '__main__':
   out_file = '../data/flickr30k/audio_level/flickr_bnf_concept_info.json'
   word_concept_align_file = '../data/flickr30k/word_level/flickr30k_gold_alignment.json'
   gold_align_file = '../data/flickr30k/audio_level/flickr30k_gold_alignment.json' 
-  bn_preproc = FlickrBottleneckPreprocessor(train_file, test_file, data_info_file, word_align_dir, phone_centroids_file=phnset, caption_seqs_file=caption_seqs_file)
+  audio_dir = '/home/lwang114/data/flickr_audio/wavs/'
+  bn_preproc = FlickrAudioPreprocessor(train_file, test_file, data_info_file, word_align_dir, phone_centroids_file=phnset, caption_seqs_file=caption_seqs_file)
   #bn_preproc.extract_info(out_file=out_file)
   #bn_preproc.label_captions()
-  #bn_preproc.create_gold_alignment(out_file, word_concept_align_file, out_file=gold_align_file)
-  bn_preproc.json_to_xnmt_format(out_file, gold_align_file, train_test_split=False)
+  #bn_preproc.create_gold_alignment(out_file, audio_dir, word_concept_align_file, out_file=gold_align_file)
+  #bn_preproc.json_to_xnmt_format(out_file, gold_align_file)
+  bn_preproc.create_feat_to_wav_maps(audio_dir, gold_align_file)
   #wrd_segment_loader = WordSegmentationLoader(word_align_dir)
   #wrd_segment_loader.extract_info()  wrd_segment_loader.generate_gold_audio_concept_alignment(word_concept_align_file, bn_info_file, word_align_dir)

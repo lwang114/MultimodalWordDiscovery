@@ -2,6 +2,8 @@ from utils.audio_preprocess import *
 from utils.postprocess import *
 from utils.clusteval import *
 from smt.audio_smt_word_discoverer import *
+from smt.audio_kmeans_word_discoverer import *
+from smt.audio_segembed_kmeans_word_discoverer import *
 import argparse
 import shutil
 import time
@@ -13,7 +15,9 @@ parser.add_argument('--nmt', help='Use neural encoder-decoder model', action='st
 parser.add_argument('--exp_dir', type=str, default=None, help='Experiment directory with / at the end')
 parser.add_argument('--data_path', type=str, default='data/flickr30k/', help='Data directory with / at the end')
 parser.add_argument('--num_mixtures', type=int, default='3', help='Number of mixtures for GMM')
-parser.add_argument('--model_dir', type=str, default=None, help='SMT model directory with / at the end')
+parser.add_argument('--model_dir', type=str, default='', help='SMT model directory with / at the end')
+parser.add_argument('--smt_model', choices=['gmm', 'kmeans', 'segembed-kmeans'], default='gmm', help='Type of SMT model')
+parser.add_argument('--embed_dim', type=int, default=None, help='Acoustic embedding dimension; used only in segmental embedded models')
 args = parser.parse_args() 
 
 # TODO: Create the path if a path does not exist
@@ -75,12 +79,23 @@ if start < 2 and end >= 2:
   if args.nmt:
     print('Please train with XNMT and make sure the output files have been generated in the output/ dir')
   else:
-    model = GMMWordDiscoverer(src_file, trg_file, numMixtures=args.num_mixtures)
+    if args.smt_model == "gmm":
+      model = GMMWordDiscoverer(src_file, trg_file, numMixtures=args.num_mixtures)
+    elif args.smt_model == "kmeans":
+      model = KMeansWordDiscoverer(src_file, trg_file, numMixtures=args.num_mixtures)
+    elif args.smt_model == "segembed-kmeans":
+      model = SegEmbedKMeansWordDiscoverer(src_file, trg_file, numMixtures=args.num_mixtures, embedDim=args.embed_dim)
+       
     if os.path.isfile(args.model_dir+'model_final_mixture_priors.json'):
-      model.trainUsingEM(writeModel=True, mixturePriorFile=args.model_dir+'model_final_mixture_priors.json', transMeanFile=args.model_dir+'model_final_translation_means.json', transVarFile=args.model_dir+'model_final_translation_variances.json')
+      if args.smt_model == "gmm":
+        model.trainUsingEM(writeModel=True, mixturePriorFile=args.model_dir+'model_final_mixture_priors.json', 
+                          transMeanFile=args.model_dir+'model_final_translation_means.json', 
+                          transVarFile=args.model_dir+'model_final_translation_variances.json')
+      elif args.smt_model == 'kmeans' or self.smt_model == 'segembed_kmeans':
+        model.trainUsingEM(writeModel=True, centroidFile=args.model_dir+'model_final.json')
     else:
       model.trainUsingEM(writeModel=True, modelPrefix=args.model_dir)
-    model.printAlignment(out_file_prefix = exp_smt_dir+'flickr30k_pred_alignment')
+    model.printAlignment(filePrefix = exp_smt_dir+'flickr30k_pred_alignment')
   
   print('Finish training after %f s !' % (time.time() - start_time))
 
@@ -99,11 +114,12 @@ if start < 3 and end >= 3:
   else:
     with open(pred_alignment_smt_prefix+'.json' , 'r') as f:   
       pred_aligns = json.load(f)
+    
+    with open(gold_alignment_file, 'r') as f:
+      gold_aligns = json.load(f)
   
-  with open(gold_alignment_file, 'r') as f:
-    gold_aligns = json.load(f)
-
-  print('Word IoU: ', word_IoU(pred_aligns, gold_aligns))
+  # TODO: Make the word IoU work later
+  #print('Word IoU: ', word_IoU(pred_aligns, gold_aligns))
   print('Accuracy: ', accuracy(pred_aligns, gold_aligns))
   boundary_retrieval_metrics(pred_aligns, gold_aligns)
   #retrieval_metrics(pred_clsts, gold_clsts)

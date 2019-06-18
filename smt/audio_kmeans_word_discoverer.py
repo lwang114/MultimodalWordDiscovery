@@ -30,7 +30,7 @@ class KMeansWordDiscoverer:
       self.fCorpus = [fCorpus[fKey] for fKey in sorted(fCorpus.keys(), key=lambda x:int(x.split('_')[-1]))]
       self.data_ids = [fKey for fKey in sorted(fCorpus.keys(), key=lambda x:int(x.split('_')[-1]))]
 
-    def initialize(self, centroidFile=None, initMethod= "kmeans++"):
+    def initialize(self, centroidFile=None):
       if centroidFile:
         with open(centroidFile, 'r') as f:
           self.centroids = json.load(f)
@@ -119,7 +119,7 @@ class KMeansWordDiscoverer:
             for m in range(self.numMixtures):
               rand_id = self.randomDraw(np.min(distances[tw], axis=0))
               self.centroids[tw][m] = feats[rand_id]           
-    
+        
     def findAssignment(self):
       self.assignments = []
       for i, (tSen, fSen) in enumerate(zip(self.tCorpus, self.fCorpus)):
@@ -137,6 +137,8 @@ class KMeansWordDiscoverer:
         self.assignments.append(assignment)
 
     def updateCentroid(self):
+      if DEBUG:
+        print(self.centroids)  
       self.centroids = {tw:np.zeros(cent.shape) for tw, cent in self.centroids.items()}
       self.counts = {tw:np.zeros((self.numMixtures,)) for tw in self.centroids}
       for i, (tSen, fSen) in enumerate(zip(self.tCorpus, self.fCorpus)):
@@ -145,11 +147,7 @@ class KMeansWordDiscoverer:
         for i_f, centroid_id in enumerate(self.assignments[i].tolist()):
           i_t = int(centroid_id / self.numMixtures)
           m = centroid_id % self.numMixtures
-          if DEBUG:
-            print(tSen[i_t])
-            #print(fSen.shape)
-            #print(self.centroids[tSen[i_t]][m].shape)
-            
+
           self.centroids[tSen[i_t]][m] += fSen[i_f]
           self.counts[tSen[i_t]][m] += 1
 
@@ -159,12 +157,9 @@ class KMeansWordDiscoverer:
           if self.counts[tw][m] > 0:
             self.centroids[tw][m] /= self.counts[tw][m]
 
-    def train(self, maxIterations=10, centroidFile=None, modelPrefix='', writeModel=False, initMethod='kmeans++'):
+    def trainUsingEM(self, maxIterations=10, centroidFile=None, modelPrefix='', writeModel=False, initMethod='kmeans++'):
       self.initialize(centroidFile=centroidFile, initMethod=initMethod)
-      self.printModel(modelPrefix+'model_init.txt')
 
-    def trainUsingEM(self, maxIterations=10, centroidFile=None, modelPrefix='', writeModel=False):
-      self.initialize(centroidFile=centroidFile)
       prev_assignments = deepcopy(self.assignments)
       n_iter = 0
       
@@ -209,6 +204,8 @@ class KMeansWordDiscoverer:
     def computeDist(self, x, y):
       return np.sqrt(np.sum((x - y)**2))
     
+  
+      
     def align(self, fSen, tSen):
       fLen = fSen.shape[0]
       tLen = len(tSen)
@@ -249,5 +246,5 @@ class KMeansWordDiscoverer:
 if __name__ == "__main__":
   datapath = "../data/random/"
   mkmeans = KMeansWordDiscoverer(datapath + "random.npz", datapath + "random.txt", 1)
-  mkmeans.train(writeModel=True, modelPrefix="random_", initMethod='cyclic')
+  mkmeans.trainUsingEM(writeModel=True, modelPrefix="random_", initMethod='kmeans++')
   mkmeans.printAlignment("random_pred")

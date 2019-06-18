@@ -467,11 +467,11 @@ class GMMWordDiscoverer:
         ''' 
 
     # Write the predicted alignment to file
-    def printAlignment(self, out_file_prefix, src_file=None, trg_file=None):
+    def printAlignment(self, filePrefix, src_file=None, trg_file=None):
       if src_file and trg_file:
         self.initialize(src_file, trg_file)
       
-      f = open(out_file_prefix+'.txt', 'w')
+      f = open(filePrefix+'.txt', 'w')
       aligns = []
       for i, (fSen, tSen) in enumerate(zip(self.fCorpus, self.tCorpus)):
         alignment, alignProbs = self.align(fSen, tSen)
@@ -492,7 +492,7 @@ class GMMWordDiscoverer:
       f.close()
     
       # Write to a .json file for evaluation
-      with open(out_file_prefix+'.json', 'w') as f:
+      with open(filePrefix+'.json', 'w') as f:
         json.dump(aligns, f, indent=4, sort_keys=True)            
 
 
