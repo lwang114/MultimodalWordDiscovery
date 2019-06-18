@@ -63,13 +63,13 @@ def boundary_retrieval_metrics(pred, gold, out_file='class_retrieval_scores.txt'
   for n_ex, (p, g) in enumerate(zip(pred, gold)):
     p_ali = p['alignment']
     g_ali = g['alignment']
-    v = len(set(g_ali))
+    v = max(max(set(g_ali)), max(set(p_ali)))+1
     confusion = np.zeros((v, v))
     
-    assert len(p_ali) == len(g_ali)
     if DEBUG:
-      print('n_ex, v, p_ali, set(g_ali): ', n_ex, v, p_ali, set(g_ali))
-     
+      print(len(p_ali), len(g_ali))
+    assert len(p_ali) == len(g_ali)
+    
     for a_p, a_g in zip(p_ali, g_ali):
       confusion[a_g, a_p] += 1
   
@@ -173,8 +173,8 @@ def accuracy(pred, gold):
   for n_ex, (p, g) in enumerate(zip(pred, gold)):
     ali_p = p['alignment']
     ali_g = g['alignment']
-    if DEBUG:
-      print('i, len(pred caption), len(gold_caption): ', n_ex, len(p['caption']), len(g['caption']))
+    
+    #print(n_ex, g['image_id'], len(p['alignment']), len(g['alignment']))
     assert len(ali_p) == len(ali_g)
     for a_p, a_g in zip(ali_p, ali_g):
       acc += (a_p == a_g)
