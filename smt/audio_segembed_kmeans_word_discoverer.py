@@ -2,8 +2,10 @@ import numpy as np
 import time
 from copy import deepcopy
 import json
+import random
 
 NULL = 'NULL'
+DEBUG = False
 class SegEmbedKMeansWordDiscoverer:
     def __init__(self, sourceCorpusFile, targetCorpusFile, numMixtures, embedDim=64, minWordLen=10, maxWordLen=100):
       self.fCorpus = []
@@ -28,7 +30,7 @@ class SegEmbedKMeansWordDiscoverer:
       self.fCorpus = [fCorpus[fKey] for fKey in sorted(fCorpus.keys(), key=lambda x:int(x.split('_')[-1]))]
       self.data_ids = [fKey for fKey in sorted(fCorpus.keys(), key=lambda x:int(x.split('_')[-1]))]
 
-    def initialize(self, centroidFile=None):
+    def initialize(self, centroidFile=None, initMethod='kmeans++'):
       if centroidFile:
         with open(centroidFile, 'r') as f:
           self.centroids = json.load(f)
@@ -37,23 +39,94 @@ class SegEmbedKMeansWordDiscoverer:
 
       # Cyclic intialization
       # TODO: use Kmeans++ later
-      for tSen, fSen in zip(self.tCorpus, self.fCorpus):
-        nFrames = fSen.shape[0]
-        # TODO: Try skipping
-        nSegments = nFrames
-        self.featDim = fSen.shape[1]
-        for tw in tSen: 
-          for i_f in range(nSegments):
-            if tw not in self.centroids:
-              self.centroids[tw] = np.zeros((self.numMixtures, self.embedDim))
-            if i_f + int(self.embedDim / self.featDim) > nFrames:
-              continue
-            self.centroids[tw][i_f % self.numMixtures] += fSen[i_f:i_f+int(self.embedDim / self.featDim)].flatten() 
+      if initMethod == 'cyclic':
+        for tSen, fSen in zip(self.tCorpus, self.fCorpus):
+          nFrames = fSen.shape[0]
+          # TODO: Try skipping
+          nSegments = nFrames
+          self.featDim = fSen.shape[1]
+
+          for tw in tSen: 
+            for i_f in range(nSegments):
+              if tw not in self.centroids:
+                self.centroids[tw] = np.zeros((self.numMixtures, self.embedDim))
+              if i_f + int(self.embedDim / self.featDim) > nFrames:
+                continue
+              nEmbedFrames = self.embedDim / self.featDim
+              self.centroids[tw][i_f % self.numMixtures] += np.repeat(fSen[i_f:i_f+int(self.embedDim / self.featDim)].flatten(), nEmbedFrames) 
+      if initMethod == 'kmeans++':
+        # Keep a dictionary of candidate centroid vectors according to its co-occurrences with the concept
+        candidates = {}
+        candidate_counts = {}
+
+        for tSen, fSen in zip(self.tCorpus, self.fCorpus):
+          self.featDim = fSen.shape[1]
+          for tw in tSen:
+            if tw not in candidates:
+              candidates[tw] = []
+              candidate_counts[tw] = 0
         
-    # TODO: Use Bregman divergence other than Euclidean distance (e.g., Itakura divergence)
-    def computeDist(self, x, y):
-      return np.sqrt(np.sum((x - y)**2))
-    
+        for i_ex, (tSen, fSen) in enumerate(zip(self.tCorpus, self.fCorpus)):
+          for tw in tSen:
+            candidates[tw].append((i_ex, fSen.shape[0]))
+            candidate_counts[tw] += fSen.shape[0]
+        
+        # Randomly samples a subset of candidates for the current centroid
+        candidate_subset = {}
+        for tw in candidates:
+          count = candidate_counts[tw]
+          if tw not in candidate_subset:
+            candidate_subset[tw] = []
+          
+          # Randomly draw k frames
+          if count <= 100:
+            for cand_id, cand in candidates[tw]:
+              candidate_subset[tw] += self.fCorpus[cand_id].tolist()
+              
+            candidate_subset[tw] = np.array(candidate_subset[tw])           
+          else:
+            rand_ids = np.random.randint(0, count-1, 100)
+            for r_id in rand_ids.tolist():
+              acc = 0
+              for cand_id, cand in candidates[tw]:
+                if r_id < acc + cand and r_id >= acc: 
+                  candidate_subset[tw].append(self.fCorpus[cand_id][r_id - acc])   
+                else:
+                  acc += cand
+            candidate_subset[tw] = np.array(candidate_subset[tw])
+          
+        # Compute the distance of frames in the subset to the nearest centroid, 
+        # and choose according to a distribution proportional to their square distances
+        distances = {}
+        if DEBUG:
+          print('candidate_subset len: ', len(candidate_subset.items()))
+        for i_t_glob, (tw, feats) in enumerate(sorted(candidate_subset.items(), key=lambda x:x[0])):
+          if i_t_glob == 0:
+            count = feats.shape[0]
+            self.centroids[tw] = np.zeros((self.numMixtures, self.embedDim))
+            for m in range(self.numMixtures):
+              rand_id = random.randint(0, count-1)
+              self.centroids[tw][m] = np.repeat(feats[rand_id], self.embedDim / self.featDim)
+          else: 
+            count = feats.shape[0]
+            centroids = self.centroids.values()
+            distances[tw] = np.zeros(((i_t_glob+1)*self.numMixtures, count)) 
+            self.centroids[tw] = np.zeros((self.numMixtures, self.embedDim))
+            
+            if DEBUG:
+              print('i_t_glob: ', i_t_glob)
+              print('len(centroids): ', len(centroids)) 
+            for i_c, cent in enumerate(centroids):
+              for m in range(self.numMixtures):
+                if DEBUG:
+                  print(distances[tw].shape)
+                  
+                distances[tw][i_c*self.numMixtures+m] = np.sum((feats - cent[m][:self.featDim]) ** 2, axis=1)
+            
+            for m in range(self.numMixtures):
+              rand_id = self.randomDraw(np.min(distances[tw], axis=0))
+              self.centroids[tw][m] = np.repeat(feats[rand_id], self.embedDim / self.featDim) 
+        
     def findAssignment(self):
       self.assignments = []
       for i, (tSen, fSen) in enumerate(zip(self.tCorpus, self.fCorpus)):
@@ -69,7 +142,8 @@ class SegEmbedKMeansWordDiscoverer:
         fLen = fSen.shape[0]
         segmentation = self.segmentations[i]
         for i_w, centroid_id in enumerate(self.assignments[i]):
-          print(self.assignments[i], segmentation)
+          if DEBUG:
+            print('self.assignment[i], segmentation: ', self.assignments[i], segmentation)
           i_t = int(centroid_id / self.numMixtures)
           m = centroid_id % self.numMixtures
           start, end = None, None
@@ -111,8 +185,10 @@ class SegEmbedKMeansWordDiscoverer:
         segmentation = self.segment(fSen, tSen, self.minWordLen, self.maxWordLen)
         self.segmentations.append(segmentation)
 
-    def trainUsingEM(self, maxIterations=10, centroidFile=None, modelPrefix='', writeModel=False):
-      self.initialize(centroidFile=centroidFile)
+    def train(self, maxIterations=10, centroidFile=None, modelPrefix='', writeModel=False, initMethod='kmeans++'):
+      self.initialize(centroidFile=centroidFile, initMethod='kmeans++')
+      if writeModel:
+        self.printModel(modelPrefix+'model_init.txt')
 
       prev_assignments = deepcopy(self.assignments)
       n_iter = 0
@@ -122,11 +198,11 @@ class SegEmbedKMeansWordDiscoverer:
       
         begin_time = time.time()
         self.segmentStep()
-        print('Segment step takes %0.5f to finish' % (time.time() - begin_time))
+        print('Segment step takes %0.5f s to finish' % (time.time() - begin_time))
 
         begin_time = time.time()
         self.kMeansStep()
-        print('K-Means step takes %0.5f to finish' % (time.time() - begin_time))
+        print('K-Means step takes %0.5f s to finish' % (time.time() - begin_time))
         
         if writeModel:
           self.printModel(modelPrefix+'model_iter='+str(n_iter)+'.txt')
@@ -152,6 +228,22 @@ class SegEmbedKMeansWordDiscoverer:
       #print(xLen, self.embedDim / self.featDim)
       return x[::skip].flatten()[:self.embedDim]
 
+    # TODO: Use Bregman divergence other than Euclidean distance (e.g., Itakura divergence)
+    def computeDist(self, x, y):
+      return np.sqrt(np.sum((x - y)**2, axis=-1))
+   
+    # TODO: Randomly draw a sample according to a probability mass distribution
+    def randomDraw(self, pmf):
+      max_val = np.sum(pmf)
+      rand_val = max_val * random.random()
+      rand_id = 0
+      tot = 0.
+      while tot < rand_val:
+        tot += pmf[rand_id] 
+        rand_id += 1
+      return rand_id 
+
+ 
     def assign(self, fSen, tSen, segmentation):
       fLen = fSen.shape[0]
       tLen = len(tSen)
@@ -168,40 +260,38 @@ class SegEmbedKMeansWordDiscoverer:
             
             dist_mat[i_t, m, i_w] = self.computeDist(self.embed(seg), self.centroids[tw][m])
       assignment = np.argmin(dist_mat.reshape(-1, numWords), axis=0)
-      print(assignment)
       return assignment        
 
     def segment(self, fSen, tSen, minWordLen, maxWordLen):
       fLen = fSen.shape[0]
       tLen = len(tSen)
-      segmentCosts = [np.finfo(float).max]*fLen
+      segmentCosts = [0]+[np.finfo(float).max]*(fLen - 1)
       segmentPaths = [0]*fLen
+      
       for i_f in range(minWordLen-1, fLen):
+        embeds = []
+        embedLens = []
         for j_f in range(minWordLen, maxWordLen+1):
-          dists = np.zeros((tLen, self.numMixtures))  
-          if i_f - j_f + 1 == 0:
-            for i_t, tw in enumerate(tSen): 
-              for m in range(self.numMixtures):
-                # Distance weighted by the number of frames represented by the embedding
-                #dists[i_t, m] = j_f * self.computeDist(self.embed(fSen[i_f-j_f+1:i_f+1]), self.centroids[tw][m])  
-                # Unweighted distance
-                dists[i_t, m] = self.computeDist(self.embed(fSen[i_f-j_f+1:i_f+1]), self.centroids[tw][m])  
+          if i_f - j_f + 1 == 0 or i_f - j_f + 1 >= minWordLen:
+            embeds.append(self.embed(fSen[i_f-j_f+1:i_f+1]))
+            embedLens.append(j_f)
+  
+        numCandidates = len(embeds)
+        dists = np.zeros((tLen, self.numMixtures, numCandidates))  
+        for i_t, tw in enumerate(tSen): 
+          for m in range(self.numMixtures):
+            # Distance weighted by the number of frames
+            #dists[i_t, m] = j_f * self.computeDist(self.embed(fSen[i_f-j_f+1:i_f+1]), self.centroids[tw][m])  
+            # Unweighted distance
+            dists[i_t, m, :] = self.computeDist(np.array(embeds), self.centroids[tw][m])  
 
-            segmentCosts[i_f] = np.min(dists)
-          elif i_f - j_f + 1 < minWordLen:
-            continue
-          else:
-            for i_t, tw in enumerate(tSen): 
-              for m in range(self.numMixtures):
-                # Distance weighted by the number of frames
-                #dists[i_t, m] = j_f * self.computeDist(self.embed(fSen[i_f-j_f+1:i_f+1]), self.centroids[tw][m])  
-                # Unweighted distance
-                dists[i_t, m] = self.computeDist(self.embed(fSen[i_f-j_f+1:i_f+1]), self.centroids[tw][m])  
-
-            curCost = segmentCosts[i_f - j_f] + np.min(dists) 
-            if curCost < segmentCosts[i_f]:
-              segmentCosts[i_f] = curCost
-              segmentPaths[i_f] = i_f - j_f
+        minCost = np.min(dists)
+        bestLen = embedLens[np.argmin(minCost)]
+        segmentCosts[i_f] = segmentCosts[max(i_f - bestLen, 0)] + minCost 
+        if i_f - bestLen >= 0:
+          segmentPaths[i_f] = i_f - bestLen
+        else:
+          segmentPaths[i_f] = 0
       
       # Follow the back pointers to find the optimal segmentation
       i_f = fLen - 1
@@ -265,5 +355,5 @@ if __name__ == '__main__':
   trg_file = "random.txt"
 
   model = SegEmbedKMeansWordDiscoverer(datapath+src_file, datapath+trg_file, 1, 20)
-  model.trainUsingEM(writeModel=True, modelPrefix="random_kmeans_embed_")
+  model.train(writeModel=True, modelPrefix="random_kmeans_embed_")
   model.printAlignment("random_kmeans_embed_pred")

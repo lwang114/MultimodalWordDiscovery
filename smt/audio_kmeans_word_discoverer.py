@@ -30,7 +30,7 @@ class KMeansWordDiscoverer:
       self.fCorpus = [fCorpus[fKey] for fKey in sorted(fCorpus.keys(), key=lambda x:int(x.split('_')[-1]))]
       self.data_ids = [fKey for fKey in sorted(fCorpus.keys(), key=lambda x:int(x.split('_')[-1]))]
 
-    def initialize(self, centroidFile=None):
+    def initialize(self, centroidFile=None, initMethod='kmeans++'):
       if centroidFile:
         with open(centroidFile, 'r') as f:
           self.centroids = json.load(f)
