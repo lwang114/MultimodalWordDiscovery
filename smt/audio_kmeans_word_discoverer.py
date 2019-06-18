@@ -9,6 +9,7 @@ NULL = 'NULL'
 random.seed(2)
 np.random.seed(2)
 
+NULL = 'NULL'
 class KMeansWordDiscoverer:
     def __init__(self, sourceCorpusFile, targetCorpusFile, numMixtures):
       self.fCorpus = []
@@ -118,7 +119,7 @@ class KMeansWordDiscoverer:
             for m in range(self.numMixtures):
               rand_id = self.randomDraw(np.min(distances[tw], axis=0))
               self.centroids[tw][m] = feats[rand_id]           
-        
+    
     def findAssignment(self):
       self.assignments = []
       for i, (tSen, fSen) in enumerate(zip(self.tCorpus, self.fCorpus)):
@@ -136,8 +137,6 @@ class KMeansWordDiscoverer:
         self.assignments.append(assignment)
 
     def updateCentroid(self):
-      if DEBUG:
-        print(self.centroids)  
       self.centroids = {tw:np.zeros(cent.shape) for tw, cent in self.centroids.items()}
       self.counts = {tw:np.zeros((self.numMixtures,)) for tw in self.centroids}
       for i, (tSen, fSen) in enumerate(zip(self.tCorpus, self.fCorpus)):
@@ -164,6 +163,8 @@ class KMeansWordDiscoverer:
       self.initialize(centroidFile=centroidFile, initMethod=initMethod)
       self.printModel(modelPrefix+'model_init.txt')
 
+    def trainUsingEM(self, maxIterations=10, centroidFile=None, modelPrefix='', writeModel=False):
+      self.initialize(centroidFile=centroidFile)
       prev_assignments = deepcopy(self.assignments)
       n_iter = 0
       
@@ -192,7 +193,7 @@ class KMeansWordDiscoverer:
       with open(filename, 'w') as f:
         centroids = {tw: c.tolist() for tw, c in self.centroids.items()}
         json.dump(centroids, f)
-    
+   
     # TODO: Randomly draw a sample according to a probability mass distribution
     def randomDraw(self, pmf):
       max_val = np.sum(pmf)
@@ -208,7 +209,6 @@ class KMeansWordDiscoverer:
     def computeDist(self, x, y):
       return np.sqrt(np.sum((x - y)**2))
     
-  
     def align(self, fSen, tSen):
       fLen = fSen.shape[0]
       tLen = len(tSen)
