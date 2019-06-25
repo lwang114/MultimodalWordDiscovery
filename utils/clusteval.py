@@ -63,11 +63,11 @@ def boundary_retrieval_metrics(pred, gold, out_file='class_retrieval_scores.txt'
   for n_ex, (p, g) in enumerate(zip(pred, gold)):
     p_ali = p['alignment']
     g_ali = g['alignment']
-    v = max(max(set(g_ali)), max(set(p_ali)))+1
+    v = max(max(set(g_ali)), max(set(p_ali))) + 1
     confusion = np.zeros((v, v))
-    
+   
     if DEBUG:
-      print(len(p_ali), len(g_ali))
+      print(n_ex, len(p_ali), len(g_ali)) 
     assert len(p_ali) == len(g_ali)
     
     for a_p, a_g in zip(p_ali, g_ali):
@@ -125,21 +125,6 @@ def boundary_retrieval_metrics(pred, gold, out_file='class_retrieval_scores.txt'
     for i in range(n_c):
       f.write('%s %0.4f %0.4f\n' % (classes[i], class_recall[i], class_precision[i]))
   '''
-'''def roc(pred, gold):
-  #assert 'scores' in pred.keys()
-  def roc(pred, gold):
-  for p, g in zip(pred, gold):
-    v = len(set(g))
-    confusion = np.zeros((v, v))
-    p_ali = pred['alignment']
-    g_ali = pred['alignment']
-    assert len(p_ali) == len(g_ali)
-    for a_p, a_g in zip(p_ali, g_ali):
-      confusion[a_g, a_p] += 1
-    for i in range(v):
-      tpr += 1 / v * confusion / np.sum(confusion, axis=0)   
-      fpr += 1 / v * confusion[v][v] / np.sum(confusion, axis=0)
-'''
 
 def retrieval_metrics(pred, gold):
   if not hasattr(pred, 'keys') or not hasattr(gold, 'keys'):
@@ -167,26 +152,23 @@ def retrieval_metrics(pred, gold):
   print('F measure: ', f_mea / n) 
 
 def accuracy(pred, gold):
+  if DEBUG:
+    print('len(pred), len(gold): ', len(pred), len(gold))
   assert len(pred) == len(gold)
   acc = 0.
   n = 0.
   for n_ex, (p, g) in enumerate(zip(pred, gold)):
     ali_p = p['alignment']
     ali_g = g['alignment']
-    
-    #print(n_ex, g['image_id'], len(p['alignment']), len(g['alignment']))
+    if DEBUG:
+      print('n_ex, len(ali_p), len(ali_g)', n_ex, len(ali_p), len(ali_g))
     assert len(ali_p) == len(ali_g)
     for a_p, a_g in zip(ali_p, ali_g):
       acc += (a_p == a_g)
       n += 1
-
+  
   return acc / n
 
-'''def edit_distance(pred, gold):
-  L_pred = len(pred)
-  L_gold = len(gold)
-  lev = np.zeros((L_pred, L_gold))
-'''
 def word_IoU(pred, gold): 
   if DEBUG:
     print(len(pred), len(gold))

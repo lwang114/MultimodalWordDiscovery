@@ -10,10 +10,22 @@ class XNMTPostprocessor():
     self.is_phoneme = is_phoneme
 
   # Convert the predicted alignment files to the right format for evaluation
-  def convert_alignment_file(self, out_file='pred_alignment.json'):    
-    files = sorted(os.listdir(self.input_dir), key=lambda x:int(x.split('.')[-2]))
+  def convert_alignment_file(self, out_file='pred_alignment.json', feat2wav_file=None): 
+    all_files = os.listdir(self.input_dir)
+    files = []
+    for fn in all_files:
+      if fn.endswith(".json"):
+        files.append(fn)
+
+    files = sorted(files, key=lambda x:int(x.split('.')[-2]))
     alignments = []
-    for f in files:
+    
+    feat2wavs = []
+    if feat2wav_file:
+      with open(feat2wav_file, 'r') as f:
+        feat2wavs = json.load(f)
+          
+    for i, f in enumerate(files):
       if f.split('.')[-1] == 'json':
         fp = open(self.input_dir + f, 'r')
         ali = json.load(fp)
@@ -33,15 +45,38 @@ class XNMTPostprocessor():
             ali['alignment'] = [a+1 if a<len(ali['trg_sent'])-1 else 0 for a in ali['alignment']]
           else:
             ali['alignment'] = [a if a<len(ali['trg_sent'])-1 else 0 for a in ali['alignment']]
-          
-        alignment = {'index': ali['index'],
+        
+        new_ali = {}
+        if not feat2wav_file:
+          new_ali = {'index': ali['index'],
                      'is_phoneme': self.is_phoneme,
                      'caption': ali['src_sent'],
                      'image_concepts': ali['trg_sent'],
                      'alignment': ali['alignment'],
                      'attentions': ali['attentions']
                     }
-        alignments.append(alignment)
+        else:
+          feat_len = len(feat2wavs[i])
+          ali_len = len(ali['alignment'])
+          reduce_factor = ali['reduce_factor']
+          new_feat2wav = []
+          for i_a in range(ali_len): 
+            for i_f in range(feat_len):
+              st = feat2wavs[i]['feat2wav'][i_f * reduce_factor][0]
+              end = feat2wavs[i]['feat2wav'][max(i_f * reduce_factor + 1, feat_len - 1)][1]
+              new_feat2wav.append([st, end])
+          
+          new_ali = {'index': ali['index'],
+                     'is_phoneme': self.is_phoneme,
+                     'caption': ali['src_sent'],
+                     'image_concepts': ali['trg_sent'],
+                     'alignment': ali['alignment'],
+                     'attentions': ali['attentions'],
+                     'feat2wav': new_feat2wav 
+                    }
+        
+
+        alignments.append(new_ali)
     
     with open(out_file, 'w') as fp:
       json.dump(alignments, fp, indent=4, sort_keys=True)
