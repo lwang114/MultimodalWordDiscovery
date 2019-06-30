@@ -3,10 +3,15 @@ import json
 from nltk.metrics import recall, precision, f_measure
 from nltk.metrics.distance import edit_distance
 from sklearn.metrics import roc_curve 
+import logging
 
-DEBUG = False
+DEBUG = True
 NULL = 'NULL'
 END = '</s>'
+
+#logging.basicConfig(filename="clusteval.log", format="%(asctime)s %(message)s", level=logging.DEBUG)
+logging.basicConfig(format="%(asctime)s %(message)s", level=logging.DEBUG)
+
 #
 # :param  pred (clusters) --- A list of cluster indices corresponding to each sample
 #         gold (classes) --- A list of class indices corresponding to each sample
@@ -14,15 +19,16 @@ END = '</s>'
 def local_cluster_purity(pred, gold):
   score = 0
   if DEBUG:
-    print('pred[0]: ', pred[0])
-    print('gold[0]: ', gold[0])
-    print('len(pred), len(gold): ', len(pred), len(gold))
+    logging.debug('pred[0]: ' + str(pred[0]))
+    logging.debug('gold[0]: ' + str(gold[0]))
+    logging.debug('len(pred), len(gold): ' + str(len(pred)) + ' ' + str(len(gold)))
+  
   assert len(pred) == len(gold)
   N = len(pred)
   for i, (p, g) in enumerate(zip(pred, gold)):
     if DEBUG:
-      print('pred: ', p)
-      print('gold: ', g)
+      logging.debug('pred: ' + str(p))
+      logging.debug('gold: ' + str(g))
     assert len(p) == len(g)
     L = len(p)
     n_g = len(set(g))
@@ -67,24 +73,25 @@ def boundary_retrieval_metrics(pred, gold, out_file='class_retrieval_scores.txt'
     confusion = np.zeros((v, v))
    
     if DEBUG:
-      print(n_ex, len(p_ali), len(g_ali)) 
+      logging.debug("examples " + str(n_ex)) 
+      logging.debug("# of frames in predicted alignment and gold alignment: %d %d" % (len(p_ali), len(g_ali))) 
     assert len(p_ali) == len(g_ali)
     
     for a_p, a_g in zip(p_ali, g_ali):
-      confusion[a_g, a_p] += 1
+      confusion[a_g, a_p] += 1.
   
     for i in range(v):
-      if confusion[i][i] == 0:
+      if confusion[i][i] == 0.:
         continue
-      rec += 1 / v * confusion[i][i] / np.sum(confusion[i])   
-      prec += 1 / v * confusion[i][i] / np.sum(confusion[:, i])
+      rec += 1. / v * confusion[i][i] / np.sum(confusion[i])   
+      prec += 1. / v * confusion[i][i] / np.sum(confusion[:, i])
        
   recall = rec / n
   precision = prec / n
-  f_measure = 2 / (1 / recall + 1 / precision)
-  print('Local alignment recall: ', recall)
-  print('Local alignment precision: ', precision)
-  print('Local alignment f_measure: ', f_measure)
+  f_measure = 2. / (1. / recall + 1. / precision)
+  print('Local alignment recall: ' + str(recall))
+  print('Local alignment precision: ' + str(precision))
+  print('Local alignment f_measure: ' + str(f_measure))
 
   '''def _find_distinct_tokens(data):
     tokens = set()
@@ -147,13 +154,11 @@ def retrieval_metrics(pred, gold):
     prec += precision(g, p)
     f_mea += f_measure(g, p)
   
-  print('Precision: ', prec / n)
-  print('Recall: ', rec / n)
-  print('F measure: ', f_mea / n) 
+  logging.info('Precision: ', prec / n)
+  logging.info('Recall: ', rec / n)
+  logging.info('F measure: ', f_mea / n) 
 
 def accuracy(pred, gold):
-  if DEBUG:
-    print('len(pred), len(gold): ', len(pred), len(gold))
   assert len(pred) == len(gold)
   acc = 0.
   n = 0.
@@ -161,7 +166,9 @@ def accuracy(pred, gold):
     ali_p = p['alignment']
     ali_g = g['alignment']
     if DEBUG:
-      print('n_ex, len(ali_p), len(ali_g)', n_ex, len(ali_p), len(ali_g))
+      logging.debug("examples " + str(n_ex)) 
+      logging.debug("# of frames in predicted alignment and gold alignment: %d %d" % (len(ali_p), len(ali_g))) 
+  
     assert len(ali_p) == len(ali_g)
     for a_p, a_g in zip(ali_p, ali_g):
       acc += (a_p == a_g)
@@ -171,11 +178,11 @@ def accuracy(pred, gold):
 
 def word_IoU(pred, gold): 
   if DEBUG:
-    print(len(pred), len(gold))
+    logging.debug("# of examples in pred and gold: %d %d" % (len(pred), len(gold)))
   assert len(pred) == len(gold)
   def _IoU(pred, gold):
-    p_start, p_end = pred[1], pred[2]
-    g_start, g_end = gold[1], gold[2]
+    p_start, p_end = pred[0], pred[1]
+    g_start, g_end = gold[0], gold[1]
     i_start, u_start = max(p_start, g_start), min(p_start, g_start)  
     i_end, u_end = min(p_end, g_end), max(p_end, g_end)
   
@@ -188,57 +195,38 @@ def word_IoU(pred, gold):
     iou = (i_end - i_start) / (u_end - u_start)
     assert iou <= 1 and iou >= 0
     return iou
-
-  def _findPhraseFromPhoneme(sent, alignment):
-    if not hasattr(sent, '__len__') or not hasattr(alignment, '__len__'):
-      raise TypeError('sent and alignment should be list')
-    assert len(sent) == len(alignment)
+ 
+  def _findWords(alignment):
     cur = alignment[0]
-    ws = []
-    w_align = []
-    w = ''  
+    start = 0
+    end = 0
+    boundaries = []
     for i, a_i in enumerate(alignment):
       if cur == a_i:
-        w = w + ' ' + sent[i]
+        end += 1
       else:
-        ws.append(w)
-        w_align.append(cur)
-        w = sent[i]
+        boundaries.append((start, end))
+        start = end
         cur = a_i
     
-    ws.append(w)
-    w_align.append(cur)
-    return ws
-  
+    if len(boundaries) == 0:
+      boundaries.append((start, end))
+    return boundaries
+
   iou = 0.
   n = 0.
   for p, g in zip(pred, gold):
+    p_word_boundaries = _findWords(p['alignment'])
+    g_word_boundaries = _findWords(g['alignment'])
+    
     if DEBUG:
-      print('len caption, len alignment: ', len(p['caption']), len(p['alignment']), p['caption'])
-      print('len caption, len alignment: ', len(g['caption']), len(g['alignment']), g['caption'])
-
-    p_words = _findPhraseFromPhoneme(p['caption'], p['alignment'])
-    g_words = _findPhraseFromPhoneme(g['caption'], g['alignment'])
-    #if DEBUG:
-    #  print(p_words)
-    #  print(g_words)
+      logging.debug("pred word boundaries: " + str(p_word_boundaries))
+      logging.debug("groundtruth word boundaries: " + str(g_word_boundaries))
     
-    p_words_with_pos = []
-    g_words_with_pos = []
-    start = 0
-    for p_w in p_words:
-      p_words_with_pos.append((p_w, start, start + len(p_w.split())-1))
-      start += len(p_w.split())
-  
-    start = 0
-    for g_w in g_words:
-      g_words_with_pos.append((g_w, start, start + len(g_w.split())-1))
-      start += len(g_w.split())  
-    
-    for p_w in p_words_with_pos:
+    for p_wb in p_word_boundaries: 
       n_overlaps = []
-      for g_w in g_words_with_pos:
-        n_overlaps.append(_IoU(g_w, p_w))
+      for g_wb in g_word_boundaries:
+        n_overlaps.append(_IoU(g_wb, p_wb))
       max_iou = max(n_overlaps)
       iou += max_iou
       n += 1

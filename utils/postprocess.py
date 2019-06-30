@@ -1,9 +1,18 @@
 import os
 import json
+from copy import deepcopy
+import numpy as np
+import logging
 
 DEBUG = True
 END = '</s>'
 NULL = 'NULL'
+
+if os.path.exists("*.log"):
+  os.system("rm *.log")
+
+logging.basicConfig(filename="postprocess.log", format="%(asctime)s %(message)s)", level=logging.DEBUG)
+
 class XNMTPostprocessor():
   def __init__(self, input_dir, is_phoneme=True):
     self.input_dir = input_dir
@@ -73,8 +82,7 @@ class XNMTPostprocessor():
                      'alignment': ali['alignment'],
                      'attentions': ali['attentions'],
                      'feat2wav': new_feat2wav 
-                    }
-        
+                    }        
 
         alignments.append(new_ali)
     
@@ -164,8 +172,69 @@ def _findPhraseFromPhoneme(sent, alignment):
   
   return ws, w_align
 
+def resample_alignment(alignment_file, src_feat2wavs_file, trg_feat2wavs_file, out_file):
+  with open(alignment_file, "r") as f:
+    alignments = json.load(f)
+
+  with open(src_feat2wavs_file, "r") as f:
+    src_feat2wavs = json.load(f)
+  with open(trg_feat2wavs_file, "r") as f:
+    trg_feat2wavs = json.load(f)
+
+  src_ids = sorted(src_feat2wavs, key=lambda x:int(x.split("_")[-1]))
+  trg_ids = sorted(trg_feat2wavs, key=lambda x:int(x.split("_")[-1]))
+
+  new_alignments = []  
+  for i_ali, ali in enumerate(alignments):
+    # TODO: make this faster by making the feat_id convention more consistent
+    trg_feat2wav = trg_feat2wavs[trg_ids[i_ali]]
+    src_feat2wav = src_feat2wavs[src_ids[i_ali]]
+    wavLen = max(src_feat2wav[-1][1], trg_feat2wav[-1][1])
+    
+    # Frames are automatically assigned to the last frame (convenient if the two feat2wavs have different lengths)
+    trg_wav2feat = [-1]*wavLen
+    
+    alignment = ali["alignment"]
+
+    if DEBUG:
+      logging.debug("i_ali: " + str(i_ali))
+      logging.debug("src_ids, trg_ids: %s %s" % (src_ids[i_ali], trg_ids[i_ali]))
+      logging.debug("# of wav frames in src_feat2wav, # of feat frames: %d %d" % (src_feat2wav[-1][1], len(src_feat2wav))) 
+      logging.debug("# pf wav frames in trg_feat2wav, # of feat frames: %d %d" % (trg_feat2wav[-1][1], len(trg_feat2wav)))
+      logging.debug("# of frames in alignment: " + str(len(alignment)))
+      logging.debug("# of frames in trg_feat2wav: " + str(len(trg_feat2wav)))
+        
+    for i_seg, seg in enumerate(trg_feat2wav):  
+      start = seg[0]
+      end = seg[1]
+      for t in range(start, end):
+        trg_wav2feat[t] = i_seg
+    
+    new_alignment = [0]*len(trg_feat2wav)
+    for i_src in range(len(alignment)):
+      for i_wav in range(src_feat2wav[i_src][0], src_feat2wav[i_src][1]):
+        if i_wav > len(trg_wav2feat) - 1:
+          logging.warning("inconsistent wav lens: %d %d" % (src_feat2wav[-1][1], len(trg_wav2feat)))
+          break
+        i_trg = trg_wav2feat[i_wav]
+        new_alignment[i_trg] = alignment[i_src] 
+
+    new_align_info = deepcopy(ali)
+    new_align_info["alignment"] = new_alignment
+    new_alignments.append(new_align_info)
+  
+  with open(out_file, "w") as f:
+    json.dump(new_alignments, f, sort_keys=True, indent=4)  
+  
 if __name__ == '__main__':
+  '''
   postproc = XNMTPostprocessor('../nmt/exp/feb28_phoneme_level_clustering/output/report/')
   postproc.convert_alignment_file('../nmt/exp/feb28_phoneme_level_clustering/output/alignment.json')
   alignment_to_cluster('../nmt/exp/feb28_phoneme_level_clustering/output/alignment.json', '../nmt/exp/feb28_phoneme_level_clustering/output/cluster.json')
-  #postproc.convert_retrieval_file('../nmt/exp/mar19_phoneme_to_image_norm_over_time/output/phoneme_to_concept.hyp') 
+  postproc.convert_retrieval_file('../nmt/exp/mar19_phoneme_to_image_norm_over_time/output/phoneme_to_concept.hyp')
+  '''
+  alignment_file = "../smt/exp/june_24_mfcc_kmeans_mixture=3/flickr30k_pred_alignment.json"
+  src_feat2wavs_file = "../data/flickr30k/audio_level/flickr_mfcc_feat2wav.json" 
+  ref_feat2wavs_file = "../data/flickr30k/audio_level/flickr30k_gold_alignment.json_feat2wav.json"
+  out_file = "../smt/exp/june_24_mfcc_kmeans_mixture=3/pred_alignment_resample.json"
+  resample_alignment(alignment_file, src_feat2wavs_file, ref_feat2wavs_file, out_file) 
