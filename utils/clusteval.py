@@ -5,7 +5,7 @@ from nltk.metrics.distance import edit_distance
 from sklearn.metrics import roc_curve 
 import logging
 
-DEBUG = True
+DEBUG = False
 NULL = 'NULL'
 END = '</s>'
 
@@ -167,8 +167,10 @@ def accuracy(pred, gold):
     ali_g = g['alignment']
     if DEBUG:
       logging.debug("examples " + str(n_ex)) 
-      logging.debug("# of frames in predicted alignment and gold alignment: %d %d" % (len(ali_p), len(ali_g))) 
-  
+      print("examples " + str(n_ex))
+      #logging.debug("# of frames in predicted alignment and gold alignment: %d %d" % (len(ali_p), len(ali_g))) 
+      print("# of frames in predicted alignment and gold alignment: %d %d" % (len(ali_p), len(ali_g)))
+
     assert len(ali_p) == len(ali_g)
     for a_p, a_g in zip(ali_p, ali_g):
       acc += (a_p == a_g)
@@ -196,23 +198,6 @@ def word_IoU(pred, gold):
     assert iou <= 1 and iou >= 0
     return iou
  
-  def _findWords(alignment):
-    cur = alignment[0]
-    start = 0
-    end = 0
-    boundaries = []
-    for i, a_i in enumerate(alignment):
-      if cur == a_i:
-        end += 1
-      else:
-        boundaries.append((start, end))
-        start = end
-        cur = a_i
-    
-    if len(boundaries) == 0:
-      boundaries.append((start, end))
-    return boundaries
-
   iou = 0.
   n = 0.
   for p, g in zip(pred, gold):
@@ -231,6 +216,53 @@ def word_IoU(pred, gold):
       iou += max_iou
       n += 1
   return iou / n
+
+# Boundary retrieval metrics for word segmentation
+def segmentation_retrieval_metrics(pred, gold, tolerance):
+  assert len(pred) == len(gold)
+  n = len(pred)
+  prec = 0.
+  rec = 0.
+
+  # Local retrieval metrics
+  for n_ex, (p, g) in enumerate(zip(pred, gold)):
+    #print(p, g)
+    overlaps = []
+    for i, p_wb in enumerate(p.tolist()):
+      for g_wb in g.tolist():
+        if abs(g_wb[0] - p_wb[0]) <= tolerance and abs(g_wb[1] - p_wb[1]) <= tolerance:
+          overlaps.append(i)
+    
+    rec +=  len(overlaps) / len(g)   
+    prec += len(overlaps) / len(p)
+           
+  recall = rec / n
+  precision = prec / n
+  if recall <= 0. or precision <= 0.:
+    f_measure = 0.
+  else:
+    f_measure = 2. / (1. / recall + 1. / precision)
+  print('Segmentation recall: ' + str(recall))
+  print('Segmentation precision: ' + str(precision))
+  #print('Segmentation f_measure: ' + str(f_measure))
+
+def _findWords(alignment):
+  cur = alignment[0]
+  start = 0
+  end = 0
+  boundaries = []
+  for i, a_i in enumerate(alignment):
+    if cur == a_i:
+      end += 1
+    else:
+      boundaries.append((start, end))
+      start = end
+      cur = a_i
+  
+  if len(boundaries) == 0:
+    boundaries.append((start, end))
+  return boundaries
+
 
 '''class Evaluator():
   def __init__(self, pred_file, gold_file):

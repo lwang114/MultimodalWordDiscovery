@@ -238,7 +238,7 @@ class HMMWordDiscoverer:
       ll += math.log(likelihood)
     return ll / len(self.tCorpus)
 
-  def trainUsingEM(self, numIterations=10, writeModel=False, convergenceEpsilon=0.01):
+  def trainUsingEM(self, numIterations=50, writeModel=False, convergenceEpsilon=0.01):
     if writeModel:
       self.printModel('initial_model.txt')
  
@@ -297,14 +297,19 @@ class HMMWordDiscoverer:
     backPointers = np.zeros((T, nState), dtype=int)
     for i in range(nState):
       scores[i] = self.init[nState][i] * self.obs[eSen[i]][fSen[0]] 
-
+    
+    alignProbs = [] 
     for t, fw in enumerate(fSen[1:]):
       obs_arr = np.array([self.obs[eSen[i]][fw] if fw in self.obs[eSen[i]] else unkProb for i in range(nState)])
       candidates = np.tile(scores, (nState, 1)).T * self.trans[nState] * obs_arr
       backPointers[t+1] = np.argmax(candidates, axis=0)
       scores = np.max(candidates, axis=0)
+      
+      alignProbs.append((scores / np.sum(scores)).tolist())
+      
       if DEBUG:
         print(scores)
+    
     curState = np.argmax(scores)
     bestPath = [int(curState)]
     for t in range(T-1, 0, -1):
@@ -312,7 +317,8 @@ class HMMWordDiscoverer:
         print('curState: ', curState)
       curState = backPointers[t, curState]
       bestPath.append(int(curState))
-    return bestPath[::-1], np.max(scores)
+    
+    return bestPath[::-1], alignProbs
       
   def printModel(self, fileName):
     initFile = open(fileName+'_initialprobs.txt', 'w')
@@ -344,7 +350,7 @@ class HMMWordDiscoverer:
     if DEBUG:
       print(len(self.fCorpus))
     for i, (fSen, tSen) in enumerate(zip(self.fCorpus, self.tCorpus)):
-      alignment, score = self.align(fSen, tSen)
+      alignment, alignProbs = self.align(fSen, tSen)
       if DEBUG:
         print(fSen, tSen)
         print(type(alignment[1]))
@@ -353,7 +359,7 @@ class HMMWordDiscoverer:
             'image_concepts': tSen, 
             'caption': fSen,
             'alignment': alignment,
-            'alignment_score': score,
+            'align_probs': alignProbs,
             'is_phoneme': isPhoneme
           }
       aligns.append(align_info)

@@ -11,7 +11,7 @@ DEBUG = False
 
 class IBMModel1:
 
-    def __init__(self, trainingCorpusFile):
+    def __init__(self, trainingCorpusFile, modelName="simplified_mixture"):
         # Initialize data structures for storing training data
         self.fCorpus = []                   # fCorpus is a list of foreign (e.g. Spanish) sentences
 
@@ -87,7 +87,7 @@ class IBMModel1:
             self.updateTranslationProbabilities()            # <you need to implement updateTranslationProbabilities()>
             # Write model distributions after iteration i to file
             if writeModel:
-                self.printModel('model_iter='+str(i)+'.txt')     # <you need to implement printModel(filename)>
+                self.printModel(self.modelName + 'model_iter='+str(i)+'.txt')     # <you need to implement printModel(filename)>
             i += 1
 
     # Compute translation length probabilities q(m|n)
@@ -105,9 +105,9 @@ class IBMModel1:
             #if DEBUG:
             #  if len(ts) == 9:
             #    print(ts, fs)
-            self.lenProb[len(ts)-1][len(fs)] = 1
+            self.lenProb[len(ts)-1][len(fs)] = 1.
           else:
-            self.lenProb[len(ts)-1][len(fs)] += 1
+            self.lenProb[len(ts)-1][len(fs)] += 1.
         
         if smoothing == 'laplace':
           tLenMax = max(list(self.lenProb.keys()))
@@ -358,7 +358,7 @@ class IBMModel2:
         j = 0;
         tTokenized = ();
         fTokenized = ();
-        for s in f:
+        for s in f: 
             if i == 0:
                 tTokenized = s.split() #word_tokenize(s)
                 # Add null word in position zero
@@ -383,21 +383,14 @@ class IBMModel2:
         return
 
     # Uses the EM algorithm to learn the model's parameters
-    def trainUsingEM(self, numIterations=50, writeModel=False, transProbFile=None, alignPriorFile=None, epsilon=1e-2):
-        ###
-        # Part 1: Train the model using the EM algorithm
-        #
-        # <you need to finish implementing this method's sub-methods>
-        #
-        ###
-
+    def trainUsingEM(self, numIterations=50, writeModel=False, transProbFile=None, alignPriorFile=None, epsilon=1e-2):   
         # Compute translation length probabilities q(m|n)
         self.computeTranslationLengthProbabilities()         # <you need to implement computeTranslationlengthProbabilities()>
         # Set initial values for the translation probabilities p(f|e)
         self.initializeWordTranslationProbabilities(transProbFile)        # <you need to implement initializeTranslationProbabilities()>
         self.initializeAlignmentProbabilities(alignPriorFile)
         
-        print("Initial log likelihood: ", self.averageTranslationProbability())
+        print("Initial log translation probability: ", self.averageTranslationProbability())
         # Write the initial distributions to file
         if writeModel:
             self.printModel('initial_model.txt')                 # <you need to implement printModel(filename)>
@@ -406,7 +399,7 @@ class IBMModel2:
             #i = 1
             #while not self.checkConvergence(epsilon):
             print ("Starting training iteration "+str(i))
-            print ("Average Log Translation Probability: ", self.avgLogTransProb)
+            print ("Average log translation probability: ", self.averageTranslationProbability())
             # Run E-step: calculate expected counts using current set of parameters
             self.computeExpectedCounts()                     # <you need to implement computeExpectedCounts()>
             # Run M-step: use the expected counts to re-estimate the parameters
@@ -556,10 +549,13 @@ class IBMModel2:
  
     def updateAlignmentProbabilities(self):
       newAlignPriors = {tLen: {fLen: np.zeros((int(tLen), int(fLen))) for fLen in self.alignPriors[tLen]} for tLen in self.alignPriors}
-      for fs, ts in zip(self.fCorpus, self.tCorpus):
+      
+      for s, (fs, ts) in enumerate(zip(self.fCorpus, self.tCorpus)):
         for i, tw in enumerate(ts):
           for j, fw in enumerate(fs):
-            newAlignPriors[len(ts)][len(fs)][i][j] += self.alignPriors[len(ts)][len(fs)][i][j] * self.trans[tw][fw]    
+            fKey = str(j)+'_'+fw
+            tKey = str(i)+'_'+tw
+            newAlignPriors[len(ts)][len(fs)][i][j] += self.alignProb[s][fKey][tKey] #self.alignPriors[len(ts)][len(fs)][i][j] * self.trans[tw][fw]    
 
       for tLen in self.alignPriors:
         for fLen in self.alignPriors[tLen]:
@@ -569,9 +565,14 @@ class IBMModel2:
       avgTransProb = 0.
       if DEBUG:
         print(len(self.fCorpus), self.fCorpus[0])
+        print("length prob keys: ", self.lenProb.keys())
+          
       for fs, ts in zip(self.fCorpus, self.tCorpus):
-        #if DEBUG:
-        #  print(ts, fs, len(ts), len(fs))
+        if DEBUG:
+          print("ts, fs, len(ts), len(fs): ", ts, fs, len(ts), len(fs))
+          print("length prob keys: ", self.lenProb.keys())
+          print("lenProb[tLen].keys(), lenProb[tLen][fLen]", self.lenProb[len(ts)-1].keys(), self.lenProb[len(ts)-1][len(fs)])
+
         avgTransProb += math.log(self.lenProb[len(ts)-1][len(fs)])
         for j, fw in enumerate(fs):   
           avgTransWord = 0. 
@@ -592,7 +593,6 @@ class IBMModel2:
       self.avgLogTransProb = avgLogTransProb  
       return 0
     
-    # TODO: Modify for IBM Model 2
     # Returns the best alignment between fSen and tSen, according to your model
     def align(self, fSen, tSen):
         ###
