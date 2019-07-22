@@ -238,7 +238,7 @@ class HMMWordDiscoverer:
       ll += math.log(likelihood)
     return ll / len(self.tCorpus)
 
-  def trainUsingEM(self, numIterations=50, writeModel=False, convergenceEpsilon=0.01):
+  def trainUsingEM(self, numIterations=80, writeModel=False, convergenceEpsilon=0.01):
     if writeModel:
       self.printModel('initial_model.txt')
  

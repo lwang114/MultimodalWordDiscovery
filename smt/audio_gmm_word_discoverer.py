@@ -112,7 +112,8 @@ class GMMWordDiscoverer:
                 transMeanFile=None, 
                 transVarFile=None,
                 initMethod="kmeans++",
-                contextWidth=0):
+                contextWidth=0,
+                fixedVariance=0.002):
         self.maxNumMixtures = numMixtures
         self.numMixtures = {} 
         # Initialize data structures for storing training data
@@ -133,7 +134,12 @@ class GMMWordDiscoverer:
         self.contextWidth = contextWidth
 
         # Initialize any additional data structures here (e.g. for probability model)        
-        self.initializeWordTranslationDensities(mixturePriorFile=mixturePriorFile, transMeanFile=transMeanFile, transVarFile=transVarFile, initMethod=initMethod) 
+        self.initializeWordTranslationDensities(
+                                        mixturePriorFile=mixturePriorFile, 
+                                        transMeanFile=transMeanFile, 
+                                        transVarFile=transVarFile, 
+                                        initMethod=initMethod, fixedVariance=fixedVariance 
+                                        ) 
     
     # Reads a corpus of parallel sentences from a text file (you shouldn't need to modify this method)
     def initialize(self, fFileName, tFileName, contextWidth, maxLen=1000):
@@ -144,7 +150,7 @@ class GMMWordDiscoverer:
         
         fCorpus = np.load(fFileName) 
         self.fCorpus = [concatContext(fCorpus[k], contextWidth) for k in sorted(fCorpus.keys(), key=lambda x:int(x.split('_')[-1]))]
-        self.fCorpus = [fSen[:maxLen] for fSen in fCorpus] 
+        self.fCorpus = [fSen[:maxLen] for fSen in self.fCorpus] 
         
         self.data_ids = [feat_id.split('_')[-1] for feat_id in sorted(fCorpus.keys(), key=lambda x:int(x.split('_')[-1]))]
         self.featDim = self.fCorpus[0].shape[1]
@@ -152,7 +158,7 @@ class GMMWordDiscoverer:
         return
     
     # Uses the EM algorithm to learn the model's parameters
-    def trainUsingEM(self, numIterations=10, writeModel=False, modelPrefix='', epsilon=1e-5, smoothing=None):
+    def trainUsingEM(self, numIterations=100, writeModel=False, modelPrefix='', epsilon=1e-5, smoothing=None, fixedVariance=0.002):
         ###
         # Part 1: Train the model using the EM algorithm
         #
@@ -182,7 +188,7 @@ class GMMWordDiscoverer:
             
             begin_time = time.time()            
             # Run M-step: use the expected counts to re-estimate the parameters
-            self.updateTranslationDensities()            # <you need to implement updateTranslationProbabilities()>
+            self.updateTranslationDensities(fixedVariance=fixedVariance)            # <you need to implement updateTranslationProbabilities()>
             print('M-step takes %0.5f s to finish' % (time.time() - begin_time))
             
             # Write model distributions after iteration i to file
@@ -231,7 +237,7 @@ class GMMWordDiscoverer:
             self.lenProb[tl][fl] = self.lenProb[tl][fl] / totCount 
 
     # Set initial values for the translation probabilities p(f|e)
-    def initializeWordTranslationDensities(self, mixturePriorFile=None, transMeanFile=None, transVarFile=None, initMethod="kmeans++"):
+    def initializeWordTranslationDensities(self, mixturePriorFile=None, transMeanFile=None, transVarFile=None, initMethod="kmeans++", fixedVariance=0.002):
         # Initialize the translation mean and variance
         self.transMeans = {}
         self.transVars = {}
@@ -255,7 +261,7 @@ class GMMWordDiscoverer:
             self.transVars = {tw:np.array(self.transVars[tw]) for tw in self.transVars}
 
         else:
-          self.mkmeans.trainUsingEM()
+          self.mkmeans.trainUsingEM(maxIterations=10)
           self.transMeans = self.mkmeans.centroids
           self.mixturePriors = {tw:np.log(np.ones((centroid.shape[0],)) / float(centroid.shape[0])) for tw, centroid in self.transMeans.items()}  
           #self.transVars = {tw:np.ones((self.maxNumMixtures, self.featDim)) for tw in self.transMeans}
@@ -273,16 +279,19 @@ class GMMWordDiscoverer:
               if ts[k_t] not in conceptCounts:
                 conceptCounts[ts[k_t]] = np.zeros((self.maxNumMixtures,))
               conceptCounts[ts[k_t]][m] += 1
-
-          for i, (ts, fs) in enumerate(zip(self.tCorpus, self.fCorpus)):
-            fLen = fs.shape[0]
-            for k_f in range(fLen):
-              k_c = self.mkmeans.assignments[i][k_f]
-              k_t = int(k_c / self.maxNumMixtures)
-              m = k_c % self.maxNumMixtures
-               
-              self.transVars[ts[k_t]][m] += np.sum((fs - self.transMeans[ts[k_t]][m]) ** 2, axis=0) / conceptCounts[ts[k_t]][m]
           
+          if fixedVariance <= 0.:
+            for i, (ts, fs) in enumerate(zip(self.tCorpus, self.fCorpus)):
+              fLen = fs.shape[0]
+              for k_f in range(fLen):
+                k_c = self.mkmeans.assignments[i][k_f]
+                k_t = int(k_c / self.maxNumMixtures)
+                m = k_c % self.maxNumMixtures
+                 
+                self.transVars[ts[k_t]][m] += np.sum((fs - self.transMeans[ts[k_t]][m]) ** 2, axis=0) / conceptCounts[ts[k_t]][m]
+          else:
+            for tw in self.transMeans:
+              self.transVars[tw] = fixedVariance * np.ones((self.maxNumMixtures, self.featDim))    
 
           if DEBUG: 
             print("fs: ", fs[0, :10])
@@ -339,11 +348,12 @@ class GMMWordDiscoverer:
         #pass
 
     # Run M-step: use the expected counts to re-estimate the parameters
-    def updateTranslationDensities(self):
+    def updateTranslationDensities(self, fixedVariance=0.002):
         # Implement this method
         n_sentence = min(len(self.tCorpus), len(self.fCorpus))
         self.transMeans = {}
-        self.transVars = {}
+        if fixedVariance <= 0:
+          self.transVars = {}
         self.mixturePriors = {}
 
         # Sum all the expected counts across sentence for pairs of translation
@@ -354,7 +364,8 @@ class GMMWordDiscoverer:
           for k_t, tw in enumerate(tSen):
             if tw not in self.transMeans.keys():
               self.transMeans[tw] = np.zeros((self.numMixtures[tw], self.featDim))
-              self.transVars[tw] = np.zeros((self.numMixtures[tw], self.featDim))
+              if fixedVariance <= 0:
+                self.transVars[tw] = np.zeros((self.numMixtures[tw], self.featDim))
               self.mixturePriors[tw] = np.zeros((self.numMixtures[tw],)) 
               normFactorList[tw] = [[] for _ in range(self.numMixtures[tw])]
               #normFactor_[tw] = np.zeros((self.numMixtures,))
@@ -385,28 +396,30 @@ class GMMWordDiscoverer:
               self.transMeans[tw][m] /= np.exp(normFactor[tw][m])  
               m += 1
 
-        # Update translation variance
-        for i, (tSen, fSen) in enumerate(zip(self.tCorpus, self.fCorpus)):
-          for k_t, tw in enumerate(tSen):
-            tKey = str(k_t)+'_'+tw
-            for m in range(self.numMixtures[tw]):
-              self.transVars[tw][m] += np.dot(np.exp(self.alignProb[i][tKey][m]), ((fSen - self.transMeans[tw][m]) ** 2))
+        if fixedVariance <= 0.:
+          # Update translation variance
+          for i, (tSen, fSen) in enumerate(zip(self.tCorpus, self.fCorpus)):
+            for k_t, tw in enumerate(tSen):
+              tKey = str(k_t)+'_'+tw
+              for m in range(self.numMixtures[tw]):
+                self.transVars[tw][m] += np.dot(np.exp(self.alignProb[i][tKey][m]), ((fSen - self.transMeans[tw][m]) ** 2))
         
-        # Normalization over all the possible translation of the target word
-        for tw in self.transMeans.keys():
-          m = 0
-          while m <= self.numMixtures[tw] - 1:
-            self.transVars[tw][m] /= np.exp(normFactor[tw][m])  
-              
-            if np.min(self.transVars[tw][m]) <= 0:
-              print('bad variance, remove the cluster: ', tw, m, np.min(self.transVars[tw][m]))
-              self.removeCluster(tw, m)
-            else:
-              self.mixturePriors[tw][m] = normFactor[tw][m] - logsumexp(normFactor[tw]) 
-              m += 1
+          # Normalization over all the possible translation of the target word
+          for tw in self.transMeans.keys():
+            m = 0
+            while m <= self.numMixtures[tw] - 1:
+              self.transVars[tw][m] /= np.exp(normFactor[tw][m])  
+                
+              if np.min(self.transVars[tw][m]) <= 0:
+                print('bad variance, remove the cluster: ', tw, m, np.min(self.transVars[tw][m]))
+                self.removeCluster(tw, m)
+              else:
+                self.mixturePriors[tw][m] = normFactor[tw][m] - logsumexp(normFactor[tw]) 
+                m += 1
 
             #if np.min(self.transVars[tw][m]) <= 0:
             #  self.transVars[tw][m] = EPS
+
 
     def removeCluster(self, tw, m):
       transMeans = np.zeros((self.numMixtures[tw] - 1, self.featDim))
@@ -624,7 +637,7 @@ if __name__ == "__main__":
     #model = GMMWordDiscoverer(src_file, trg_file, 10, contextWidth=2)
     #model.initializeWordTranslationDensities(mixturePriorFile, transMeanFile, transVarFile)
     #model.avgLogLikelihood()
-    model.trainUsingEM(numIterations=10, writeModel=True)
+    model.trainUsingEM(numIterations=50, writeModel=True)
     
     alignment, _ = model.align(Xcontext, ["NULL", "1", "2", "3", "4"])
     print("alignment by my model: ", np.array(alignment)) 

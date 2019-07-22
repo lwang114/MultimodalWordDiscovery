@@ -47,7 +47,7 @@ pred_cluster_nmt_file = ''
 output_path = ''
 
 smt_model_path = 'smt/models/flickr30k_phoneme_level/model_iter=46.txt_translationprobs.txt'
-start = 3
+start = 1
 end = 4
 
 if start < 1 and end >= 1:
@@ -92,7 +92,7 @@ if start < 2 and end >= 2:
       model = HMMWordDiscoverer(datapath + "phoneme_level/flickr30k.txt",
                                 modelName=args.exp_dir + args.smt_model)
 
-  model.trainUsingEM(50, writeModel=True)
+  model.trainUsingEM(80, writeModel=True)
   model.printAlignment(pred_alignment_smt_prefix)
   
   print('Finish training after %f s !' % (time.time() - start_time))
@@ -162,7 +162,8 @@ if start < 4 and end >= 4:
   print("Finishing drawing roc plots after %f s !" % (time.time() - start_time))
   
   start_time = time.time()
-  rand_ids = np.random.randint(0, n_ex-1, 10).tolist()
+  n_ex = 6000
+  rand_ids = np.random.randint(0, n_ex-1, size=(10,)).tolist()
   if args.nmt:
     generate_nmt_attention_plots(pred_alignment_file, indices=rand_ids, out_dir=args.exp_dir + "attention_plot_")
   else:

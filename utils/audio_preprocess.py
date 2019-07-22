@@ -316,9 +316,9 @@ class FlickrAudioPreprocessor:
             if cur_img_id == img_id and cur_capt_id == capt_id:
               feat_id = cur_feat_id
               if train_test_split:
-                feats_train[feat_id] = self.bnf_train[feat_id]
+                feats_train["%s_%d" % (feat_id, i_a)] = self.bnf_train[feat_id]
               else:
-                feats[feat_id] = self.bnf_train[feat_id]
+                feats["%s_%d" % (feat_id, i_a)] = self.bnf_train[feat_id]
               found = True
               break
 
@@ -329,9 +329,9 @@ class FlickrAudioPreprocessor:
                 feat_id = cur_feat_id
                 if train_test_split:
                   #np.save(test_src_dir + '_'.join([img_id, capt_id, str(i_a)])+'.npy', self.bnf_test[feat_id])
-                  feats_test[feat_id] = self.bnf_test[feat_id]
+                  feats_test["%s_%d" % (feat_id, i_a)] = self.bnf_test[feat_id]
                 else:
-                  feats[feat_id] = self.bnf_test[feat_id]
+                  feats["%s_%d" % (feat_id, i_a)] = self.bnf_test[feat_id]
     
     if train_test_split:
       np.savez(out_prefix+"_train_src.npz", **feats_train)
@@ -525,7 +525,7 @@ class FlickrAudioPreprocessor:
       json.dump(feat2wavs, f, indent=4, sort_keys=True)
 
 if __name__ == '__main__':
-  datapath = "./" #"../data/flickr30k/audio_level/"
+  datapath = "../data/flickr30k/audio_level/"
   data_info_file = '../data/flickr30k/phoneme_level/flickr30k_info_phoneme_concept.json'
   train_file = '/home/lwang114/data/flickr/flickr_40k_speech_mbn/flickr_40k_speech_train.npz'
   test_file = '/home/lwang114/data/flickr/flickr_40k_speech_mbn/flickr_40k_speech_test.npz'
@@ -543,8 +543,8 @@ if __name__ == '__main__':
   #bn_preproc.extract_info(out_file=out_file)
   #bn_preproc.label_captions()
   #bn_preproc.create_gold_alignment(audio_dir, out_file, word_concept_align_file, out_file=gold_align_file)
-  bn_preproc.json_to_xnmt_format(out_file, gold_align_file)
+  #bn_preproc.json_to_xnmt_format(out_file, gold_align_file)
   #bn_preproc.create_feat_to_wav_maps(audio_dir, gold_align_file)
-  #bn_preproc.create_gold_word_segmentation(out_file, gold_align_file, feat_to_wav_file)
+  bn_preproc.create_gold_word_segmentation(out_file, gold_align_file, feat_to_wav_file)
   #wrd_segment_loader = WordSegmentationLoader(word_align_dir)
   #wrd_segment_loader.extract_info()  wrd_segment_loader.generate_gold_audio_concept_alignment(word_concept_align_file, bn_info_file, word_align_dir)

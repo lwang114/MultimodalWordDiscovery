@@ -223,7 +223,7 @@ class KMeansWordDiscoverer:
           if self.counts[tw][m] > 0:
             self.centroids[tw][m] /= self.counts[tw][m]
 
-    def trainUsingEM(self, maxIterations=10, modelPrefix='', writeModel=False):
+    def trainUsingEM(self, maxIterations=100, modelPrefix='', writeModel=False):
       prev_assignments = deepcopy(self.assignments)
       n_iter = 0
       
