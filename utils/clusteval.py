@@ -5,7 +5,7 @@ from nltk.metrics.distance import edit_distance
 from sklearn.metrics import roc_curve 
 import logging
 
-DEBUG = False
+DEBUG = True
 NULL = 'NULL'
 END = '</s>'
 
@@ -59,7 +59,7 @@ def cluster_purity(pred, gold):
 
   return cp / n
 
-def boundary_retrieval_metrics(pred, gold, out_file='class_retrieval_scores.txt'):
+def boundary_retrieval_metrics(pred, gold, out_file='class_retrieval_scores.txt', max_len=1000):
   assert len(pred) == len(gold)
   n = len(pred)
   prec = 0.
@@ -67,8 +67,8 @@ def boundary_retrieval_metrics(pred, gold, out_file='class_retrieval_scores.txt'
 
   # Local retrieval metrics
   for n_ex, (p, g) in enumerate(zip(pred, gold)):
-    p_ali = p['alignment']
-    g_ali = g['alignment']
+    p_ali = p['alignment'][:max_len]
+    g_ali = g['alignment'][:max_len]
     v = max(max(set(g_ali)), max(set(p_ali))) + 1
     confusion = np.zeros((v, v))
    
@@ -158,13 +158,15 @@ def retrieval_metrics(pred, gold):
   logging.info('Recall: ', rec / n)
   logging.info('F measure: ', f_mea / n) 
 
-def accuracy(pred, gold):
+def accuracy(pred, gold, max_len=1000):
+  if DEBUG:
+    print("len(pred), len(gold): ", len(pred), len(gold))
   assert len(pred) == len(gold)
   acc = 0.
   n = 0.
   for n_ex, (p, g) in enumerate(zip(pred, gold)):
-    ali_p = p['alignment']
-    ali_g = g['alignment']
+    ali_p = p['alignment'][:max_len]
+    ali_g = g['alignment'][:max_len]
     if DEBUG:
       logging.debug("examples " + str(n_ex)) 
       print("examples " + str(n_ex))

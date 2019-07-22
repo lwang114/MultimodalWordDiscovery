@@ -52,7 +52,8 @@ phnset = 'pseudophns.npy'
 word_align_dir = '/home/lwang114/data/flickr/word_segmentation/'
 audio_level_info_file = 'data/flickr30k/audio_level/flickr_bnf_concept_info.json'
 word_concept_align_file = 'data/flickr30k/word_level/flickr30k_gold_alignment.json'
-gold_align_file = 'data/flickr30k/audio_level/flickr30k_gold_alignment.json' 
+gold_align_file = 'data/flickr30k/audio_level/flickr30k_gold_alignment.json'
+gold_segmentation_file = "../data/flickr30k/audio_level/flickr30k_gold_segmentation_mfcc.json"
 src_feat2wavs_file = "data/flickr30k/audio_level/flickr_mfcc_feat2wav.json" 
 trg_feat2wavs_file = "data/flickr30k/audio_level/flickr30k_gold_alignment.json_feat2wav.json"
   
@@ -61,6 +62,7 @@ audio_seq_file = datapath + 'audio_level/flickr_bnf_all_src.npz'
 gold_alignment_file = datapath + 'audio_level/flickr30k_gold_alignment.json'
 pred_alignment_nmt_file = exp_nmt_dir + 'output/alignment.json'
 pred_alignment_smt_prefix = exp_smt_dir + 'flickr30k_pred_alignment'
+pred_segmentation_file = exp_smt_dir + "flickr30k_pred_segmentation.npy"
 if args.feat_type == "mfcc":
   src_file = datapath + 'audio_level/flickr_mfcc_cmvn.npz'
 elif args.feat_type == "bn":
@@ -72,7 +74,7 @@ trg_file = datapath + 'audio_level/flickr_bnf_all_trg.txt'
 output_path = ''
 
 smt_model_dir = args.model_dir #'smt/models/flickr30k_phoneme_level/model_iter=46.txt_translationprobs.txt'
-start = 2
+start = 1
 end = 4
 
 if start < 1 and end >= 1:
@@ -96,7 +98,7 @@ if start < 2 and end >= 2:
     print('Please train with XNMT and make sure the output files have been generated in the output/ dir')
   else:
     if args.smt_model == "gmm":
-      model = GMMWordDiscoverer(src_file, trg_file, numMixtures=args.num_mixtures,
+      model = GMMWordDiscoverer(args.num_mixtures, src_file, trg_file,
                                 contextWidth=args.context_width)
     elif args.smt_model == "kmeans":
       model = KMeansWordDiscoverer(args.num_mixtures, src_file, trg_file, 
@@ -151,12 +153,17 @@ if start < 3 and end >= 3:
         pred_aligns = json.load(f)
   
   n_ex = len(pred_aligns) 
-    
+
+  if args.smt_model.split("-")[0] == "segembed":
+    pred_segs = np.load(pred_segmentation_file)
+    gold_segs = np.load(gold_segmentation_file)
+    segmentation_retrieval_metrics(pred_segs, gold_segs)    
+  
   # TODO: Make the word IoU work later
-  #print('Word IoU: ', word_IoU(pred_aligns, gold_aligns))
   print('Accuracy: ', accuracy(pred_aligns, gold_aligns))
   boundary_retrieval_metrics(pred_aligns, gold_aligns)
   #retrieval_metrics(pred_clsts, gold_clsts)
+  print('Word IoU: ', word_IoU(pred_aligns, gold_aligns))
   print('Finish evaluation after %f s !' % (time.time() - start_time))
 
 if start < 4 and end >= 4:
@@ -181,7 +188,8 @@ if start < 4 and end >= 4:
   print("Finishing drawing roc plots after %f s !" % (time.time() - start_time))
   
   start_time = time.time()
-  rand_ids = np.randint(0, n_ex-1, 10).tolist()
+  n_ex = 6000
+  rand_ids = np.random.randint(0, n_ex-1, 10).tolist()
   if args.nmt:
     generate_nmt_attention_plots(pred_alignment_file, indices=rand_ids, out_dir=args.exp_dir + "attention_plot_")
   else:

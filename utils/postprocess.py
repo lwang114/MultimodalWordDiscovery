@@ -4,7 +4,7 @@ from copy import deepcopy
 import numpy as np
 import logging
 
-DEBUG = True
+DEBUG = False
 END = '</s>'
 NULL = 'NULL'
 
@@ -225,7 +225,25 @@ def resample_alignment(alignment_file, src_feat2wavs_file, trg_feat2wavs_file, o
   
   with open(out_file, "w") as f:
     json.dump(new_alignments, f, sort_keys=True, indent=4)  
-  
+
+def convert_binary_to_frame_boundary(binary_boundary_file, frame_boundary_file):
+  binary_boundaries = np.load(binary_boundary_file)
+  frame_boundaries = []
+  for i, b_vec in enumerate(binary_boundaries):
+    print("segmentation %d" % i)
+    end_frames = np.nonzero(b_vec)[0]
+    
+    frame_boundary = [[0, end_frames[0]]]
+    for st, end in zip(end_frames[:-1], end_frames[1:]):
+      frame_boundary.append([st, end])
+    
+    if DEBUG:
+      print("end_frames: ", end_frames)
+      print("frame_boundary: ", frame_boundary) 
+    frame_boundaries.append(np.asarray(frame_boundary))
+
+  np.save(frame_boundary_file, frame_boundaries) 
+
 if __name__ == '__main__':
   '''
   postproc = XNMTPostprocessor('../nmt/exp/feb28_phoneme_level_clustering/output/report/')
@@ -237,4 +255,7 @@ if __name__ == '__main__':
   src_feat2wavs_file = "../data/flickr30k/audio_level/flickr_mfcc_feat2wav.json" 
   ref_feat2wavs_file = "../data/flickr30k/audio_level/flickr30k_gold_alignment.json_feat2wav.json"
   out_file = "../smt/exp/june_24_mfcc_kmeans_mixture=3/pred_alignment_resample.json"
-  resample_alignment(alignment_file, src_feat2wavs_file, ref_feat2wavs_file, out_file) 
+  binary_boundary_file = "../data/flickr30k/audio_level/boundaries_semkmeans.npy"
+  frame_boundary_file = "../data/flickr30k/audio_level/frame_boundaries_semkmeans.npy"
+  convert_binary_to_frame_boundary(binary_boundary_file, frame_boundary_file)
+  #resample_alignment(alignment_file, src_feat2wavs_file, ref_feat2wavs_file, out_file) 
