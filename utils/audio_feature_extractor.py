@@ -79,8 +79,7 @@ class FlickrFeaturePreprocessor:
     if compute_cmvn:
       self.cmvn(feat_configs, out_dir)
     
-    np.savez(out_dir + "flickr_mfcc_cmvn.npz", **self.mfccs) 
-    
+    np.savez(out_dir + "flickr_mfcc_cmvn.npz", **self.mfccs)     
 
   def cmvn(self, feat_configs, out_dir):
     n_mfcc = feat_configs.get("n_mfcc", 13)
@@ -109,6 +108,52 @@ class FlickrFeaturePreprocessor:
       if (self.spk_vars[spk_id] == 0).any():
         print(spk_id)
       self.mfccs[feat_id] = (self.mfccs[feat_id] - self.spk_means[spk_id]) / np.sqrt(self.spk_vars[spk_id]) 
+   
+  def convertMatToNpz(feat_mat_file, feat_npz_file, utterance_ids_file=None, feat2wav_file=None):
+    feat_mat = io.loadmat(feat_mat_file)['F']
+    n_feats = len(feat_mat)
+    if utterance_ids_file is None:
+      utterance_ids = [str(i) for i in range(n_feats)]  
+    else:
+      with open(utterance_ids_file, 'r') as f:
+        utterance_ids = json.load(f)
+
+    for utt_id, feat in zip(utterance_ids, feat_mat):
+      feat_dict[utt_id] = feat
+    np.savez(feat_npz_file, **feat_dict)
+    
+    if feat2wav_file:
+      feat2wavs = {}
+      for i, (audio_info_i, feat) in enumerate(zip(self.audio_info, feat_mat)):
+        audio_id = audio_info_i["capt_id"].split("_")[-1]
+        img_id = audio_info_i["image_id"]
+      
+        found = False
+        for fn in self.audio_files:
+          cur_img_id, _, cur_audio_id = fn.split(".")[0].split("_") 
+          if cur_img_id == img_id and cur_audio_id == audio_id:
+            found = True
+            break
+        if not found:
+          print("image id not found, check the filename format")
+          assert False
+
+        sr, y = io.wavfile.read(self.audio_dir + 'wavs/' + fn) 
+        N = y.shape[0]
+
+        feat_len = feat.shape[0]
+        n = int(N / feat_len)
+        print(audio_id, img_id, n)
+        feat2wav = []
+        for i_f in range(feat_len):
+          if i_f == feat_len - 1:
+            feat2wav.append((i_f * n, N))
+          else:
+            feat2wav.append((i_f * n, (i_f + 1) * n))
+        feat2wavs[i] = feat2wav
+      
+      with open(feat2wav_file, 'w') as f:
+        json.dump(feat2wavs, f)
 
 def preemphasis(signal, coeff=0.97):
   return np.append(signal[0], signal[1:] - coeff * signal[:-1])
@@ -116,9 +161,15 @@ def preemphasis(signal, coeff=0.97):
 if __name__ == "__main__":
   data_dir = "../data/flickr30k/audio_level/"
   audio_info_file = data_dir + "flickr30k_gold_alignment.json"
-  audio_dir = "/home/lwang114/data/flickr_audio/"
+  audio_dir = "/home/lwang114/data/flickr_audio/"#"/ws/ifp-53_2/hasegawa/lwang114/data/flickr_audio/"
   utt2spk_file = audio_dir + "wav2spk.txt"
+  feat_mat_file = data_dir + "flickr_mfcc_cmvn_htk.mat"
+  feat_npz_file = data_dir + "flickr_mfcc_cmvn_htk.npz"
+  utterance_ids_file = data_dir + "ids_to_utterance_labels.json"
+
   feat_configs = {} 
   out_dir = data_dir
   feat_extractor = FlickrFeaturePreprocessor(audio_info_file, audio_dir, utt2spk_file)
-  feat_extractor.extractMFCC(feat_configs, out_dir)
+  #feat_extractor.extractMFCC(feat_configs, out_dir)
+
+  feat_extractor.convertMatToNpz(feat_mat_file, feat_npz_file, utterance_ids_file)
