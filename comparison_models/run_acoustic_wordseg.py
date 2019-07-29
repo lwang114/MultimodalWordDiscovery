@@ -31,6 +31,7 @@ def downsample(y, n, args):
       print("y.shape: ", y.shape)
     args.technique = "interpolate"
 
+  y = y[:, :args.mfcc_dim]
   # Downsample
   if args.technique == "interpolate":
       x = np.arange(y.shape[1])
@@ -50,21 +51,23 @@ def downsample(y, n, args):
   return y_new
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--embed_dim", type=int, default=390, help="Dimension of the embedding vector")
-parser.add_argument("--n_slices_min", type=int, default=2, help="Minimum number of landmark per segments")
-parser.add_argument("--n_slices_max", type=int, default=30, help="Maximum number of landmark per segments")
-parser.add_argument("--min_duration", type=int, default=0, help="Minimum length of a segment")
+parser.add_argument("--embed_dim", type=int, default=120, help="Dimension of the embedding vector")
+parser.add_argument("--n_slices_min", type=int, default=0, help="Minimum slices between landmarks per segments")
+parser.add_argument("--n_slices_max", type=int, default=6, help="Maximum slices between landmarks per segments")
+parser.add_argument("--min_duration", type=int, default=0, help="Minimum slices of a segment")
 parser.add_argument("--technique", choices={"resample", "interpolate", "rasanen"}, default="resample", help="Downsampling technique")
 parser.add_argument("--am_class", choices={"fbgmm", "kmeans", "multimodal-fbgmm", "multimodal-kmeans"}, help="Class of acoustic model")
 parser.add_argument("--am_K", type=int, default=10, help="Number of clusters")
 parser.add_argument("--exp_dir", type=str, default='./', help="Experimental directory")
 parser.add_argument("--feat_type", type=str, choices={"mfcc", "bn"}, help="Acoustic feature type")
+parser.add_argument("--mfcc_dim", type=int, default=12, help="Number of the MFCC/delta feature")
+parser.add_argument("--landmarks_file", type=str, help="Npz file with landmark locations")
 args = parser.parse_args()
 print(args)
 if args.feat_type == "bn":
   datapath = "../data/flickr30k/audio_level/flickr_bnf_all_src.npz"
 elif args.feat_type == "mfcc":
-  datapath = "../data/flickr30k/audio_level/flickr_mfcc_cmvn.npz"
+  datapath = "../data/flickr30k/audio_level/flickr_mfcc_cmvn_htk.npz"
 else:
   raise ValueError("Please specify the feature type")
 
@@ -87,48 +90,63 @@ concept_ids = []
 vec_ids_dict = {}
 durations_dict = {}
 landmarks_dict = {}
+if args.landmarks_file: 
+  landmarks_dict = np.load(args.landmarks_file)
 
-start_step = 3
+start_step = 1
 if start_step == 0:
   print("Start extracting acoustic embeddings")
   begin_time = time.time()
-  for i_ex, feat_id in enumerate(sorted(audio_feats.keys(), key=lambda x:int(x.split('_')[-1]))):
+  for i_ex, feat_id in enumerate(sorted(audio_feats.keys()[:4], key=lambda x:int(x.split('_')[-1]))):
     print (feat_id)
     feat_mat = audio_feats[feat_id]
     if feat_id.split("_")[0] == "3652859271":
-      feat_mat = feat_mat[:1000]
-    n_slices = feat_mat.shape[0]
-    feat_dim = feat_mat.shape[1]
-    assert args.embed_dim % feat_dim == 0
-    #assert args.n_slices_min >= args.embed_dim / feat_dim
-    embed_mat = np.zeros(((args.n_slices_max - args.n_slices_min + 1)*n_slices, args.embed_dim)) #[]
-    concept_ids_i = [[] for _ in range(embed_mat.shape[0])] #[]
+      feat_mat = feat_mat[:1000, :args.mfcc_dim]
+    else:
+      feat_mat = feat_mat[:, :args.mfcc_dim]
+
+    if not args.landmarks_file:
+      n_slices = feat_mat.shape[0]
+      landmarks_dict[feat_id] = np.arange(n_slices)
+    else:  
+      n_slices = len(landmarks_dict[feat_id]) 
+    
+    feat_dim = args.mfcc_dim 
+    assert args.embed_dim % feat_dim == 0   
+    embed_mat = np.zeros(((args.n_slices_max - max(args.n_slices_min, 1) + 1)*n_slices, args.embed_dim))
+    if args.am_class.split("-")[0] == "multimodal":
+      concept_ids_i = [[] for _ in range((args.n_slices_max - max(args.n_slices_min, 1) + 1)*n_slices)] 
     vec_ids = -1 * np.ones((n_slices * (1 + n_slices) / 2,))
     durations = np.nan * np.ones((n_slices * (1 + n_slices) / 2,))
 
     i_embed = 0        
+    
     # Store the vec_ids using the mapping i_embed = end * (end - 1) / 2 + start (following unigram_acoustic_wordseg.py)
     for cur_start in range(n_slices):
-        for cur_end in range(cur_start + max(args.n_slices_min - 1, 0), min(n_slices, cur_start + args.n_slices_max)):
+        for cur_end in range(cur_start + max(args.n_slices_min, 1), min(n_slices, cur_start + args.n_slices_max)):
             cur_end += 1
             t = cur_end
             i = t*(t - 1)/2
             vec_ids[i + cur_start] = i_embed
-            #print cur_start, cur_end, i + cur_start, i_embed
             n_down_slices = args.embed_dim / feat_dim
-            embed_mat[i_embed] = downsample(feat_mat[cur_start:cur_end].T, n_down_slices, args) 
+            start_frame, end_frame = landmarks_dict[feat_id][cur_start], landmarks_dict[feat_id][cur_end-1]
+            #print cur_start, cur_end, start_frame, end_frame, i + cur_start, i_embed
+            #print landmarks_dict[feat_id]
+            embed_mat[i_embed] = downsample(feat_mat[start_frame:end_frame].T, n_down_slices, args) 
             #embed_mat.append(downsample(feat_mat[cur_start:cur_end].T, n_down_slices, args))
             if args.am_class.split("-")[0] == "multimodal":
               concept_ids_i[i_embed] = [concept2idx[NULL]] + [concept2idx[c] for c in image_concepts[i_ex]]
               #concept_ids_i.append([concept2idx[NULL]] + [concept2idx[c] for c in image_concepts[i_ex]])
            
-            durations[i + cur_start] = cur_end - cur_start
+            durations[i + cur_start] = end_frame - start_frame
             i_embed += 1 
 
     vec_ids_dict[feat_id] = vec_ids
     embedding_mats[feat_id] = embed_mat
     durations_dict[feat_id] = durations 
-    landmarks_dict[feat_id] = np.arange(n_slices).tolist()
+    
+    if args.am_class.split("-")[0] == "multimodal":
+      print('# of embeds, # of concepts: ', len(concept_ids_i), concept_ids_i[0])
     
     if args.am_class.split("-")[0] == "multimodal":
       concept_ids += concept_ids_i         
@@ -205,6 +223,9 @@ if start_step <= 3:
       concepts = json.load(f) 
     with open(args.exp_dir+"concept_names.json", "r") as f:
       concept_names = json.load(f)
+    
+    #concepts = [[0, 1, 2] for i in range(embeddings.shape[0])]
+    #concept_names = ['1', '2', '3']
 
   with open(args.exp_dir+"vec_ids.json", "r") as f:
     #with open("../data/flickr30k/audio_level/vec_ids.json", "r") as f:
@@ -232,7 +253,7 @@ if start_step <= 3:
     D = args.embed_dim
     am_class = fbgmm.FBGMM
     am_alpha = 10.
-    am_K = 1000
+    am_K = args.am_K
     m_0 = np.zeros(D)
     k_0 = 0.05
     # S_0 = 0.025*np.ones(D)
@@ -278,10 +299,10 @@ if start_step <= 3:
 
   # Perform sampling
   if args.am_class.split("-")[-1] == "fbgmm":
-    record = segmenter.gibbs_sample(5, 3, anneal_schedule="linear", anneal_gibbs_am=True)
+    record = segmenter.gibbs_sample(10, 3, anneal_schedule="linear", anneal_gibbs_am=True)
     #sum_neg_len_sqrd_norm = record["sum_neg_len_sqrd_norm"] 
   else:
-    record = segmenter.segment(5, 3)
+    record = segmenter.segment(30, 3)
     sum_neg_len_sqrd_norm = record["sum_neg_len_sqrd_norm"] 
   
   print("Take %0.5f s to finish training !" % (time.time() - begin_time))
@@ -289,7 +310,7 @@ if start_step <= 3:
   
   if args.am_class.split("-")[-1] == "fbgmm":
     means = []
-    for k in range(args.am_K):
+    for k in range(segmenter.acoustic_model.components.K_max):
       mean = segmenter.acoustic_model.components.rand_k(k)
       means.append(mean)
     np.save(args.exp_dir+"fbgmm_means.npy", np.asarray(means))

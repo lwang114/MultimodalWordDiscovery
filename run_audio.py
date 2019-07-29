@@ -1,6 +1,7 @@
 from utils.audio_preprocess import *
 from utils.postprocess import *
 from utils.clusteval import *
+from smt._cython_utils import *
 from utils.plot import *
 from smt.audio_gmm_word_discoverer import *
 from smt.audio_kmeans_word_discoverer import *
@@ -53,8 +54,8 @@ word_align_dir = '/home/lwang114/data/flickr/word_segmentation/'
 audio_level_info_file = 'data/flickr30k/audio_level/flickr_bnf_concept_info.json'
 word_concept_align_file = 'data/flickr30k/word_level/flickr30k_gold_alignment.json'
 gold_align_file = 'data/flickr30k/audio_level/flickr30k_gold_alignment.json'
-gold_segmentation_file = "../data/flickr30k/audio_level/flickr30k_gold_segmentation_mfcc.json"
-src_feat2wavs_file = "data/flickr30k/audio_level/flickr_mfcc_feat2wav.json" 
+gold_segmentation_file = "data/flickr30k/audio_level/flickr30k_gold_segmentation_mfcc_htk.npy"
+src_feat2wavs_file = "data/flickr30k/audio_level/flickr_mfcc_cmvn_htk_feat2wav.json" 
 trg_feat2wavs_file = "data/flickr30k/audio_level/flickr30k_gold_alignment.json_feat2wav.json"
   
 audio_seq_file = datapath + 'audio_level/flickr_bnf_all_src.npz'
@@ -62,9 +63,13 @@ audio_seq_file = datapath + 'audio_level/flickr_bnf_all_src.npz'
 gold_alignment_file = datapath + 'audio_level/flickr30k_gold_alignment.json'
 pred_alignment_nmt_file = exp_nmt_dir + 'output/alignment.json'
 pred_alignment_smt_prefix = exp_smt_dir + 'flickr30k_pred_alignment'
+pred_boundary_file = exp_smt_dir + "pred_boundaries.npy"
+landmarks_file = datapath + "audio_level/flickr_landmarks.npz" 
+pred_landmark_segmentation_file = exp_smt_dir + "flickr30k_pred_landmark_segmentation.npy"
 pred_segmentation_file = exp_smt_dir + "flickr30k_pred_segmentation.npy"
+
 if args.feat_type == "mfcc":
-  src_file = datapath + 'audio_level/flickr_mfcc_cmvn.npz'
+  src_file = datapath + 'audio_level/flickr_mfcc_cmvn_htk.npz'
 elif args.feat_type == "bn":
   src_file = datapath + 'audio_level/flickr_bnf_all_src.npz' 
 else:
@@ -74,8 +79,8 @@ trg_file = datapath + 'audio_level/flickr_bnf_all_trg.txt'
 output_path = ''
 
 smt_model_dir = args.model_dir #'smt/models/flickr30k_phoneme_level/model_iter=46.txt_translationprobs.txt'
-start = 1
-end = 4
+start = 2
+end = 3
 
 if start < 1 and end >= 1:
   start_time = time.time() 
@@ -127,7 +132,7 @@ if start < 3 and end >= 3:
   start_time = time.time()
   print("Start evaluation ...")
   
-  pred_aligns = []
+  '''pred_aligns = []
   gold_aligns = []
 
   if args.nmt:
@@ -148,23 +153,26 @@ if start < 3 and end >= 3:
       gold_aligns = json.load(f)
   
     if args.feat_type == "mfcc":
-      resample_alignment(pred_alignment_smt_prefix+".json", src_feat2wavs_file, trg_feat2wavs_file, pred_alignment_smt_prefix+"_resample.json")
+      #resample_alignment(pred_alignment_smt_prefix+".json", src_feat2wavs_file, trg_feat2wavs_file, pred_alignment_smt_prefix+"_resample.json")
       with open(pred_alignment_smt_prefix+'_resample.json' , 'r') as f:   
         pred_aligns = json.load(f)
   
-  n_ex = len(pred_aligns) 
+  n_ex = len(pred_aligns)''' 
 
   if args.smt_model.split("-")[0] == "segembed":
-    pred_segs = np.load(pred_segmentation_file)
-    gold_segs = np.load(gold_segmentation_file)
+    #convert_boundary_to_segmentation(pred_boundary_file, pred_landmark_segmentation_file)
+    #convert_landmark_to_10ms_segmentation(pred_landmark_segmentation_file, landmarks_file, pred_segmentation_file)
+    pred_segs = np.load(pred_segmentation_file, encoding="latin1")
+    gold_segs = np.load(gold_segmentation_file, encoding="latin1")
     segmentation_retrieval_metrics(pred_segs, gold_segs)    
   
   # TODO: Make the word IoU work later
-  print('Accuracy: ', accuracy(pred_aligns, gold_aligns))
+  '''print('Accuracy: ', accuracy(pred_aligns, gold_aligns))
   boundary_retrieval_metrics(pred_aligns, gold_aligns)
   #retrieval_metrics(pred_clsts, gold_clsts)
   print('Word IoU: ', word_IoU(pred_aligns, gold_aligns))
   print('Finish evaluation after %f s !' % (time.time() - start_time))
+  '''
 
 if start < 4 and end >= 4:
   start_time = time.time()
@@ -194,6 +202,4 @@ if start < 4 and end >= 4:
     generate_nmt_attention_plots(pred_alignment_file, indices=rand_ids, out_dir=args.exp_dir + "attention_plot_")
   else:
     generate_smt_alignprob_plots(pred_alignment_file, indices=rand_ids, out_dir=args.exp_dir + "align_prob_plot_")
-  print("Finishing drawing attention plots after %f s !" % (time.time() - start_time))
-  
- 
+  print("Finishing drawing attention plots after %f s !" % (time.time() - start_time))  
