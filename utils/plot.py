@@ -174,9 +174,9 @@ def plot_word_len_distribution(json_file, out_file='word_len_distribution', cuto
   
   return np.arange(max_len+1), len_dist
 
-def generate_nmt_attention_plots(filenames, out_dir='', normalize=False):
-  for f in filenames:
-    fp = open(f, 'r')
+def generate_nmt_attention_plots(filenames, indices, out_dir='', normalize=False):
+  for f_id in indices:
+    fp = open(filenames[f_id], 'r')
     att_info = json.load(fp)
     fp.close()
 
@@ -197,13 +197,13 @@ def generate_nmt_attention_plots(filenames, out_dir='', normalize=False):
     plot_attention(src_sent, trg_sent, attention, '%s%s.png' % 
                   (out_dir, str(index)), normalize=normalize)
 
-def generate_smt_alignprob_plots(in_file, indices=None, out_dir=''):
+def generate_smt_alignprob_plots(in_file, indices, out_dir=''):
   fp = open(in_file, 'r')
   align_info = json.load(fp)
   fp.close()
 
   for index, ali in enumerate(align_info):
-    if indices and index not in indices:
+    if index not in indices:
       continue
     concepts = ali['image_concepts']
     align_prob = np.array(ali['align_probs'])
