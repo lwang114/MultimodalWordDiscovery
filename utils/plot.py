@@ -160,29 +160,30 @@ def plot_word_len_distribution(json_file, out_file='word_len_distribution', cuto
   max_len = max(labels)  
   len_dist = np.zeros((max_len+1,))   
   for l in labels:
-    len_dist[l] += 1 / tot
+    len_dist[l] += 1. / float(tot)
 
+  plt.plot(np.arange(min(cutoff, max_len))+1, len_dist[1:min(max_len, cutoff)+1])
+  plt.xlabel('Word Length')
+  plt.ylabel('Number of Words')
+  
+  if out_file:
+    plt.savefig(out_file, dpi=100)
+  
   if draw_plot:
-    plt.plot(top_classes, top_freqs)
-    plt.ylabel('Number of Words')
-    plt.xlabel('Word Length')
-    if out_file:
-      plt.savefig(out_file, dpi=100)
-    else:
-      plt.show()
-    plt.close()
+    plt.show()
+  
+  plt.close()
   
   return np.arange(max_len+1), len_dist
 
-def generate_nmt_attention_plots(filenames, indices, out_dir='', normalize=False):
-  for f_id in indices:
-    fp = open(filenames[f_id], 'r')
-    att_info = json.load(fp)
-    fp.close()
+def generate_nmt_attention_plots(align_info_file, indices, out_dir='', normalize=False):
+  fp = open(align_info_file, 'r')
+  align_info = json.load(fp)
+  fp.close()
 
-    if type(att_info) == list:
-      att_info = att_info[0]
-   
+  for index, att_info in enumerate(align_info):  
+    if index not in indices:
+      continue   
     src_sent = None
     trg_sent = None
     if 'caption' in att_info: 

@@ -25,7 +25,7 @@ parser.add_argument('--min_word_len', type=int, default=None, help='Minimal numb
 parser.add_argument('--max_word_len', type=int, default=None, help='Maximal number of feature frames per word; used only in segmental embedded models')
 parser.add_argument('--feat_type', choices={"mfcc", "bn"})
 parser.add_argument("--context_width", type=int, default=0, help="Width of the context window in acoustic feature; used only in frame-level models")
-parser.add_argument("--boundary_file", type=str, default=None, help="Pre-segmentation for the segmental models")
+parser.add_argument("--preseg_file", type=str, default=None, help="Pre-segmentation for the segmental models")
 args = parser.parse_args() 
 
 logging.basicConfig(filename="run_audio.log", format="%(asctime)s %(message)s", level=DEBUG)
@@ -81,7 +81,7 @@ trg_file = datapath + 'audio_level/flickr_bnf_all_trg.txt'
 output_path = ''
 
 smt_model_dir = args.model_dir #'smt/models/flickr30k_phoneme_level/model_iter=46.txt_translationprobs.txt'
-start = 2
+start = 3
 end = 4
 
 if start < 1 and end >= 1:
@@ -114,7 +114,7 @@ if start < 2 and end >= 2:
       model = SegEmbedKMeansWordDiscoverer(args.num_mixtures, src_file, trg_file, 
                                           embedDim=args.embed_dim,
                                           minWordLen=args.min_word_len, maxWordLen=args.max_word_len,
-                                          boundaryFile=args.boundary_file)
+                                          boundaryFile=args.preseg_file)
        
     if os.path.isfile(args.model_dir+'model_final*'):
       if args.smt_model == "gmm":
