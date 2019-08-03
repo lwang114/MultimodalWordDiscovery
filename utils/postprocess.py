@@ -52,6 +52,10 @@ class XNMTPostprocessor():
           if NULL not in ali['trg_sent']:
             ali['trg_sent'] = [NULL] + ali['trg_sent']
             ali['alignment'] = [a+1 if a<len(ali['trg_sent'])-1 else 0 for a in ali['alignment']]
+            new_attention = np.zeros(ali["attention"].shape)  
+            new_attention[:, 0] = ali["attention"][:, -1] 
+            new_attention[:, 1:] = ali["attention"][:, :len(ali['trg_sent'])-1]
+            ali["attention"] = new_attention
           else:
             ali['alignment'] = [a if a<len(ali['trg_sent'])-1 else 0 for a in ali['alignment']]
         
@@ -109,6 +113,12 @@ class XNMTPostprocessor():
     fp = open(out_file, 'w') 
     fp.write('\n'.join(ret_indices))
     fp.close()
+  
+  '''def warp_attention_by_frequency(self, in_file, concept_distribution, out_file="warp_alignment.json", warp_function="linear"):
+    if warp_function == "linear":
+      with open(in_file, "r") as f:
+        alignments = []
+  '''
 
 def alignment_to_cluster(ali_file, out_file='cluster.json'):
   def _find_distinct_tokens(data):
