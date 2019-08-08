@@ -5,7 +5,7 @@ from nltk.metrics.distance import edit_distance
 from sklearn.metrics import roc_curve 
 import logging
 
-DEBUG = True
+DEBUG = False
 NULL = 'NULL'
 END = '</s>'
 
@@ -13,10 +13,12 @@ END = '</s>'
 logging.basicConfig(format="%(asctime)s %(message)s", level=logging.DEBUG)
 
 #
-# :param  pred (clusters) --- A list of cluster indices corresponding to each sample
-#         gold (classes) --- A list of class indices corresponding to each sample
+# Parameters:
+# ----------  
+# pred (clusters) --- A list of cluster indices corresponding to each sample
+# gold (classes) --- A list of class indices corresponding to each sample
 #
-def local_cluster_purity(pred, gold):
+def cluster_purity(pred, gold):
   score = 0
   if DEBUG:
     logging.debug('pred[0]: ' + str(pred[0]))
@@ -29,7 +31,7 @@ def local_cluster_purity(pred, gold):
     if DEBUG:
       logging.debug('pred: ' + str(p))
       logging.debug('gold: ' + str(g))
-    assert len(p) == len(g)
+    #assert len(p) == len(g)
     L = len(p)
     n_g = len(set(g))
     n_p = len(set(p))
@@ -59,7 +61,7 @@ def cluster_purity(pred, gold):
 
   return cp / n
 
-def boundary_retrieval_metrics(pred, gold, out_file='class_retrieval_scores.txt', max_len=1000):
+def boundary_retrieval_metrics(pred, gold, out_file='class_retrieval_scores.txt', max_len=2000):
   assert len(pred) == len(gold)
   n = len(pred)
   prec = 0.
@@ -93,72 +95,47 @@ def boundary_retrieval_metrics(pred, gold, out_file='class_retrieval_scores.txt'
   print('Local alignment precision: ' + str(precision))
   print('Local alignment f_measure: ' + str(f_measure))
 
-  '''def _find_distinct_tokens(data):
-    tokens = set()
-    for datum in data:
-      if 'image_concepts' in datum: 
-        tokens = tokens.union(set(datum['image_concepts']))
-      elif 'foreign_sent' in datum:
-        tokens = tokens.union(set(datum['foreign_sent']))
-    return list(tokens)
-  
-  # Retrieval metrics across classes
-  classes = _find_distinct_tokens(gold)
-  class2id = {c:i for i, c in enumerate(classes)}
-  n_c = len(classes)
-  g_confusion = np.zeros((n_c, 2, 2))
-
-  for p, g in zip(pred, gold):
-    p_ali = p['alignment']
-    g_ali = g['alignment']
-    p_concepts = p['image_concepts']
-    g_concepts = g['image_concepts']
-    for a_p, a_g in zip(p_ali, g_ali):
-      for i_c in range(n_c):
-        p_c = p_concepts[a_p]
-        g_c = g_concepts[a_g]
-        g_confusion[class2id[g_c], int(class2id[g_c] == i_c), int(class2id[p_c] == i_c)] += 1
-  
-  class_recall = np.zeros((n_c,))
-  class_precision = np.zeros((n_c,))
-  for i in range(n_c):
-    class_recall[i] = g_confusion[i, 1, 1] / (g_confusion[i, 1, 1] + g_confusion[i, 1, 0])
-    class_precision[i] = g_confusion[i, 1, 1] / (g_confusion[i, 1, 1] + g_confusion[i, 0, 1]) 
-  
-  print('Average class recall: ', class_recall.mean())
-  print('Average class precision: ', class_precision.mean())
-  print('Average class f_measure: ', 2 / (1 / class_recall.mean() + 1 / class_precision.mean()))
-  with open(out_file, 'w') as f:
-    for i in range(n_c):
-      f.write('%s %0.4f %0.4f\n' % (classes[i], class_recall[i], class_precision[i]))
-  '''
-
-def retrieval_metrics(pred, gold):
-  if not hasattr(pred, 'keys') or not hasattr(gold, 'keys'):
-    raise TypeError('pred and gold should be dictionaries')
+def retrieval_metrics(pred, gold, concept2idx, pred_word_cluster_file="pred_clusters.json"):
   assert len(list(gold)) == len(list(pred))
   n = len(list(gold))
-  count = 0.
-  rec = 0.
-  prec = 0.
-  f_mea = 0.
-  for g, p in zip(gold, pred):
-    if g == 'NULL':
-      continue
-    if not g or not p:
-      continue 
-    g, p = set(gold[g]), set(pred[p])
-    if not g or not p:
-      continue
-    rec += recall(g, p)
-    prec += precision(g, p)
-    f_mea += f_measure(g, p)
+  n_c = len(concept2idx.keys())
   
-  logging.info('Precision: ', prec / n)
-  logging.info('Recall: ', rec / n)
-  logging.info('F measure: ', f_mea / n) 
+  pred_word_clusters = {}
+  confusion_mat = np.zeros((n_c, n_c))
+  for i_ex, (g, p) in enumerate(zip(gold, pred)):
+    print("alignment %d" % i_ex)
+    g_ali, p_ali = g["alignment"], p["alignment"]
+    g_c = g["image_concepts"]
+    g_word_boundaries = _findWords(g_ali)
+    p_word_boundaries = _findWords(p_ali)
+    for p_w_b in p_word_boundaries:
+      #print(set(p_ali[p_w_b[0]:p_w_b[1]]))
+      p_c = p_ali[p_w_b[0]]
+      if p_c not in pred_word_clusters:
+        pred_word_clusters[p_c] = []
+      pred_word_clusters[p_c].append((i_ex, p_w_b))
+       
+    for g_w_b in g_word_boundaries:
+      g_w = g_ali[g_w_b[0]:g_w_b[1]]
+      p_w = p_ali[g_w_b[0]:g_w_b[1]]
+      for i_g_a, i_p_a in zip(g_w, p_w):
+        i_g_c, i_p_c = concept2idx[g_c[i_g_a]], concept2idx[g_c[i_p_a]]
+        confusion_mat[i_g_c, i_p_c] += 1.
+        
+  rec = np.mean(np.diag(confusion_mat) / np.maximum(np.sum(confusion_mat, axis=0), 1.))
+  prec = np.mean(np.diag(confusion_mat) / np.maximum(np.sum(confusion_mat, axis=1), 1.))
+  if rec <= 0. or prec <= 0.:
+    f_mea = 0.
+  else:
+    f_mea = 2. / (1. / rec + 1. / prec)
+  print('Recall: ', rec)
+  print('Precision: ', prec)
+  print('F measure: ', f_mea) 
 
-def accuracy(pred, gold, max_len=1000):
+  with open(pred_word_cluster_file, "w") as f:
+    json.dump(pred_word_clusters, f)
+
+def accuracy(pred, gold, max_len=2000):
   if DEBUG:
     print("len(pred), len(gold): ", len(pred), len(gold))
   assert len(pred) == len(gold)
@@ -184,22 +161,6 @@ def word_IoU(pred, gold):
   if DEBUG:
     logging.debug("# of examples in pred and gold: %d %d" % (len(pred), len(gold)))
   assert len(pred) == len(gold)
-  def _IoU(pred, gold):
-    p_start, p_end = pred[0], pred[1]
-    g_start, g_end = gold[0], gold[1]
-    i_start, u_start = max(p_start, g_start), min(p_start, g_start)  
-    i_end, u_end = min(p_end, g_end), max(p_end, g_end)
-  
-    if i_start >= i_end:
-      return 0.
-
-    if u_start == u_end:
-      return 1.
-
-    iou = (i_end - i_start) / (u_end - u_start)
-    assert iou <= 1 and iou >= 0
-    return iou
- 
   iou = 0.
   n = 0.
   for p, g in zip(pred, gold):
@@ -213,14 +174,14 @@ def word_IoU(pred, gold):
     for p_wb in p_word_boundaries: 
       n_overlaps = []
       for g_wb in g_word_boundaries:
-        n_overlaps.append(_IoU(g_wb, p_wb))
+        n_overlaps.append(intersect_over_union(g_wb, p_wb))
       max_iou = max(n_overlaps)
       iou += max_iou
       n += 1
   return iou / n
 
 # Boundary retrieval metrics for word segmentation
-def segmentation_retrieval_metrics(pred, gold, tolerance):
+def segmentation_retrieval_metrics(pred, gold, tolerance=3):
   assert len(pred) == len(gold)
   n = len(pred)
   prec = 0.
@@ -228,15 +189,17 @@ def segmentation_retrieval_metrics(pred, gold, tolerance):
 
   # Local retrieval metrics
   for n_ex, (p, g) in enumerate(zip(pred, gold)):
-    #print(p, g)
-    overlaps = []
-    for i, p_wb in enumerate(p.tolist()):
-      for g_wb in g.tolist():
-        if abs(g_wb[0] - p_wb[0]) <= tolerance and abs(g_wb[1] - p_wb[1]) <= tolerance:
-          overlaps.append(i)
+    print(p, g)
+    overlaps = 0.
+    for i, p_wb in enumerate(p.tolist()[:-1]):
+      for g_wb in g.tolist()[:-1]:
+        #if abs(g_wb[0] - p_wb[0]) <= tolerance and abs(g_wb[1] - p_wb[1]) <= tolerance:
+        iou = intersect_over_union(p_wb, g_wb) 
+        if abs(g_wb[1]-p_wb[1]) <= tolerance or iou > 0.5: 
+          overlaps += 1.
     
-    rec +=  len(overlaps) / len(g)   
-    prec += len(overlaps) / len(p)
+    rec +=  overlaps / len(g)   
+    prec += overlaps / len(p)
            
   recall = rec / n
   precision = prec / n
@@ -246,38 +209,43 @@ def segmentation_retrieval_metrics(pred, gold, tolerance):
     f_measure = 2. / (1. / recall + 1. / precision)
   print('Segmentation recall: ' + str(recall))
   print('Segmentation precision: ' + str(precision))
-  #print('Segmentation f_measure: ' + str(f_measure))
+  print('Segmentation f_measure: ' + str(f_measure))
 
+def intersect_over_union(pred, gold):
+  p_start, p_end = pred[0], pred[1]
+  g_start, g_end = gold[0], gold[1]
+  i_start, u_start = max(p_start, g_start), min(p_start, g_start)  
+  i_end, u_end = min(p_end, g_end), max(p_end, g_end)
+
+  if i_start >= i_end:
+    return 0.
+
+  if u_start == u_end:
+    return 1.
+
+  iou = (i_end - i_start) / (u_end - u_start)
+  assert iou <= 1 and iou >= 0
+  return iou
+ 
 def _findWords(alignment):
   cur = alignment[0]
   start = 0
-  end = 0
   boundaries = []
   for i, a_i in enumerate(alignment):
-    if cur == a_i:
-      end += 1
-    else:
-      boundaries.append((start, end))
-      start = end
+    if a_i != cur:
+      boundaries.append((start, i))
+      start = i
       cur = a_i
-  
-  if len(boundaries) == 0:
-    boundaries.append((start, end))
+    print(i, a_i, start, cur)
+
+  boundaries.append((start, len(alignment)))
   return boundaries
 
 
-'''class Evaluator():
-  def __init__(self, pred_file, gold_file):
-    self.pred_file = pred_file
-    self.gold_file = gold_file 
-
-  def _tokenize(self):
-    return nltk.word_tokenize()
-'''
 if __name__ == '__main__':
   #clsts = [2, 2, 2, 2, 2, 2, 1, 1, 1, 1, 1, 1, 3, 3, 3, 3, 3]
   #classes = [1, 1, 1, 1, 1, 2, 1, 2, 2, 2, 2, 3, 1, 3, 3, 3, 1]
-  data_dir = '../data/'
+  '''data_dir = '../data/'
   exp_dir = '../smt/exp/ibm1_phoneme_level_clustering/' 
   #'../nmt/exp/feb28_phoneme_level_clustering/output/'
   pred_align_file = exp_dir + 'flickr30k_pred_alignment.json' 
@@ -314,3 +282,33 @@ if __name__ == '__main__':
   print(local_cluster_purity(clsts, classes))
   print(cluster_purity(clsts_info, classes_info))
   retrieval_metrics(pred_clsts, gold_clsts)
+
+  pred_seg_file = "../data/flickr30k/audio_level/flickr_landmarks_combined.npz" 
+  gold_seg_file = "../data/flickr30k/audio_level/flickr30k_gold_segmentation_mfcc_htk.npy"
+  pred_seg = np.load(pred_seg_file)
+  gold_seg = np.load(gold_seg_file, encoding="latin1")
+  seg_keys = sorted(pred_seg, key=lambda x:int(x.split('_')[-1]))
+  new_pred_seg = [pred_seg[k] for k in seg_keys]
+  pred_seg = []
+  for seg in new_pred_seg:
+    seg_ = []
+    for start, end in zip(seg[:-1].tolist(), seg[1:].tolist()):
+      seg_.append([start, end])
+    pred_seg.append(np.array(seg_))
+  np.save("flickr_pred_syllable_segmentation.npy", pred_seg)
+  segmentation_retrieval_metrics(pred_seg, gold_seg)'''
+  
+  a = [0, 0, 1, 1, 1, 3, 2, 2]
+  print(_findWords(a))
+
+  pred_align_file = "../comparison_models/exp/aug1_mkmeans/flickr30k_pred_alignment.json"
+  gold_align_file = "../data/flickr30k/audio_level/flickr30k_gold_alignment.json"
+  concept2idx_file = "../data/flickr30k/concept2idx.json"
+  with open(concept2idx_file, "r") as f:
+    concept2idx = json.load(f)
+  with open(pred_align_file, "r") as f:
+    pred_aligns = json.load(f)
+  with open(gold_align_file, "r") as f:
+    gold_aligns = json.load(f)
+  
+  retrieval_metrics(pred_aligns, gold_aligns, concept2idx)

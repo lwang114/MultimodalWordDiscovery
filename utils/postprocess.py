@@ -3,6 +3,9 @@ import numpy as np
 import logging
 import os
 import json
+import scipy.io.wavfile as wavfile
+import librosa
+from PIL import Image
 
 DEBUG = False
 END = '</s>'
@@ -52,10 +55,6 @@ class XNMTPostprocessor():
           if NULL not in ali['trg_sent']:
             ali['trg_sent'] = [NULL] + ali['trg_sent']
             ali['alignment'] = [a+1 if a<len(ali['trg_sent'])-1 else 0 for a in ali['alignment']]
-            new_attention = np.zeros(ali["attention"].shape)  
-            new_attention[:, 0] = ali["attention"][:, -1] 
-            new_attention[:, 1:] = ali["attention"][:, :len(ali['trg_sent'])-1]
-            ali["attention"] = new_attention
           else:
             ali['alignment'] = [a if a<len(ali['trg_sent'])-1 else 0 for a in ali['alignment']]
         
@@ -113,12 +112,6 @@ class XNMTPostprocessor():
     fp = open(out_file, 'w') 
     fp.write('\n'.join(ret_indices))
     fp.close()
-  
-  '''def warp_attention_by_frequency(self, in_file, concept_distribution, out_file="warp_alignment.json", warp_function="linear"):
-    if warp_function == "linear":
-      with open(in_file, "r") as f:
-        alignments = []
-  '''
 
 def alignment_to_cluster(ali_file, out_file='cluster.json'):
   def _find_distinct_tokens(data):
@@ -267,7 +260,7 @@ def convert_landmark_to_10ms_segmentation(landmark_segment_file, landmarks_file,
     frame_segments.append(np.asarray(f_seg))
   np.save(frame_segment_file, frame_segments)
 
-def convert_sec_to_10ms_segmentation(real_time_segment_file, feat2wav_file, frame_segment_file, fs=16000):
+def convert_sec_to_10ms_segmentation(real_time_segment_file, feat2wav_file, frame_segment_file, fs=16000, max_feat_len=2000):
   real_time_segments = np.load(real_time_segment_file) 
   with open(feat2wav_file, 'r') as f:
     feat2wavs = json.load(f)
@@ -275,9 +268,9 @@ def convert_sec_to_10ms_segmentation(real_time_segment_file, feat2wav_file, fram
   wav2feats = []
   utt_ids = []
   for utt_id, feat2wav in sorted(feat2wavs.items(), key=lambda x:int(x[0].split('_')[-1])):
-    print('utt_id: ', utt_id)
     feat_len = len(feat2wav)
     wav_len = feat2wav[-1][1]
+    print('utt_id, wav_len: ', utt_id, wav_len)
     wav2feat = np.zeros((wav_len,), dtype=int)
     for i in range(feat_len):
       wav2feat[feat2wav[i][0]:feat2wav[i][1]] = i
@@ -289,25 +282,28 @@ def convert_sec_to_10ms_segmentation(real_time_segment_file, feat2wav_file, fram
   max_gap_segment = []
   for i_seg, r_seg in enumerate(real_time_segments.tolist()):
     feat_len = len(feat2wavs[utt_ids[i_seg]])
+    wav_len = len(wav2feats[i_seg])
     wav2feat = wav2feats[i_seg]
     print('utt_id: ', utt_ids[i_seg])
-    print('wav_len, wav2feats_len: ', r_seg[-1] * fs, len(wav2feats[i_seg]))
+    print('wav_len from segmentation, wav_len from wav2feats: ', r_seg[-1] * fs, len(wav2feats[i_seg]))
 
     n_segs = len(r_seg)
     f_seg = [0]
     for i in range(n_segs):
-      if wav2feat[int(r_seg[i] * fs)] <= 0 or wav2feat[int(r_seg[i] * fs)] - f_seg[-1] <= 0:
+      # XXX: Need thresholding since some syllable segmentation is slightly longer than the actual wavform 
+      wav_frame_i = min(int(r_seg[i] * fs), wav_len - 1)
+      if wav2feat[wav_frame_i] <= 0 or wav2feat[wav_frame_i] - f_seg[-1] <= 0:
         continue
       else:
-        if wav2feat[int(r_seg[i] * fs)] - f_seg[-1] > max_gap[1]:
-          max_gap = [i_seg, wav2feat[int(r_seg[i] * fs)] - f_seg[-1]]
-          max_gap_segment = [f_seg[-1], wav2feat[int(r_seg[i] * fs)]] 
-        if wav2feat[int(r_seg[i] * fs)] >= feat_len - 1:
+        if wav2feat[wav_frame_i] - f_seg[-1] > max_gap[1]:
+          max_gap = [i_seg, wav2feat[wav_frame_i] - f_seg[-1]]
+          max_gap_segment = [f_seg[-1], wav2feat[wav_frame_i]] 
+        if wav2feat[wav_frame_i] >= min(feat_len - 1, max_feat_len):
           continue
 
-        f_seg.append(wav2feat[int(r_seg[i] * fs)] + 1) 
+        f_seg.append(wav2feat[wav_frame_i] + 1) 
         
-    f_seg.append(feat_len)
+    f_seg.append(min(feat_len, max_feat_len))
     frame_segments[utt_ids[i_seg]] = f_seg
   
   print("max_gap: ", max_gap)
@@ -328,6 +324,51 @@ def convert_txt_to_npy_segment(txt_segment_file, npy_segment_file):
 
     np.save(npy_segment_file, segmentations)
 
+def extract_concept_segments(cluster, feat2wav, wav_dir, ids_to_utterance_labels, out_dir=None):
+  segments = []
+  for seg_info in cluster:
+    wav_id = ids_to_utterance[seg_info[0]]
+    print(wav_id)
+    filename = '_'.join(wav_id.split('_')[:-1]) + ".wav"
+    y, sr = wavfile.read(filename)
+    
+    t_start, t_end = feat2wav[seg_info[1][0]][0], feat2wav[seg_info[1][1]][1]
+    if t_end - t_start <= 1600: 
+      continue
+    segment = y[t_start:t_end]
+    segment_melspectrogram = librosa.feature.melspectrogram(segment, sr=sr) 
+    
+    segments.append(segment)
+    segment_features.append(segment_melspectrogram)
+    if out_dir:
+      segment_file = "%s%s_%d_%d.wav" % (np.out_dir, wav_id, t_start, t_end)
+      segment_feat_file = "%s%s_%d_%d.png" % (np.out_dir, wav_id, t_start, t_end)
+      wavfile.write(segment_file, sr, y)
+      img = Image.fromarray(segment_melspectrogram)
+      img.save(segment_feat_file)
+  
+  return segments, segment_features
+     
+def extract_top_concept_segments(audio_cluster_file, feat2wav_file, wav_dir, ids_to_utterance_label_file, concept_priors_file, n_top=20):
+  with open(audio_cluster_file, "r") as f:
+    clusters = json.load(f)
+  
+  with open(concept_priors_file, "r") as f:
+    concept_priors = json.load(f)
+  
+  with open(ids_to_utterance_label_file, "r") as f:
+    ids_to_utterance_labels = json.load(f)
+
+  with open(feat2wav_file, "r") as f:
+    feat2wav = json.load(f)
+
+  top_concepts = sorted(concept_priors, key=lambda x:concept_priors[x], reverse=True)[1:n_top+1]
+
+  for c in top_concepts:
+    c_dir = "%s%s/" % (out_dir, c) 
+    os.mkdir(c_dir)
+    _, _ = extract_concept_segments(clusters[c], feat2wav, wav_dir, ids_to_utterance_labels, out_dir=c_dir)
+
 if __name__ == '__main__':
   '''
   postproc = XNMTPostprocessor('../nmt/exp/feb28_phoneme_level_clustering/output/report/')
@@ -341,11 +382,16 @@ if __name__ == '__main__':
   out_file = "../smt/exp/june_24_mfcc_kmeans_mixture=3/pred_alignment_resample.json"
   binary_boundary_file = "../comparison_models/exp/july_20_multimodal_kmeans/boundaries_multimodal-kmeans.npy"
   frame_boundary_file = "../data/flickr30k/audio_level/frame_boundaries_semkmeans.npy"
-  txt_syl_segment_file = "../data/flickr30k/audio_level/syllable_boundaries.txt"
-  npy_syl_segment_file = "../data/flickr30k/audio_level/syllable_segmentations.npy"
-  landmark_file = "flickr_landmarks.npz" #"../data/flickr30k/audio_level/flickr_landmarks.npz"
-  feat2wavs_htk_file = "../data/flickr30k/audio_level/flickr_mfcc_cmvn_htk_feat2wav.json"
+  txt_syl_segment_file = "../data/flickr30k/audio_level/combined_syllable_boundaries.txt"
+  npy_syl_segment_file = "../data/flickr30k/audio_level/combined_syllable_segmentations.npy"
+  landmark_file = "flickr_landmarks_mbn.npz" #"../data/flickr30k/audio_level/flickr_landmarks.npz"
+  feat2wavs_htk_file = "../data/flickr30k/audio_level/flickr30k_gold_alignment.json_feat2wav.json" #"../data/flickr30k/audio_level/flickr_mfcc_cmvn_htk_feat2wav.json"  
+  audio_cluster_file = "../comparison_models/exp/aug1_mkmeans/pred_clusters.json"
+  ids_to_utterance_file = "../data/flickr30k/audio_level/ids_to_utterance_labels.json"
+  wav_dir = "/home/lwang114/data/flickr/flickr_audio/wavs/"
   #convert_boundary_to_segmentation(binary_boundary_file, frame_boundary_file)
   #resample_alignment(alignment_file, src_feat2wavs_file, ref_feat2wavs_file, out_file)
   #convert_txt_to_npy_segment(txt_syl_segment_file, npy_syl_segment_file)
-  convert_sec_to_10ms_segmentation(npy_syl_segment_file, feat2wavs_htk_file, landmark_file) 
+  #convert_sec_to_10ms_segmentation(npy_syl_segment_file, feat2wavs_htk_file, landmark_file)
+  
+   

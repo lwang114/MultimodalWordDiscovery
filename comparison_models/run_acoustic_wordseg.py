@@ -12,11 +12,16 @@ import segmentalist.segmentalist.mfbgmm as mfbgmm
 import segmentalist.segmentalist.gaussian_components_fixedvar as gaussian_components_fixedvar
 import segmentalist.segmentalist.kmeans as kmeans
 import segmentalist.segmentalist.mkmeans as mkmeans
+# XXX: Copy from utils folder, move this file outside later
+from plot import *
+from clusteval import *
 
 #import argparse
 #import time
 #import logging
 #from scipy import signal
+random.seed(2)
+np.random.seed(2)
 
 logger = logging.getLogger(__name__)
 i_debug_monitor = 0  # 466  # the index of an utterance which is to be monitored
@@ -61,7 +66,7 @@ parser.add_argument("--am_K", type=int, default=10, help="Number of clusters")
 parser.add_argument("--exp_dir", type=str, default='./', help="Experimental directory")
 parser.add_argument("--feat_type", type=str, choices={"mfcc", "bn"}, help="Acoustic feature type")
 parser.add_argument("--mfcc_dim", type=int, default=12, help="Number of the MFCC/delta feature")
-parser.add_argument("--landmarks_file", type=str, help="Npz file with landmark locations")
+parser.add_argument("--landmarks_file", default="../data/flickr30k/audio_level/flickr_landmarks_combined.npz", type=str, help="Npz file with landmark locations")
 args = parser.parse_args()
 print(args)
 if args.feat_type == "bn":
@@ -73,6 +78,13 @@ else:
 
 image_concept_file = "../data/flickr30k/audio_level/flickr_bnf_all_trg.txt"
 concept2idx_file = "../data/flickr30k/concept2idx.json"
+pred_boundary_file = "%spred_boundaries.npy" % args.exp_dir
+pred_landmark_segmentation_file = "%sflickr30k_pred_landmark_segmentation.npy" % args.exp_dir
+pred_segmentation_file = "%sflickr30k_pred_segmentation.npy" % args.exp_dir
+gold_segmentation_file = "../data/flickr30k/audio_level/flickr30k_gold_segmentation.json"
+pred_alignment_file = "%sflickr30k_pred_alignment.json" % args.exp_dir
+gold_alignment_file = "../data/flickr30k/audio_level/flickr30k_gold_alignment.json"
+# XXX: Repetitive; move this part to the top later
 
 # Generate acoustic embeddings, vec_ids_dict and durations_dict 
 audio_feats = np.load(datapath)
@@ -92,12 +104,15 @@ durations_dict = {}
 landmarks_dict = {}
 if args.landmarks_file: 
   landmarks_dict = np.load(args.landmarks_file)
+  landmark_ids = sorted(landmarks_dict, key=lambda x:int(x.split('_')[-1]))
+else:
+  landmark_ids = []
 
-start_step = 1
+start_step = 5
 if start_step == 0:
   print("Start extracting acoustic embeddings")
   begin_time = time.time()
-  for i_ex, feat_id in enumerate(sorted(audio_feats.keys()[:4], key=lambda x:int(x.split('_')[-1]))):
+  for i_ex, feat_id in enumerate(sorted(audio_feats.keys(), key=lambda x:int(x.split('_')[-1]))):
     print (feat_id)
     feat_mat = audio_feats[feat_id]
     if feat_id.split("_")[0] == "3652859271":
@@ -108,8 +123,9 @@ if start_step == 0:
     if not args.landmarks_file:
       n_slices = feat_mat.shape[0]
       landmarks_dict[feat_id] = np.arange(n_slices)
-    else:  
-      n_slices = len(landmarks_dict[feat_id]) 
+      landmark_ids.append(feat_id)
+    else:   
+      n_slices = len(landmarks_dict[landmark_ids[i_ex]]) 
     
     feat_dim = args.mfcc_dim 
     assert args.embed_dim % feat_dim == 0   
@@ -129,10 +145,19 @@ if start_step == 0:
             i = t*(t - 1)/2
             vec_ids[i + cur_start] = i_embed
             n_down_slices = args.embed_dim / feat_dim
-            start_frame, end_frame = landmarks_dict[feat_id][cur_start], landmarks_dict[feat_id][cur_end-1]
+            start_frame, end_frame = landmarks_dict[landmark_ids[i_ex]][cur_start], landmarks_dict[landmark_ids[i_ex]][cur_end-1]
             #print cur_start, cur_end, start_frame, end_frame, i + cur_start, i_embed
+            #print ("feat_mat.shape: ", feat_mat.shape)
             #print landmarks_dict[feat_id]
-            embed_mat[i_embed] = downsample(feat_mat[start_frame:end_frame].T, n_down_slices, args) 
+            #if end_frame > feat_mat.shape[0]:
+            #  continue
+            #if start_frame == end_frame:
+            #  print("overlap boundaries", start_frame, end_frame)
+            #  continue
+            if end_frame - start_frame == 1:
+              embed_mat[i_embed] = np.repeat(feat_mat[start_frame:end_frame], n_down_slices)
+            else:
+              embed_mat[i_embed] = downsample(feat_mat[start_frame:end_frame].T, n_down_slices, args) 
             #embed_mat.append(downsample(feat_mat[cur_start:cur_end].T, n_down_slices, args))
             if args.am_class.split("-")[0] == "multimodal":
               concept_ids_i[i_embed] = [concept2idx[NULL]] + [concept2idx[c] for c in image_concepts[i_ex]]
@@ -146,7 +171,7 @@ if start_step == 0:
     durations_dict[feat_id] = durations 
     
     if args.am_class.split("-")[0] == "multimodal":
-      print('# of embeds, # of concepts: ', len(concept_ids_i), concept_ids_i[0])
+      print("# of embeds, # of concepts: ", len(concept_ids_i), concept_ids_i[0])
     
     if args.am_class.split("-")[0] == "multimodal":
       concept_ids += concept_ids_i         
@@ -240,6 +265,14 @@ if start_step <= 3:
   #landmarks_dict = np.load("../data/flickr30k/audio_level/landmarks_dict.npz")
   durations_dict = np.load(args.exp_dir+"durations_dict.npz")
   landmarks_dict = np.load(args.exp_dir+"landmarks_dict.npz")
+  # Ensure the landmark ids and utterance ids are the same
+  if args.feat_type == "bn":
+    landmarks_ids = sorted(landmarks_dict, key=lambda x:int(x.split('_')[-1]))
+    new_landmarks_dict = {}
+    for lid, uid in zip(landmarks_ids, ids_to_utterance_labels):
+      new_landmarks_dict[uid] = landmarks_dict[lid]
+    np.savez(args.exp_dir+"new_landmarks_dict.npz", **new_landmarks_dict)
+    landmarks_dict = np.load(args.exp_dir+"new_landmarks_dict.npz") 
 
   if DEBUG:
     print(ids_to_utterance_labels)
@@ -281,12 +314,7 @@ if start_step <= 3:
       n_slices_min=args.n_slices_min, n_slices_max=args.n_slices_max
       ) 
   elif args.am_class == "kmeans":
-    am_K = args.am_K
-    # Initialize model
-    '''segmenter = SegmentalKMeansWordseg(am_K, embedding_mats, vec_ids_dict,
-      durations_dict, landmarks_dict=landmarks_dict, p_boundary_init=0.5, n_slices_max=args.n_slices_max
-      )
-    '''
+    am_K = args.am_K 
     segmenter = SegmentalKMeansWordseg(am_K, embeddings, vec_ids, ids_to_utterance_labels,
       durations_dict, landmarks_dict=landmarks_dict, p_boundary_init=0.1, n_slices_min=args.n_slices_min, n_slices_max=args.n_slices_max
       )
@@ -299,14 +327,14 @@ if start_step <= 3:
 
   # Perform sampling
   if args.am_class.split("-")[-1] == "fbgmm":
-    record = segmenter.gibbs_sample(10, 3, anneal_schedule="linear", anneal_gibbs_am=True)
+    record = segmenter.gibbs_sample(30, 3, anneal_schedule="linear", anneal_gibbs_am=True)
     #sum_neg_len_sqrd_norm = record["sum_neg_len_sqrd_norm"] 
   else:
     record = segmenter.segment(30, 3)
     sum_neg_len_sqrd_norm = record["sum_neg_len_sqrd_norm"] 
   
   print("Take %0.5f s to finish training !" % (time.time() - begin_time))
-  np.save("%sboundaries_%s.npy" % (args.exp_dir, args.am_class), segmenter.utterances.boundaries)
+  np.save("%spred_boundaries.npy" % args.exp_dir, segmenter.utterances.boundaries)
   
   if args.am_class.split("-")[-1] == "fbgmm":
     means = []
@@ -321,11 +349,76 @@ if start_step <= 3:
     np.save(args.exp_dir + "counts.npy", counts)
 
   if args.am_class.split("-")[0] == "multimodal":
-    segmenter.get_alignments(out_file_prefix=args.exp_dir+"flickr30k_pred_alignments")
+    segmenter.get_alignments(out_file_prefix=args.exp_dir+"flickr30k_pred_alignment")
 
 if start_step <= 4:
-  boundaries = np.load("%sboundaries_%s.npy" % (args.exp_dir, args.am_class))
-  #for i, feat_id in enumerate(sorted(audio_feats.keys(), key=lambda x:int(x.split('_')[-1]))):
-  #print boundaries[i]
+  convert_boundary_to_segmentation(pred_boundary_file, pred_landmark_segmentation_file)
+  convert_landmark_to_10ms_segmentation(pred_landmark_segmentation_file, args.landmarks_file, pred_segmentation_file)
+  pred_segs = np.load(pred_segmentation_file, encoding="latin1")
+  gold_segs = np.load(gold_segmentation_file, encoding="latin1")
+  segmentation_retrieval_metrics(pred_segs, gold_segs)    
+  
+  # TODO: Make the word IoU work later
+  with open(pred_alignment_file, "w") as f:
+    pred_aligns = json.load(f)
+  with open(gold_alignment_file, "w") as f:
+    gold_aligns = json.load(f)
+  print('Accuracy: ', accuracy(pred_aligns, gold_aligns))
+  boundary_retrieval_metrics(pred_aligns, gold_aligns)
+  #retrieval_metrics(pred_clsts, gold_clsts)
+  print('Word IoU: ', word_IoU(pred_aligns, gold_aligns))
+  print('Finish evaluation after %f s !' % (time.time() - start_time))
 
-  # Evaluate (full-coverage boundary scores, concept-level boundary scores, precision for head concept classification)
+if start_step <= 5:
+  embeddings = np.load(args.exp_dir+"embeddings.npy")
+  with open(args.exp_dir+"image_concepts.json", "r") as f:
+    concepts = json.load(f) 
+  with open(args.exp_dir+"concept_names.json", "r") as f:
+    concept_names = json.load(f)
+  
+  durations_dict = np.load(args.exp_dir+"durations_dict.npz")
+  landmarks_dict = np.load(args.exp_dir+"landmarks_dict.npz")
+  # Ensure the landmark ids and utterance ids are the same
+  if args.feat_type == "bn":
+    landmarks_ids = sorted(landmarks_dict, key=lambda x:int(x.split('_')[-1]))
+    new_landmarks_dict = {}
+    for lid, uid in zip(landmarks_ids, ids_to_utterance_labels):
+      new_landmarks_dict[uid] = landmarks_dict[lid]
+    np.savez(args.exp_dir+"new_landmarks_dict.npz", **new_landmarks_dict)
+    landmarks_dict = np.load(args.exp_dir+"new_landmarks_dict.npz") 
+
+  with open(args.exp_dir+"vec_ids.json", "r") as f:
+    #with open("../data/flickr30k/audio_level/vec_ids.json", "r") as f:
+    #vec_ids = json.load(f)[:3]
+    vec_ids = json.load(f) 
+    vec_ids = [np.asarray(vec_id) for vec_id in vec_ids]
+
+  with open(args.exp_dir+"ids_to_utterance_labels.json", "r") as f:
+    #with open("../data/flickr30k/audio_level/ids_to_utterance_labels.json", "r") as f:
+    ids_to_utterance_labels = json.load(f)
+
+  mean_numerator_file = "%smean_numerators.npy" % args.exp_dir
+  count_file = "%scounts.npy" % args.exp_dir 
+  print("Compute alignment matrix ...")
+  start_time = time.time()
+  segmenter = MultimodalSegmentalKMeansWordseg(concepts, concept_names, embeddings, vec_ids, ids_to_utterance_labels,
+      durations_dict, landmarks_dict=landmarks_dict, p_boundary_init=0, n_slices_min=args.n_slices_min, n_slices_max=args.n_slices_max, init_am_assignments="spread"
+      )
+  segmenter.get_alignment_matrix(args.landmarks_file, pred_landmark_segmentation_file, pred_alignment_file, mean_numerator_file, count_file)
+  print("Finish computing alignment matrix after %f s !" % (time.time() - start_time))
+
+'''
+if start_step <= 6:
+  print("Generating plots ...")
+  start_time = time.time()
+  top_classes, top_freqs = plot_word_len_distribution(pred_alignment_file, args.exp_dir+"length_distribution", draw_plot=False, phone_level=False)
+  print("Finishing drawing length distribution plots after %f s !" % (time.time() - start_time))
+   
+  start_time = time.time() 
+  plot_avg_roc(pred_alignment_file, gold_alignment_file, concept2idx="../data/flickr30k/concept2idx.json", out_file=args.exp_dir + "roc")
+  print("Finishing drawing roc plots after %f s !" % (time.time() - start_time))
+  
+  # Generate the attention plots
+  rand_ids = np.arange(10)
+  generate_smt_alignprob_plots(pred_alignment_file, indices=rand_ids, out_dir=args.exp_dir + "align_prob_plot_")
+  print("Finishing drawing attention plots after %f s !" % (time.time() - start_time))'''
