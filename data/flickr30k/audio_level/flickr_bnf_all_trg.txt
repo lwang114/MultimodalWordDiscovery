@@ -34,11 +34,9 @@ girl river
 girl ocean pigtail
 child pajama
 building worker
-top woman
 booklet girl seat
 area dog water
 board child pool
-guy window
 beach dog
 male_child short_pants weaponry
 landscape skier
@@ -107,7 +105,6 @@ drink hair head mouth people
 dog splash
 male_child shirt short_pants
 dog water
-backpack railing work_force
 bed male_child short_pants
 bed man person room weaponry
 lodger skier slope snowboarder
@@ -135,8 +132,6 @@ man shirt
 face jersey man smile
 man sign wall
 dog grass
-blue girl shore
-city people
 ball dog
 saunterer toddler
 hat male_child
@@ -159,7 +154,6 @@ boat people windows
 girl
 male_child swing
 food male_child spoon
-coat heel sidewalk woman
 dog
 dog field tree
 bear blanket conciliator toddler
@@ -191,20 +185,16 @@ child girl overall shirt
 head male_child shirt
 child cloud mountain splash water
 people table
-fountain girl short_pants skirt
 bridge car person
 bench jersey short_pants woman
 bench caffe_latte dog lap leash woman
 bicycle caffe_latte man shirt street sunglasses
-baby pigtail playpen room
 person
 dog grass mouth stick
 face football male_child
 girl
 ball dog
 adult child
-bloomers man shirt short_pants
-baseball_club shirt short_pants woman
 backpack person rock
 beach male_child moon shirt short_pants structure
 man speedboat
@@ -212,7 +202,6 @@ board boat man
 arrow booth child medieval woman
 child floor goldfish people water
 baseball male_child uniform
-crowd lady top
 barroom male_child platform tongue
 dog head object strap
 dog person snow
@@ -236,11 +225,8 @@ face male_child pavement short_pants
 male_child suit water
 bottle cap child face plant
 cap girl leotard man outfit writing
-apparel man parallel_bars
 male_child rescuer slide
 jean path top woman
-man shirt sign
-dress head woman
 dog field
 child
 motorist vehicle
@@ -253,7 +239,6 @@ mountain person pole
 puppy wall
 dog snow sun
 balloon dress girl hand
-brown girl lake male_child people yellow
 girl jacket
 girl hat short_pants top
 bikini cloud girl
@@ -313,7 +298,6 @@ dog mouth towel
 male_child shirt
 cyclist motorcycle mountain rock
 climber forest overhang
-male_child swing
 dog sidewalk
 dog people person
 canoe front man river
@@ -321,7 +305,6 @@ people shop
 earphone man screen table
 bench bloomers snowboarder
 dog
-door wall woman
 case outfit woman yellow
 child hair path sunflower
 boat girl lake person suit
@@ -339,13 +322,10 @@ bin man pug
 dog mouth object water
 male_child man shirt spectacles water
 extremum male_child pocket spectacles
-balloon door man
 cross hat man shirt
 baggage people
 dog grass
-backpack hill man
 bikini girl rubber
-girl man suit tube
 shirt sunglasses work_force
 boot girl sidewalk
 girl harness sign
@@ -359,15 +339,12 @@ beach dog ocean sky
 man short_pants water
 ball dog water
 harness man mountain rope waist water
-bandanna fist head male_child spot
 beach girl swimsuit wave
 ball bat helmet male_child shirt
 face finger player
 girl sand shirt short_pants
-mountain work_force
 male_child sidewalk street weaponry
 internet man short_pants
-boot car girl
 drive
 cellular_telephone drink hand man spectacles
 clothing seller wear
@@ -376,9 +353,7 @@ work_force
 baby fingerstall male_child
 baseball_glove cap food man
 dog pole water
-cigarette hat jacket man mouth
 boat fisherman rod water
-hair man
 bird child front
 backpack man mountain sheep
 man
@@ -391,13 +366,10 @@ face girl
 band floor male_child sleeve sweater water
 door jersey man wall
 cloud people rock
-child hamburger shirt woman
-child statue
 crystalline head jersey man
 wall water_scooter woman
 girl male_child table
 man wall
-heel man shirt sidewalk woman
 fish person
 bloomers crowd short_pants work_force
 backpack hill man trail
@@ -485,7 +457,6 @@ girl jacket man sunglasses
 bridge girl male_child weaponry
 animal dog yard
 disguise man motorcycle
-man rock short_pants stick
 camera girl pink
 girl trampoline
 collar dog water
@@ -493,8 +464,6 @@ male_child man shirt
 girl male
 grass puppy
 dog mouth
-bald crowd man shirt sunglasses
-people shirt woman
 girl house shirt skirt
 foot girl shirt tongue
 dog rock splash water
@@ -515,7 +484,6 @@ cloud people
 building child handlebar plant shirt skull
 field jacket male_child
 dog plant sand
-bleary road woman
 hat woman
 jacket male_child soccer
 soil tool woman
@@ -531,9 +499,7 @@ man orange sand tent
 child hay sun
 girl necklace
 dog legs
-ear earphone jacket man
 dog overpass pond
-girl vest
 face man pull sand water
 child internet
 male_child short_pants
@@ -553,7 +519,6 @@ dog field water
 necklace sweater woman
 car man woman
 light wagon
-child outdoors
 ocean shore woman work_force
 boat flag man sunset
 couple
@@ -582,10 +547,8 @@ female male ocean
 dog grass rock
 hound vehicle
 expression girl
-fountain jersey man top
 dog short_pants vest woman
 child
-dog mouth stick
 dog surf
 male_child shirt weaponry
 girl resort_area slide
@@ -609,7 +572,6 @@ area dog ramp
 people structure
 ball dog leaf mouth road
 ear hairdo person shirt
-bed child parent
 male_child pink soccer uniform
 dog harness
 child drive horse
@@ -618,7 +580,6 @@ animal field tree
 girl street
 male_child rock weaponry
 dog grass
-bunch garbage man shirt wall
 bikini man shop woman
 suit towel woman
 butt dog hand
@@ -695,20 +656,15 @@ dog fence radio_beam
 ocean person
 beach dog
 dog leash motorcycle owner
-bikini girl gym_shoe rock water
 child pit
 baseball_glove cycle helmet way
 male_child pool
 collar dog log
-brook foot place shirt short_pants towel woman
 baby ball hosiery house
 dog measure river
 ball dog sand
 adult child gift male_child
 bowl man shirt
-baby back bag hand shoulder woman
-child leaf
-brown child one parallel_bars
 dog nose water
 building child water
 fountain leash maestro rottweiler world
@@ -916,7 +872,6 @@ hair shoulder woman
 earring head piece spectacles woman
 dog object rug
 hummer mud
-girl material outfit
 cow dog head horn
 male_child pool short_pants
 apparel seating woman
@@ -925,7 +880,6 @@ hat jacket person
 boat people
 dog leash shirt stick
 dog frisbee mouth
-bag cigarette mouth woman
 child helmet sled snow
 people rock
 formation hiker stream
@@ -941,7 +895,6 @@ baby figure hat outfit
 face girl short_pants smile sweatshirt
 brown dog sidewalk
 floor male_child paper saber tree
-adult beach motorcycle trail
 male_child shirt water
 girl pool swimsuit
 person snow
@@ -955,8 +908,6 @@ man spectacles
 adult child shirt
 dog snow
 poodle snow
-male_child ocean
-boat male_child vest water
 field jean jersey male_child
 dog sheep
 desk hand window woman
@@ -972,14 +923,12 @@ ball child
 helmet man minibike uniform
 hands head male_child toilet
 hammer shirt worker
-backpack hat man
 dog frisbee person road
 dog dress_suit grass
 hat jacket jewelry man spectacles wall
 dog
 animal face tail
 chair male_child plaything
-apparel building hands male_child snow
 dog mouth object rope way
 fountain people water way
 girl male_child park swimsuit water
@@ -987,10 +936,8 @@ ball dog soil
 child girl leg
 cheerleader silver
 dinghy man water
-bicycle dawdler jacket man street
 dog man
 cow dog
-mountain people
 child necklace water
 diver
 boat cap man river
@@ -1001,8 +948,6 @@ adult child move pigeon uniform
 chair face girl hand
 bandanna dog keyboard paw
 lake person pier
-bag hat sunglasses woman
-beach child sun
 helmet shade shirt woman
 animal dog television
 booth child lap table
@@ -1038,7 +983,6 @@ male_child woman
 bagpipe man
 dog ocean
 girl water_scooter
-fence hand man short_pants
 man rope wall
 face jersey man short_pants
 dog railing
@@ -1048,7 +992,6 @@ dog grass tongue
 cart company internet man wheel
 ball dog
 earring hair sweatshirt woman
-chair guitar hog male_child
 board surfer
 barrow child lake
 dog object
@@ -1069,7 +1012,6 @@ girl rock shadow
 cheek male_child tongue woman
 dog grass
 labrador mouth plaything water
-girl stick top
 child
 baby crawl floor
 baby beach coat skateboard track woman
@@ -1081,12 +1023,10 @@ bow helmet woman
 dog grass
 ceiling check light
 dog
-hair hairnet jacket man mouth
 building hat man
 cat plaything puppy
 dog frisbee male_child mouth
 ball dog mouth
-ball beach dog
 building man people shirt
 dog water
 dock dog man water
@@ -1103,7 +1043,6 @@ dog stairs
 door dress hair hand people woman
 baby diaper mouth water
 dress girl watermelon
-child stairs uniform
 beads male_child shirt
 ball cone hat head work_force
 dog end fire hurdle
@@ -1153,14 +1092,12 @@ coat jean person snow
 jacket person rock
 man sidewalk snow
 male_child new_jersey orange
-bloomers man shirt
 people
 apple male_child wall
 face male_child path
 ball girl male_child
 dog tree
 louis shop woman
-bird tree
 man mountain
 man mountain ocean
 helmet person water
@@ -1209,7 +1146,6 @@ coat dog grass plaything
 dog water
 dog leaf
 bucket head male_child water
-skier way
 hiker snow
 basketball court male_child short_pants
 dog
@@ -1231,7 +1167,6 @@ child sibling
 cat collar dog pool
 bucket male_child man pump sodium_carbonate
 child hosiery slide
-dog grass
 dog field
 girl ocean short_pants
 man street
@@ -1286,7 +1221,6 @@ dog tongue
 cap child jacket rock
 dog way
 dog
-coat man spectacles
 puppy
 bloomers male_child
 lake mountain people
@@ -1320,7 +1254,6 @@ sweater wall woman
 dog snow
 boardwalk child water
 dog finger mouth
-dog laying person
 garden pot toddler
 bucket guy man sax
 dog one spot
@@ -1329,8 +1262,6 @@ dog stare
 dog
 dog object topographic_point
 dog snow
-girl plaything
-building cigarette man shirt
 house people person snow
 beach man short_pants
 bear shadow snow
@@ -1357,7 +1288,6 @@ choice climber helmet ice
 flower girl male_child shirt skateboard
 man notebook sweatshirt
 male_child park unicycle
-bench cart dress woman work_force
 dog hill
 child
 garage girl rope sidewalk
@@ -1367,10 +1297,8 @@ ramp skateboard
 ball man paddle short_pants
 hat man shirt
 dress man suit woman
-hand wave woman
 dog harness snow
 helmet man rock
-child trampoline
 dog tongue
 dog jacket jean man
 coat girl hat path
@@ -1409,7 +1337,6 @@ male_child toothpaste
 dog duck mouth snow
 inside one
 ball building dog
-bill face instrument man sidewalk sweatshirt vest work_force
 bed child girl jean
 ball drip male_child team
 hat mouth uniform woman
@@ -1435,7 +1362,6 @@ child dog snow
 drink people
 girl people
 dog rock
-flower girl hand
 collar dog
 attire woman
 child cloak hat trim
@@ -1488,7 +1414,6 @@ fence jacket place woman
 dog mouth plaything trail
 male_child stairs water
 cape dog
-beach girl water woman
 ball child dog field goat
 dog grass jacket
 child coat snow thumb
@@ -1510,7 +1435,6 @@ dog
 dog face
 stream waterfall woman
 dog forest tongue
-cyclist rider
 cattle dog
 dog ear
 dog plaything
@@ -1581,7 +1505,6 @@ new_jersey number player
 people statue truck
 coat girl stick
 people train
-guy hair jersey mouth
 dog grass head
 dog mouth plaything shirt
 bloomers girl man plaza suit
@@ -1590,22 +1513,18 @@ girl man suit top
 girl
 clothing couple
 backpack hat sunglasses woman
-baby bowl water
 dog furniture
 irons jacket male_child post
 child gear hat sunglasses
-costume girl headdress
 bag man wall
 cheek child man shirt
 child house
 dog jeep woman
 girl reversal sundress
 car child
-ball girl shirt
 arm male_child
 dog leash
 head male_child shirt strainer
-beacon coat man wall
 child shirt weaponry
 rock woman
 face guitar male_child
@@ -1648,7 +1567,6 @@ ball mouth run
 block male_child
 arm bed male_child short_pants towel
 child puddle sandal
-girl jean shirt window
 collar dog plaything
 child face sweatshirt wagon
 ball bat child shirt
@@ -1658,8 +1576,6 @@ dog wall
 dog post
 bandanna dog snow
 disk dog
-child forest sleeve
-floor girl
 man people shirt table
 child man slide sunglasses
 dog people pool
@@ -1679,7 +1595,6 @@ slide sunglasses
 grass man shirt spectacles
 bag woman
 dog walk
-child shirt swing
 hat jacket person sign wheelchair
 girl shirt slide
 dog frisbee man mouth shirt
@@ -1689,12 +1604,10 @@ brother cape leg male_child painter
 retriever
 fence flower helmet horse jumper
 dog gravel
-dog field hoop
 dog one
 girl people
 bloomers girl gym_shoe split
 fish lake line pole woman
-artwork easel man wall woman
 bow girl nose
 bird dog fence mouth
 boat man stick
@@ -1741,7 +1654,6 @@ male_child object sweatshirt
 male_child rod rope
 male_child mud onlooker
 child plaything
-man phrase rock
 field girl sack
 girl wall
 mud person
@@ -1785,7 +1697,6 @@ house male_child soil
 face kayak man water
 girl leg
 dog water
-ball dog
 greyhound shirt
 child hands head object shirt short_pants
 grass jumper male_child shirt short_pants
@@ -1794,7 +1705,6 @@ dog
 dress girl
 corner helmet motorcyclist
 ball mouth puppy
-face girl mouth
 man
 foam girl jersey sign
 beer hooker hotel man sign
@@ -1807,8 +1717,6 @@ dog ear floor
 motorcycle person uniform wheel
 dog
 girl
-building man shop
-building cart man motorcycle
 dog man stick
 girl swing
 male_child shoulder tire yard
@@ -1826,15 +1734,12 @@ dog frisbee
 ball dog nose
 gun protection woman
 dog jacket person stick water
-arm man truck woman
 grass machine mouth
-girl hair rope smile
 child kitten
 ball collar dog mulch
 dog ocean
 hands hat head skirt stairs woman
 dog frisbee mouth
-goggles male_child pool water
 dog fence field mouth object
 dog tongue
 male_child tube
@@ -1862,7 +1767,6 @@ cap jacket man people picture shirt
 dog grass mouth stick
 fountain people
 child swing target
-harness male_child man strap wall
 car work_force
 box head male_child shirt
 male_child noodle utensil
@@ -1880,7 +1784,6 @@ ball beach dog mouth
 apparel man rock
 dog frisbee mouth
 bench flower girl grass ponytail
-bench bloomers bus jean man woman
 dog goat grass
 football male_child uniform
 boat dog uniform work_force
@@ -1960,7 +1863,6 @@ hat man rock shirt
 helmet rider road
 child jean shirt tunnel
 foot harness person spray water
-dog grass
 shepherd wave
 area ball people tree
 abdomen male_child shirt swing
@@ -1972,7 +1874,6 @@ dog
 bank hat man watermelon
 girl goggles
 guard male_child surfboard
-dog
 kite people scope
 mouth
 collar dog tongue
@@ -2003,7 +1904,6 @@ animal
 bloomers bridge fence man railing singlet
 dog grass
 contestant dog
-basketball house male_child
 beach dog water
 man park short_pants top
 plaything puppy
@@ -2028,7 +1928,6 @@ line people
 bicycle crowd enforcement people
 ball dog
 adult child mouth
-puppy
 dog grass
 vehicle
 dog eye mouth stick topographic_point water
@@ -2050,7 +1949,6 @@ child dress jacket short_pants
 eyes girl shirt
 dog food head person
 dog sand
-girl grass short_pants top
 candy dress girl shoe
 dog jean work_force
 skateboard skateboarder
@@ -2065,7 +1963,6 @@ arm cast girl hat sheep
 child sky
 dog face
 goggles jacket male_child pool
-face water woman
 flag jersey male_child slide weaponry
 haircut male_child shirt
 ball player racket shirt
@@ -2104,7 +2001,6 @@ male_child pajama plant plaything tire
 adventurer rock
 container dog
 girl hair shirt
-girl shirt
 campfire people
 face paint woman
 bag dog
@@ -2121,7 +2017,6 @@ baby house jacket
 dog
 dog new_jersey
 ball dog
-baby mouth plant
 dog lawn people woman
 child city mountain
 child sandal shirt short_pants swing
@@ -2201,21 +2096,17 @@ man tightrope tree
 cellular_telephone man
 greyhound number
 item road shoreline woman
-face girl grass sidewalk weaponry
 child instrument
-building guy traffic
 poodle
 head male_child water
 car explosion
 man
 cart man parachute
 ball daughter grass woman
-building grass tree work_force
 dog flower paw surface
 graffito man shirt skateboard
 shirt wall woman
 dog eyes rug
-beard hill man sunglasses
 faux_pas friend male_child
 ball girl racket
 dog leg person
@@ -2241,7 +2132,6 @@ area man shirt
 bat pitch player uniform
 guitar man
 adult child plaything
-dog harness mouth stick water
 foot ice man mat
 grass man tree
 dog way
@@ -2256,7 +2146,6 @@ child object people person
 jersey magazine male_child
 head male_child shirt tons
 bear child people
-girl
 dog
 lake man mountain
 ball dog field
@@ -2266,12 +2155,9 @@ chair dog field string_section tripod way
 dog mouth
 area child male_child
 beach male_child ocean
-bikini man woman
 cereal floor male_child table
 jersey man rock
 girl hat
-chair shirt skirt star wall woman
-woman
 girl merry-go-round
 greyhound
 girl kilt man place
@@ -2293,7 +2179,6 @@ girl makeup shirt
 beer person table top
 chair female short_pants top
 dog fence
-blanket street umbrella woman
 bicycle fountain male_child
 chair man sunglasses
 backpack girl hair spectacles
@@ -2307,7 +2192,6 @@ display jersey skirt street woman
 man wrap
 girl suit
 girl ribbon shirt skirt
-fountain male_child
 child pool
 fence hand male_child
 male_child weaponry
@@ -2359,7 +2243,6 @@ girl puddle
 floor male_child powder
 dog grass tree
 ball dog mouth
-people wall
 male_child shirt stick table
 girl hand necktie
 barroom dog
@@ -2390,7 +2273,6 @@ male_child short_pants water
 girl male_child tree
 dentition man smile sunglasses
 bubble male_child
-girl lake
 bag box man
 dog hurdle
 hair male_child spectacles
@@ -2424,7 +2306,6 @@ dog male_child sand
 coat people
 hand mohawk woman
 girl slide
-hands male_child pool suit
 dog grass
 arm hands male_child man sky
 ball football_player payer yellow
@@ -2469,12 +2350,10 @@ lawn man shirt spectacles
 dog gray man stick
 driver male_child
 child outfit watch
-bag dress girl hat
 bench people present stop
 people water way
 chair face man water
 man ponytail shirt short_pants top woman
-cup man tree
 dog grass nerve_pathway
 man rock short_pants water
 ball deck dog
@@ -2489,7 +2368,6 @@ dog
 brown foot hands male_child
 jean person
 bench male_child
-girl male_child
 girl shirt swing
 dog tree
 blue man mountain
@@ -2515,7 +2393,6 @@ hair head male_child shirt
 child ice necklace water
 helmet person
 dog goat man pen stick
-board foot man water
 dog
 greyhound new_jersey
 baby girl mountain
@@ -2575,22 +2452,17 @@ male_child pole
 canoe jacket people river
 approach canoeist conifer river rock
 child male_child
-dock lake suit woman
 ball dog fence grass
-accordion building driveway man
 child computer man table woman
 dog road
 shirt sign woman
 girl wave
 couple ocean
 man shirt wall woman
-body hair male_child
-child head water
 bikini girl pool slide
 ball dog grass mouth
 dress frame girl
 beach girl man
-backpack hill man
 hill person short_pants sweatshirt
 dog mouth object sand water
 child jean jersey
@@ -2607,7 +2479,6 @@ ball dog
 dog equipment
 competition crowd man motorcycle
 child float helmet water
-car crowd smoke
 coffee person robe
 box hell sign street work_force
 animal shelf shirt woman
@@ -2630,7 +2501,6 @@ cigarette orange whist woman
 dog sprinkler water
 gentleman motorcycle
 bucket hand male_child
-rider rise
 equipment toddler
 male_child motorcycle shirt
 dog mouth paw stick
@@ -2639,7 +2509,6 @@ girl shirt skirt traffic
 jean person saddle
 equipment male_child
 beach bird child
-girl male_child ocean water
 ball dog mouth
 field mountain sport_utility telescope woman
 jeep stream
@@ -2690,7 +2559,6 @@ person rock
 orange player
 hat man sweatshirt telephone
 couple
-ball jean man woman
 male_child shirt short_pants
 male_child railing skate
 ball dog hole
@@ -2700,7 +2568,6 @@ child face goggles
 man newspaper place shirt suit
 ball dog
 ball male_child
-audience horse rider
 girl head mouth
 male_child shirt trampoline
 jacket kayak man water
@@ -2743,11 +2610,9 @@ man shirt singlet sunglasses
 cone man people short_pants
 dog field frisbee
 bird legs water
-dog
 cigarette crowd hat man
 ball cap jacket male_child
 greens prohibition
-dog grass
 dog retriever
 number race racetrack truck
 car fire people
@@ -2762,7 +2627,6 @@ dog doorway leash tan woman
 adult child
 bicycle people person
 friend man motorcycle
-cap goggles male_child
 experimenter fire
 ball girl strip
 helmet skateboard wheel work_force
@@ -2774,7 +2638,6 @@ ball dog mouth water
 dog water
 girl handstand sofa tutu
 male_child skateboard wall
-building girl
 man shirt skateboard
 boot jean male_child sweater swing
 boardwalk girl motorcycle pink shop
@@ -2801,7 +2664,6 @@ dog grass spot weeds
 bed girl leotard
 circuit motorcyclist
 monkey structure
-skateboarder
 helmet midair
 bleachers people raincoat
 new_jersey paint person
@@ -2827,7 +2689,6 @@ motorcycle rider
 basket dog
 arm costume girl hand hip
 dog face
-avant-garde child house
 ball man
 line man stump
 player
@@ -2846,22 +2707,17 @@ child
 male_child man skateboard suit
 dog fence grass tree
 ball member player
-person sweatshirt
 child shirt stairs weaponry
-male_child skateboard
 people rock water
-male_child
 handle male_child rope shirt short_pants
 cliff climber terrain
 dog hill
-building fire fireman
 swimsuit woman
 jar register work_force
 man motorcycle
 cellular_telephone man woman
 building man wall
 avant-garde cyclist helmet
-girl shirt short_pants
 male_child sprinkler
 jersey surfboard water young_person
 dog frisbee people
@@ -2911,7 +2767,6 @@ male_child motorcycle ramp
 baggage woman
 blow hayfield woman
 canoe hat man river
-couple man shoulder toddler
 man railing
 child jacket noodle raft
 child man
@@ -2919,7 +2774,6 @@ building jean jersey male_child skateboard windows
 man tongue
 arm racer
 dentition dog
-dog
 ball male_child uniform
 dog man shore
 car fire
@@ -2927,8 +2781,6 @@ player
 board man sea wave
 ball court people
 bolide people vest
-bloomers male_child railing
-bloomers brassiere crowd face jewel woman
 jean male_child pigeon shirt
 field person shirt
 bannister hat rollerblader shirt stairs
@@ -2964,16 +2816,12 @@ jacket man
 apparel lady underwear
 dog water
 man
-jacket man
 coat hat man wall
 beach dog man stick
-male_child uniform vehicle
 crowd display
-ball dog marker
 board harness man
 girl man shirt sunglasses
 minibike motorcyclist road
-male_child pumpkin wagon
 surfer wave
 arm man paint ribbon
 man surfboard wave
@@ -3043,7 +2891,6 @@ girl suit water
 bicycle man
 clothing person wall
 mountain person
-fence girl male_child way wings
 hat horse jacket partition person
 person water
 racket woman
@@ -3062,7 +2909,6 @@ dog grass
 ledge person stunt wheel
 dog home
 girl horse ponytail
-man rock swimsuit
 ball team work_force
 goalkeeper ice player
 dog stick woman
@@ -3111,7 +2957,6 @@ barrier dog gun_muzzle
 car path
 bale child jersey male_child
 ball foot internet male_child
-girl hair suit swing
 male_child motorcycle
 crack face frame man tree
 dog
@@ -3128,7 +2973,6 @@ area shirt short_pants woman
 batter mound player
 arch building people
 male_child overall slide
-ball crowd player uniform
 dog duck
 bed curtain male_child
 motorcycle prey rider
@@ -3137,7 +2981,6 @@ expression face girl
 girl leg woman
 hat railing snowboarder
 male_child
-bucket girl person shirt water
 costume people
 dress girl
 costume man
@@ -3148,7 +2991,6 @@ clothing man mask setting
 ball man player
 ball player uniform
 brown dog eye grass
-new_jersey player
 shirt shoulder spot
 man tripod
 dog road windshield
@@ -3205,7 +3047,6 @@ people rock short_pants stream
 dog road
 lake man shirt waterfall
 dog grass legs rope
-goose wings
 area jeep people
 base new_jersey one work_force
 alley person shirt
@@ -3247,7 +3088,6 @@ hat male_child river shirt
 ball dog grass mouth
 child stool
 counter dog head legs
-ball man uniform
 component
 adolescent road short_pants
 dog numbers path uniform
@@ -3298,7 +3138,6 @@ man motorcycle
 dog lawn
 eyebrow finger girl haircut weaponry
 dog mouth object
-male_child mud river
 dress head woman
 people table
 computer equipment person
@@ -3368,7 +3207,6 @@ helmet motorcycle outfit rider
 motorcyclist
 boat team
 surface work_force
-man mexico shop
 box child shirt
 building canoe paddle people shore water
 man surfboard wave
@@ -3458,7 +3296,6 @@ ocean splash windsurf
 mask people
 dog spray
 outfit people street
-equipment girl shirt
 collar dog tag tongue
 mountain
 people
@@ -3488,9 +3325,6 @@ ramp skateboarder
 chandelier mirror people sofa
 greyhound path
 man
-beverage hand work_force
-bride bridesmaid suit work_force
-dinner_jacket dress man woman
 snowboarder
 climber hand ledge
 instrument musician table
@@ -3531,9 +3365,7 @@ railing woman
 couple plastic
 child food lady person table
 child hands
-jean man rock spectacles top woman
 jean man shirt woman
-person snowboard
 man orange woman
 dog water
 cap man
@@ -3557,8 +3389,6 @@ dog person snow
 woman
 display woman
 chair girl ma people shirt
-skateboarder stairs warehouse
-people person
 balloon male_child shirt
 parka stick woman
 dog man woman
@@ -3590,7 +3420,6 @@ dog
 bicycle man
 green snowboarder
 dog surface
-man woman
 deer snow turkey
 girl peach
 male_child mitten snow
@@ -3611,7 +3440,6 @@ ball player
 ball man new_jersey opposition
 child topographic_point
 dog musca_volitans
-dress heel light street woman
 wings
 deck shirt work_force
 black dog mouth object snow
@@ -3642,7 +3470,6 @@ light station train
 hand person shirt
 costume girl male_child
 goal goalkeeper yellow
-horse
 cabin cap hearth work_force
 girl tree
 chest_of_drawers girl tree
@@ -3679,7 +3506,6 @@ boat child grass
 man stick
 dog grass
 basketball player
-football male_child new_jersey
 equipment man rock
 hair man spectacles
 ball beach dog ocean
@@ -3703,7 +3529,6 @@ crowd new_jersey player
 ball player strip
 basketball man new_jersey
 dog house legs table woman
-skateboard skateboarder
 bloomers jacket man
 parka person snowboard
 ball dog mouth
@@ -3733,7 +3558,6 @@ elephant fabric trunk
 colors drive elephant work_force
 elephant head man person
 shirt woman
-ball goalkeeper new_jersey player
 ball person shirt short_pants sunglasses
 ball dog grass
 people snow tripod
@@ -3763,13 +3587,11 @@ ball male_child pond
 person sky
 hill person
 collar dog limb mark thorax
-people street vest worker
 collar dog male_child snowsuit
 car driver helmet
 beer hands lady man
 surfer wave weaponry
 man people woman
-bag picture woman
 light people restaurant table
 hill person
 constitution device hand purple woman
@@ -3785,7 +3607,6 @@ flag hand
 dog
 man
 adult orange snow
-fleece woman
 crowd people
 animal child
 column jacket jean man
@@ -3793,11 +3614,8 @@ batch cart male_child
 ball child uniform
 collie obstacle
 person snow
-fence man woman
 ball opposition player
-telephone woman
 duck male_child
-girl male_child shirt sofa
 people ramp
 adult house
 beach scarf woman
@@ -3861,7 +3679,6 @@ dog pond stick
 male_child motorcycle railing
 dress lady
 child fireplace mantle people
-dog mouth snow wood
 guitar microphone woman
 dog plaything snow sweater
 bikini man woman
@@ -3884,7 +3701,6 @@ ad backpacker child coat hat man snowsuit
 girl guy toboggan
 girl hat snow
 brace legs man sunglasses weaponry
-burn handkerchief man shirt
 beach kayak sunbather
 man motorcycle
 counter dog
@@ -3913,14 +3729,11 @@ girl head hood snow
 descent man shirt
 bird legs white
 girl male_child rope
-firework hands woman work_force
 dress gown maid woman
 shirt surfer wave
 bride family sofa
 lift pink skier
-man river rock weaponry
 man surfboard wave
-back barrier horse rider
 bridesmaid dress foot shoe
 person rock
 dog plant
@@ -3933,7 +3746,6 @@ hill person snowboard
 brown dog face shock_absorber
 dog frame object
 embankment person
-adolescent cooper screen
 person tan
 rider
 cart child
@@ -3941,7 +3753,6 @@ climber stare sun
 apparel flag people
 grass sweater toddler way
 ocean person wave
-child hat scarf snow street
 ball dog mouth
 adult girl
 dog number
@@ -3957,21 +3768,18 @@ jean shirt skateboarder
 card_game male_child yellow
 cyclist ramp window
 baby branch child woman
-doorway people
 umpire wrestler
 blue ring wrestler
 girl hand headband outfit sash waist
 backpack bandanna head male_child woman
 coat hat road woman
 crowd field jacket
-beach bikini child girl ocean sand
 ramp skateboarder
 man new_jersey player soccer
 fence horse nose sand
 man paper suit
 defense woman
 ball male_child short_pants
-man sidewalk woman
 blindfold people sign
 dog man plaything snow
 dog
@@ -3991,12 +3799,10 @@ coat glass man
 hill man mountain ski
 ball dog snow
 jacket people
-card_game man table woman
 bird foot water
 drink man motorcycle shirt sign
 bride display groom
 dachshund hill woman
-ball dog harness mouth
 post puppy
 jacket male_child motorcycle
 dog
@@ -4023,7 +3829,6 @@ branch dog field
 dog frisbee
 skier
 person snowboard
-man place short_pants water
 man snowboard
 dog field mouth stick
 light people shore
@@ -4039,7 +3844,6 @@ ball dog mouth
 child wall
 hill rider
 dog marker snow
-male_child people stick
 child equipment jacket
 dog spot
 girl
@@ -4055,7 +3859,6 @@ male_child penguin plaything shirt
 jean male_child shadow
 girl shirt sweater woman
 building coat people
-people tattoo
 dog water
 bloomers foot girl top
 dress girl ship walk
@@ -4091,14 +3894,12 @@ dog grass gun_muzzle
 bird water woman
 numbers shirt work_force
 building people
-climber wall
 slope snowboarder
 apparel backpack hair work_force
 adult hands pocket sweater
 skier sunglasses
 bloomers person structure top
 girl male_child road
-bench blanket head person
 dog snow
 car man
 board day man shirt
@@ -4116,7 +3917,6 @@ audience male_child man
 fire people person
 designation dog gun_muzzle
 collar dog leash
-male_child snow
 guy hand jacket rectangle
 equipment people table tree
 laptop proctor table work_force
@@ -4135,8 +3935,6 @@ crowd knee man
 man people shirt
 male_child shore sunglasses
 dog
-building entrance girl jean statue woman
-man people suit
 dog jacket man snow team
 dog musher smile
 player
@@ -4154,7 +3952,6 @@ dog road
 motorcycle mud rain rider
 cattail dog snow
 skateboarder wall
-scarf woman
 people splash
 dog
 jacket man
@@ -4175,13 +3972,10 @@ ball player racket
 crowd motorcyclist
 building cigarette man shirt
 motorcycle motorcyclist mud
-male_child railing skateboard
 butterfly goggles hat swimmer
-child ledge
 man rock tree water
 people truck
 dog grass
-ball goal number
 painting wine woman
 animal dog grass
 water woman
@@ -4213,7 +4007,6 @@ bridge people water
 ski
 dog snow
 cook restaurant work_force
-dog field plaything
 woman
 girl
 child woman
@@ -4240,11 +4033,9 @@ blue game player
 basket basketball hand man player uniform
 basketball man new_jersey
 dog leaf stream
-ball player weaponry
 basketball blue man
 hand player
 dog
-girl
 bottom top woman
 jersey woman work_force
 building lantern people street
@@ -4271,13 +4062,11 @@ record woman
 guy short_pants
 dog
 man surfboard
-course skier
 hill lift man snow
 block hand male_child shirt table
 area dog work_force
 dog field
 bicycle person train
-dish man
 vehicle water
 building jacket man
 bicycle fence man stairway
@@ -4293,7 +4082,6 @@ helmet mountain
 attire
 girl hoop sidewalk sweater
 crowd player signage stretch surface
-art man shirt
 beak bird branch
 team
 girl outfit
@@ -4338,7 +4126,6 @@ boat people water
 crane water
 girl grass jean shirt
 dog tree
-case guitar man suit
 course man shirt
 helmet motorcycle person
 helmet rider shirt
@@ -4380,23 +4167,18 @@ man railing skate
 dog
 blond dog
 ball field man shirt
-bloomers cap person snowboard
 audience ball player
 hand woman
 bird
 bandanna dog
-ramp snowboarder
 car
 bag dog grass mouth
 house rock woman work_force
 cross hillside people
 dog fence snow
 poodle
-man new_jersey short_pants
 student
 basket hat jersey shirt woman
-boards male_child short_pants
-bloomers jacket person snowboard
 slope woman
 jacket snowboarder
 man mountain ski
@@ -4420,7 +4202,6 @@ cigarette man
 dog man mat shirt
 fictional_character male_child
 dog
-tiger
 dog people shoulder
 child hat jacket snow
 baseball baseball_glove male_child uniform
@@ -4428,15 +4209,11 @@ dog mouth tongue
 circuit motorcycle team
 man sign vest
 suit wave woman
-goggles people
 apparel hair people
-curvy girl resort_area slide yellow
 building coat people
 butter dog
 bloomers hat man ramp shirt
 admire adult baby child
-camera man short_pants top woman
-man people sign
 group people photograph wall
 dog snow
 dog
@@ -4458,14 +4235,10 @@ blue male_child
 people
 dog head outdoors
 male_child setting skateboard track
-gear person
-skateboarder
 girl hair swimsuit
 man swimsuit water
-man ramp skateboard
 board snowboarder
 goalkeeper stick
-graffito overpass rider
 ball player whistle
 ball player uniform
 cyclist skyline
@@ -4478,9 +4251,7 @@ player racket shirt
 man people ramp
 child foot hat ski snowsuit
 blanket sweatband woman
-body cement girl
 building man railing
-male_child shirt sunglasses whirl
 dog
 dog field mouth
 bag fence work_force
@@ -4502,7 +4273,6 @@ camel child mountain
 ball bat male_child street visor
 hair skateboard stairs
 child street
-bottle dog mouth snow
 park people river
 building people
 jacket ramp skater
@@ -4512,9 +4282,6 @@ child shirt wake_board wave
 backpack climber mountain
 curtain gear guitar musician suit
 rock skier
-boarding people person
-skater weaponry
-ledge shirt skateboarder
 box man work_force
 food man shirt
 camel male_child sand
@@ -4530,10 +4297,8 @@ man motorcycle outfit
 jacket man shirt woman
 motorcyclist
 dentition dog snow
-cat paw
 adult child
 camera man mound skier
-dog frisbee grass
 dog fish mouth snow
 area dog mouth
 jacket mountain skier
@@ -4557,7 +4322,6 @@ jean kangaroo short_pants woman
 dog field
 onlooker person
 people woman
-snowboard snowboarder
 equipment foot parasail person sky
 people shop
 girl jersey parade
@@ -4568,11 +4332,9 @@ bird water
 dog stick
 dog
 friend rider
-branch girl jean shirt
 area dog
 backpack hair jersey man shoulder
 jump_suit object woman
-girl hand
 dog mouth stick water
 dog sand
 ball field man sport
@@ -4588,7 +4350,6 @@ cheek man shirt woman
 climber figure
 mountain mountaineer
 attire graffito sidewalk work_force
-building male_child ramp shirt
 man ramp shirt skateboard
 adolescent girl sweatshirt
 bus head woman
@@ -4601,12 +4362,9 @@ crowd person shirt unicycle
 box girl green pavement
 beard hair man woman
 skier spectator
-case hat work_force
-man painting woman
 surfer wave
 man motorcycle outfit stream sunglasses
 bannister bicycle male_child walk
-bench man sodium_carbonate woman
 kangaroo number
 pistol
 crowd girl
@@ -4615,7 +4373,6 @@ boards snow snowboarder
 bicycle person rock wheel
 ice man player puck
 bird wings
-dog face
 dog hand shirt vest woman
 girl jean slide
 forest motorcycle person
@@ -4662,9 +4419,7 @@ dog fence
 coat person snow
 jacket motorcycle person
 cyclist helmet jacket mound
-magazine sunglasses woman
 number woman
-baby shirt
 dog fence head horse
 ball outfit woman
 floor girl
@@ -4715,14 +4470,11 @@ mountain people snow
 dog hole plant
 male_child snow
 parachute person ski
-people
 drink man
 surf surfer wave
 bird dog
 dog vest
-barn couple girl male_child
 child colors line shoulder woman
-male_child people ramp skateboard
 girl overall seesaw
 memorial outfit work_force
 domestic_fowl marker
@@ -4741,7 +4493,6 @@ dog eye topographic_point
 dog mouth stick way
 building limousine people stairs
 dog vest
-body building guy
 crossing people
 hair man shirt streak woman
 child forest helmet motorcycle shirt
@@ -4769,7 +4520,6 @@ ball dog mouth soil
 bagpipe gentleman tartan
 car desk head man
 headband man shirt
-legs skier
 dog frisbee mouth
 building child costume phase
 branch dog legs tree
@@ -4800,7 +4550,6 @@ girl outdoors woman
 cheerleader uniform
 bride groom weaponry
 apparel girl male_child shirt
-building people weaponry
 person raincoat rock
 dog plaything
 headband player
@@ -4815,19 +4564,16 @@ ball player racket
 athlete nike racket shirt sweatband
 ball man
 ball person racket
-airplane child hands
 bed doll suit work_force
 girl man pool
 door male_child soccer
 hair jacket man people person
-flag people
 ball door male_child
 armchair dress girl
 child man painting shirt
 fence girl horse
 bloomers curb hat jacket person place
 people picture wall
-male_child
 bicycle male_child wall
 male_child snake
 ball cameraman lanthanum player
@@ -4851,33 +4597,25 @@ couple hand outfit sidewalk
 person suit
 man vehicle woman
 car fire
-dog harness water
 dog ear legs
 asphalt back dog motorcycle water_scooter
 building railing skateboard skateboarder
 cap child coat snow
 bag canopy man military_officer
 child people
-motorcycle mural people topographic_point wall
 child scarf woman
 building ribbon work_force
 dog grass mouth tongue
-bubble daughter dress girl mother
 bite male_child
 dog way
 male_child motorcycle
-dog grass water
-girl huddle
 dog jacket lawn
 dog man suit
 dog hand ladder sweater
-beach child puddle tree
 man table
 woman
 motorcycle people uniform
-french_fries girl jersey man
 finger girl pole sign
-bear cub
 dog house
 player
 bloomers phase work_force
@@ -4889,12 +4627,10 @@ dog
 chair dog electronics woman
 ball dog ear mouth
 child egg pink
-head man microphone suit
 dog foot
 building line people
 dog onlooker ramp
 coat document man
-branch dog tree water
 jean male_child shirt
 girl pink top
 dog
@@ -4906,7 +4642,6 @@ coat person
 hat man rock sky
 military_officer
 insect plant
-girl jean shirt shore water
 dog house person
 cup paper poster woman
 face man shirt
@@ -4924,7 +4659,6 @@ bloomers girl polka
 ball dog head
 girl
 lift man woman
-beach building dog
 dress sign woman
 dissenter gear sign
 greyhound path shirt
@@ -4954,7 +4688,6 @@ girl rock
 building flag skateboarder
 brown dog soil
 equipment man motorcycle
-girl jacket woman
 man microphone shirt woman
 area dog pole
 cap girl man
@@ -4964,7 +4697,6 @@ hair male_child skin water
 people vehicle
 helmet man path
 baby dad
-person rock
 barrier course jacket motorcycle people person
 apartment dog
 einstein face male_child statue
@@ -4979,8 +4711,6 @@ bank dog
 building people
 area corner helmet rider trail
 brown dog
-snowboarder
-flower hair man
 backpack child girl row
 public_toilet tourist
 dog marker
@@ -5034,7 +4764,6 @@ ridge sky snowboarder
 helmet jacket man motorcycle
 mountain
 dog pole
-ball male_child
 people
 crowd work_force
 wall work_force
@@ -5060,7 +4789,6 @@ family people tent
 dog
 racer
 man surfboard wave
-backpack bench male_child statue woman
 building sidewalk water_scooter young_person
 bull man
 dandelion girl hand
@@ -5069,7 +4797,6 @@ beach collar dog tongue
 hat jacket ladder man
 ball dog mouth
 rink team
-coat hill man
 blue hurdle woman
 barroom dog mouth plaything ribbon
 player team
@@ -5092,7 +4819,6 @@ dolphinfish head water
 man sip suit
 angle motorcycle person shirt
 helmet man wheel
-bread child shirt
 mask woman
 ball field male_child
 ball male_child
@@ -5100,13 +4826,10 @@ base spectator
 dog ocean
 ball brown building
 cow male_child sari woman
-man motorcycle
 beads face girl point
-man stadium
 dog lake
 crowd male_child person pigeon
 girl sprinkler water
-dog musca_volitans plaything
 gear helmet motorcycle patron racer
 man surfboard
 ball man shirt
@@ -5124,7 +4847,6 @@ ball person
 basketball work_force
 baseball_glove girl heel ladder skirt
 chart child girl
-ledge tree woman
 child knight picture
 dog mouth river stick
 cement person stairs
@@ -5133,7 +4855,6 @@ helmet male_child motorcycle
 cattle man mud people
 beach surfer wave
 fan one player uniform
-building guitar man streetlight
 dog doll rug
 rollerblader street
 dog grass mouth poodle
@@ -5145,14 +4866,12 @@ ball child coat field
 dog fence
 people usher
 shepherd stairs
-bicycle helmet man people
 woman
 defender gun man
 dog leash
 bicycle man shirt
 bloomers building jacket man
 bicycle building male_child
-player teammate
 apparel hat scarf woman
 beer star woman
 jersey man sunglasses
@@ -5166,7 +4885,6 @@ cigarette jacket man mouth shirt
 girl vine water
 camera woman
 ball goalkeeper player
-clothing man snow tire
 horse jacket man
 apparel man satchel tree
 player sunglasses
@@ -5177,7 +4895,6 @@ boxer spouse
 dog lawn
 building hat work_force
 dog mouth purple
-fence horse jockey soil
 building head scarf woman
 people sunglasses woman
 girl stairway woman
@@ -5190,7 +4907,6 @@ dog grass paw
 ball dog grass leash
 child swing woman
 motorcycle tape
-dog water
 adolescent baseball uniform
 ball bat bloomers people player shirt
 ball player
@@ -5205,7 +4921,6 @@ child dress girl
 man stairs unicycle
 man moss stairway unicycle
 people water_scooter
-door jean people
 dog way woman
 dog
 girl sand
@@ -5223,11 +4938,9 @@ shore surfer wave
 frame motorcycle person sun
 ball player uniform
 brown dog grass gray
-gallery man map woman
 backpack camera male_child man shirt
 formation people
 dog mouth stick
-helmet male_child shirt skateboard stairs
 dog
 goalkeeper internet player puck
 man
@@ -5238,7 +4951,6 @@ coat hat jean place sidewalk sunglasses woman
 dog owner
 girl
 dog flower
-flower girl hair woman
 man woman
 dog jacket leash man sign
 bucket dog mouth
@@ -5264,7 +4976,6 @@ chorus_girl hand headdress lipstick mirror
 bicycle man somersault
 accent helmet ice player shirt
 chain jersey man neck people
-person surfboard water
 face man neck necklace
 hands male_child tire
 child hat jacket male_child man
@@ -5276,7 +4987,6 @@ ball drive people
 arm ball gear player
 finger girl lip sign
 cellular_telephone coat couple man woman
-turban work_force
 car people scene
 floor girl hair window
 dog grass
@@ -5287,10 +4997,7 @@ cellular_telephone girl poster
 bench girl shoulder
 helmet motorcycle scarf woman
 people railing work_force
-dog nose thorax
-dog piece
 biplane sky
-flower girl shrub woman
 building pavement people
 jersey skateboarder
 adult bench merry-go-round
@@ -5322,7 +5029,6 @@ fence horse
 bicycle man
 base jacket man piano woman
 man spectacles woman
-beach bucket male_child operating_expense
 jacket top weaponry woman
 dinner man motorcycle sign
 clothing girl man
@@ -5332,7 +5038,6 @@ baseball_glove man ring short_pants
 man short_pants
 male_child water
 box rink work_force
-ball blue child field male_child uniform
 dog grass mouth rope
 child restaurant
 person waterfall
@@ -5340,11 +5045,8 @@ drummer limelight upfront
 guitar man
 cellular_telephone helmet man
 light work_force
-dog fence yard
-person shirt skateboard stairs
 chef girl man
 balloon people
-bird worm
 people street woman
 face smuggler
 helmet man wall
@@ -5352,21 +5054,17 @@ float people water
 dog
 child equipment hands parallel_bars
 male_child mouth outdoors wall
-menu outdoor table waiter woman
 backpack cave person
 man mountain river
 man
 hurdle
 dog man plaything
 bench jacket man pot
-hat skateboarder
 people person
 dog puppy
 hill motorcycle people person
-attire helmet way woman
 dog water
 batch bloomers work_force
-bale display girl male_child pumpkin
 ad area work_force
 mountain package person
 hat instrument man suit
@@ -5389,7 +5087,6 @@ ball player
 man motorcycle water
 helmet man motorcycle shirt
 collar greyhound gun_muzzle
-boulder motorcycle person sun
 dress girl hat man suit
 dandelion field girl jean top
 building person ramp
@@ -5397,20 +5094,15 @@ dinghy man woman
 people
 cart item man suit
 bird
-male_child short_pants water
-cyclist helmet motorcycle slope
 man mound
-dog kayak tree woman
 point_of_view sky tourist
 bumper car rear
 dog man
 digger male_child shirt
 ball dog
-dog kayak man water
 rider
 drink hair man sodium_carbonate sunglasses table
 man motorcycle trail
-person sail water
 fabric puppy
 building horse military_officer
 knee man motorcycle
@@ -5423,10 +5115,7 @@ backpack people snow
 climber mountain
 dress flower girl
 music skirt woman work_force
-diver rock water
 diver rock
-car dog frisbee yard
-building cyclist shrub
 man uniform vehicle
 hawk legs line
 dog grass
@@ -5436,7 +5125,6 @@ person robe sword
 climber face man shirt
 head horse lasso man
 military_officer motorcycle
-dog lawn
 dress girl male_child stairs top
 dog mouth water
 dress flower girl weaponry
@@ -5456,11 +5144,9 @@ paperwork woman
 beach girl
 bridge dress sky woman
 girl hair shirt
-guitar work_force
 dog jean lake person
 motorcycle path person shrub
 man motorcycle spectator
-boat people
 male_child toddler woman
 motorcycle person suit
 referee rink wrestler
@@ -5501,13 +5187,10 @@ dog
 man skateboarder
 blanket puppy
 dog shoreline wave
-ball court people
 costume flower girl hair
 coat girl
 box hat man
-building legs people
 dog duck water
-male_child puddle
 baseball_glove boxer
 card_game colors headdress woman
 male_child swing
@@ -5518,7 +5201,6 @@ dog person water
 collar dog sand
 feather man microphone
 costume instrument musician
-child equipment
 man
 bicycle clothing man
 motorcycle rider
@@ -5526,7 +5208,6 @@ clown rope soil
 bull cowboy rider
 dog man trunk
 bloomers person pug shirt
-jean man ramp shirt
 clown hat people shirt weaponry
 cowboy flag hand horse judge
 bull cowboy rider
@@ -5542,7 +5223,6 @@ beak bird
 baseball_glove goatee man motorcycle
 child pullover
 dog fence
-cap male_child man shirt
 cup hat man woman
 bottle coat girl tree
 ball building dog legs mouth
@@ -5556,12 +5236,9 @@ basket hoop male_child
 drum foot hands male_child table
 child sand water
 cone group topographic_point
-building girl outfit tree
 dog flower
 dog sky
 canoe helmet man
-girl shirt
-dog eye spot
 brush dog mountain trail
 man
 person skateboard
@@ -5609,7 +5286,6 @@ contemplation dog water
 body light man screen
 jersey man rock waterfall
 backpack man pole rock
-bag bakery dress food girl
 game man short_pants volleyball
 boat equipment people
 male_child shirt
@@ -5625,13 +5301,11 @@ dog water
 dog mountainside sky
 child skateboard
 motorcycle rider
-graffito man motorcycle stairs
 expression head scarf woman
 dog water
 graffito man skateboard
 dandelion dog eye field spot
 crowd team
-bride street woman
 baby flower hat head woman
 child chin hands tree
 snowboarder
@@ -5648,24 +5322,18 @@ blue dog obstacle woman
 building helmet man
 ball dog water
 dog pole
-bloomers man
-child swimsuit
-motorcycle person
 onlooker ramp skateboarder
 horse parallel_bars rider
 man mountain snow tree
 image sunset
 droplet hands male_child water
 opposition person pool volleyball
-girl hat motorcycle table
 skateboarder
 man mask
 beach hat male_child sand
-dog mouth stick
 surfer wave
 man rollerblade
 dog grass
-dog pole
 dog water
 basketball hoop man shirt
 park people tree
@@ -5700,7 +5368,6 @@ field pylon team
 blanket dog shirt
 hat man people
 back lady people shirt
-motorcycle mountain person short_pants
 man motorcycle park
 dog
 camera woman
@@ -5713,25 +5380,21 @@ male_child skateboard stairs
 cup girl paintbrush
 baseball male_child
 expression girl
-chair person pool table
 beer cigarette jacket man
 male_child man shop
 midfield player shirt
 people shrub water
 base cloud player
 fence girl horse
-chair male_child people skateboard
 people state vehicle
 bloomers man pole shirt
 wave woman
 dog pond
-person tent
 child
 building work_force
 dress jewelry lady
 girl skateboard top wall
 circuit dog hoop
-child fence log waterfall woman
 ball camera woman
 hat man shirt
 girl shirt slide
@@ -5750,7 +5413,6 @@ girl hair shirt swing underneath
 cyclist tree
 dress game girl headband
 batch dog leash person
-dog mouth ring river
 water
 lady park people wall
 head man paddle uniform
@@ -5790,7 +5452,6 @@ dog
 boot legging people person
 people raft
 fence woman
-asphalt dog
 hands jacket male_child shirt
 man rock water
 dog mouth stick
@@ -5819,7 +5480,6 @@ dog field mouth plaything
 horse
 bloomers male_child water
 bicycle man resort_area
-baby highchair plaything
 bloomers fish jacket woman
 airplane smoke
 building skateboarder
@@ -5841,34 +5501,25 @@ cellular_telephone hat one people
 baby hand hat short_pants
 child drive shirt
 girl surface
-male_child short_pants water
-player top
 building male_child people woman work_force
 decoration jacket sign winner
 girl seat
 man motorcycle trail uniform
 gear man
 player
-equipment girl outfit place
 guy shirt
 boat helmet jacket people race
 shirt surfer wave
 bench boot girl people pool
-bench people wall
 color girl lip
-girl pool slide
 motorcycle outfit rider
-dress girl sky swing
 board ramp skateboarder
 man
 dog woman
-cyclist water
 bubble girl outfit woman
 motorcycle people person tire
 woman
-concrete dog
 book grass man
-costume girl
 ball girl shirt
 arm girl room
 bed girl outfit
@@ -5892,7 +5543,6 @@ apparel dog girl
 face foot uniform work_force
 girl jackson thriller
 child swing
-dress hands jersey man road woman
 girl male_child pool
 area dog
 adolescent board fireplug jean shirt
@@ -5913,7 +5563,6 @@ flower hat person vest
 dress girl tree
 man road woman
 dog mouth water
-airplane person window
 child dog leash tree
 duck rock
 girl water
@@ -5941,7 +5590,6 @@ man
 fabric makeup man military_officer mouth
 dog man shirt
 hike lake people snow
-girl lake wall
 cartwheel chair girl
 male_child skateboard
 man uniform
@@ -5965,10 +5613,8 @@ flight male_child skateboard stairs
 male_child rope shirt tree
 face male_child seat
 gown phase woman
-man
 hill racer
 dog snow
-shirt short_pants skier snow
 bloomers fence shirt toddler
 computer earphone man neck shirt
 handle man surfboard
@@ -6005,7 +5651,6 @@ bench fountain work_force
 bench hair skateboard young_person
 boat dock man work_force
 course dog
-obstacle person
 bagpipe coat man skirt
 dog water
 male_child shirt short_pants
@@ -6024,7 +5669,6 @@ building colors people
 hat man plaything
 concrete dog water
 backpack dog top woman
-man soil speed
 bloomers jacket person snowboard
 jersey male_child umbrella
 female
@@ -6045,7 +5689,6 @@ mountain trail
 weaponry woman
 head man weaponry woman work_force
 apparel book girl lawn woman
-weaponry
 guitar man outfit
 chevron dog number
 bicycle man wall
@@ -6106,7 +5749,6 @@ climber face
 motorcycle people street tights
 coat diner jacket man woman
 skier slope tree
-child head painting
 blink_of_an_eye child eye silverware
 male_child pool slide
 suit water woman
@@ -6114,7 +5756,6 @@ face male_child ring slide
 arm male_child pole shirt
 garden girl lily
 bicycle girl swimsuit water
-dress sprinkler toddler
 dog
 city dog
 dog
@@ -6241,7 +5882,6 @@ dog jacket male_child sled
 dog structure
 brown dog
 woman
-girl hand rainbow
 sweat_pants sweatshirt toddler tree
 restaurant sodium_carbonate work_force
 shirt woman work_force
@@ -6342,7 +5982,6 @@ dog leash mouth
 backpack person
 boot shadow ski skier
 fountain woman
-dog
 formation man weaponry
 dog ear head
 bench floor man person shirt
@@ -6350,7 +5989,6 @@ dog grass
 barroom dog
 cookie dog
 child clown people
-dog grass
 dog gray
 dog tree woman
 dog frisbee mouth
@@ -6380,7 +6018,6 @@ dog head stick water
 backpack hiker
 backpack man
 drink man newspaper spectacles table
-chair people
 backpack rock water woman
 mountain people window
 dais genocide priest suit woman work_force
@@ -6434,7 +6071,6 @@ ball field male_child
 dog hair plaything
 jacket man snow
 bench bicycle man railing
-person shirt skateboard star
 dog
 baby girl
 dog
@@ -6449,10 +6085,7 @@ dog legs
 broom collar dog
 basketball male_child man shirt tongue
 ball dog pond
-dog
 shirt work_force
-child clothing
-beach collar dog
 child river
 boat pole shore work_force
 lake person rope short_pants
@@ -6466,7 +6099,6 @@ girl handstand
 foot girl shirt slide
 balloon branch dinosaur tree
 girl lake puddle way
-bridge girl sand
 arm girl gull suit water
 dog fence
 male_child sweatshirt vest
@@ -6527,7 +6159,6 @@ hands suit sunglasses work_force
 hands lady person table
 building fountain male_child
 face girl goggles head
-girl
 hill vehicle
 fence male_child
 person rock
@@ -6545,11 +6176,9 @@ ball dog mouth rock water
 floor orange puppy
 dog fence musca_volitans
 dog fence gun_muzzle
-backpack bloomers male shirt sidewalk vicinity
 hands male_child mouth
 bloomers boot cap man rock shirt
 area ball dog harness
-male_child ocean
 mountain skier somersault
 dog mouth tree
 girl top truck
@@ -6560,7 +6189,6 @@ ambulance people
 sofa woman yard
 canoe dog man paddle
 cap child water
-military_officer motorcycle
 ball dog mouth
 candy helmet person
 face finger girl insect
@@ -6621,21 +6249,17 @@ arm male_child
 ball dog
 ball beach dog
 child fish
-people umbrella
-food glass male_child table
 hand male_child paddle
 man statue woman
 brown football woman yellow
 dog water
 barrow building girl hat wood
-beard cap girl lip
 bag jean sweater woman
 ball bat field helmet male_child shirt
 shrub tree
 car child drive
 dog frisbee
 earmuff jacket newspaper person
-baby sidewalk woman wrap
 scarf shirt woman
 bull dog
 girl hair headband
@@ -6660,7 +6284,6 @@ male_child short_pants
 child dog
 child pole ponytail shirt short_pants
 girl hand mouth sundress
-bench man place robe
 man rock sunglasses
 backpack man shirt
 dog man
@@ -6668,14 +6291,12 @@ bench lake person sidewalk woman
 coat male_child tunnel
 ball male_child plaything rug
 dog field
-girl outfit
 girl male_child telescope
 child short_pants weight
 bottle music top woman
 couple embrace outfit people
 bandanna flag jacket man
 fence wall woman
-building child trampoline
 girl park swing tree
 eyes face man smile
 attire beverage door dress stairs woman
@@ -6693,7 +6314,6 @@ climber drink mountain
 climber extremum mountain suit
 child pool
 hat male_child place sol swing
-bicycle jean man shirt street
 ball court dog
 girl skirt water
 ball field male_child
@@ -6711,7 +6331,6 @@ girl shirt
 athlete move short_pants
 baseball_glove disguise field hair hand ponytail woman
 dog rock
-back dress woman
 child fountain water
 mountain people rock
 mountain person tent
@@ -6797,7 +6416,6 @@ beach child woman
 dog grass
 child plaza race
 child fence
-ball dog inside
 dark surfboard surfer
 baby hands head paint
 dress girl jean shirt sidewalk
@@ -6884,7 +6502,6 @@ bloomers girl shirt water
 building car person
 coat head jean man umbrella
 head heel meter shirt sidewalk skirt umbrella woman
-child hat ice
 people raft rapid
 brick child
 ball girl parachute pool woman
@@ -6895,7 +6512,6 @@ foot jean water woman
 bed male_child wood
 dog grass plaything
 male_child plaything
-bench dog
 bicycle jersey male_child street
 braid girl grass swimsuit thorax water weaponry
 basket man rug
@@ -6952,7 +6568,6 @@ man standard_atmosphere
 man rock shirt
 adult child pool somersault
 photograph sky
-girl guy
 beach dog
 bag shoulder top woman
 shoe smuggler
@@ -6978,7 +6593,6 @@ hiker mountain
 balcony people
 girl hand hat makeup street umbrella
 cat collar dog
-adult child pool
 male_child tiger
 formation girl person
 dog horse passenger_car people
