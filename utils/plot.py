@@ -6,7 +6,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from sklearn.metrics import roc_curve 
 from collections import defaultdict
-from librosa.display import specshow
+#from librosa.display import specshow
 try:
   from postprocess import _findPhraseFromPhoneme 
   from clusteval import _findWords
@@ -198,7 +198,7 @@ def generate_nmt_attention_plots(align_info_file, indices, out_dir='', normalize
     plot_attention(src_sent, trg_sent, attention, '%s%s.png' % 
                   (out_dir, str(index)), normalize=normalize)
 
-def generate_smt_alignprob_plots(in_file, indices, out_dir=''):
+def generate_smt_alignprob_plots(in_file, indices, out_dir='', T=100, log_prob=False):
   fp = open(in_file, 'r')
   align_info = json.load(fp)
   fp.close()
@@ -207,7 +207,14 @@ def generate_smt_alignprob_plots(in_file, indices, out_dir=''):
     if index not in indices:
       continue
     concepts = ali['image_concepts']
-    align_prob = np.array(ali['align_probs'])
+    if 'align_probs' in ali:
+      align_prob = np.array(ali['align_probs'])
+      if log_prob:
+        align_prob = np.exp(align_prob)
+    elif 'align_scores' in ali:
+      align_scores = np.array(ali['align_scores'])
+      align_prob = np.exp((align_scores.T - np.amax(align_scores, axis=1)) / T).T
+
     normalized = (align_prob.T / np.sum(align_prob, axis=1)).T 
     if "caption" in ali.keys():
       sent = ali['caption'] 
@@ -289,6 +296,8 @@ def plot_roc(pred_file, gold_file, class_name, out_file=None, draw_plot=True):
       p_probs = p['align_probs']
     elif 'attentions' in p:
       p_probs = p['attentions']
+    elif 'align_scores' in p:
+      p_probs = p['align_scores']
     else:
       raise TypeError('Invalid file format')
 
@@ -351,6 +360,7 @@ def plot_avg_roc(pred_json, gold_json, concept2idx=None, freq_cutoff=100, out_fi
   #avg_fpr += fpr
   #avg_tpr += tpr
 
+'''
 def plot_acoustic_features(utterance_idx, audio_dir, feat_dir, out_file=None):
   mfccs = np.load(feat_dir+"flickr_mfcc_cmvn.npz", "r")
   bnfs = np.load(feat_dir+"flickr_bnf_all_src.npz", "r")
@@ -376,6 +386,7 @@ def plot_acoustic_features(utterance_idx, audio_dir, feat_dir, out_file=None):
   else:
     plt.show()
   plt.close()
+'''
 
 if __name__ == '__main__':
   '''labels = []
