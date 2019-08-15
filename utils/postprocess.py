@@ -260,6 +260,25 @@ def convert_landmark_to_10ms_segmentation(landmark_segment_file, landmarks_file,
     frame_segments.append(np.asarray(f_seg))
   np.save(frame_segment_file, frame_segments)
 
+def convert_10ms_segmentation_to_landmark(segmentation_file, ids_to_utterance_label_file, landmarks_file):
+  segmentations = np.load(segmentation_file)
+  with open(ids_to_utterance_label_file, "r") as f:
+    ids_to_utterance_labels = json.load(f)
+
+  landmarks = {}
+  assert len(segmentations) == len(ids_to_utterance_labels)
+  for (utt, segmentation) in zip(ids_to_utterance_labels, segmentations):
+    print(utt)
+    landmark = [0]
+    for seg in segmentation:
+      if seg[1] == seg[0]:
+        print("Overlapped boundaries: ", seg)
+        continue
+      landmark.append(int(seg[1]))
+    landmarks[utt] = landmark
+
+  np.savez(landmarks_file, **landmarks)
+
 def convert_sec_to_10ms_segmentation(real_time_segment_file, feat2wav_file, frame_segment_file, fs=16000, max_feat_len=2000):
   real_time_segments = np.load(real_time_segment_file) 
   with open(feat2wav_file, 'r') as f:
@@ -384,14 +403,14 @@ if __name__ == '__main__':
   frame_boundary_file = "../data/flickr30k/audio_level/frame_boundaries_semkmeans.npy"
   txt_syl_segment_file = "../data/flickr30k/audio_level/combined_syllable_boundaries.txt"
   npy_syl_segment_file = "../data/flickr30k/audio_level/combined_syllable_segmentations.npy"
-  landmark_file = "flickr_landmarks_mbn.npz" #"../data/flickr30k/audio_level/flickr_landmarks.npz"
+  landmark_file = "flickr_landmarks_combined.npz"#"../data/flickr30k/audio_level/flickr_landmarks.npz" #"flickr_landmarks_mbn.npz" #"../data/flickr30k/audio_level/flickr_landmarks.npz" 
   feat2wavs_htk_file = "../data/flickr30k/audio_level/flickr30k_gold_alignment.json_feat2wav.json" #"../data/flickr30k/audio_level/flickr_mfcc_cmvn_htk_feat2wav.json"  
   audio_cluster_file = "../comparison_models/exp/aug1_mkmeans/pred_clusters.json"
   ids_to_utterance_file = "../data/flickr30k/audio_level/ids_to_utterance_labels.json"
-  wav_dir = "/home/lwang114/data/flickr/flickr_audio/wavs/"
+  wav_dir = "/home/lwang114/data/flickr/flickr_audio/wavs/" 
+  gold_seg_file = "../data/flickr30k/audio_level/flickr30k_gold_segmentation_mfcc_htk.npy"
   #convert_boundary_to_segmentation(binary_boundary_file, frame_boundary_file)
   #resample_alignment(alignment_file, src_feat2wavs_file, ref_feat2wavs_file, out_file)
   #convert_txt_to_npy_segment(txt_syl_segment_file, npy_syl_segment_file)
   #convert_sec_to_10ms_segmentation(npy_syl_segment_file, feat2wavs_htk_file, landmark_file)
-  
-   
+  convert_10ms_segmentation_to_landmark(gold_seg_file, ids_to_utterance_file, "flickr30k_gold_landmarks.npz")
