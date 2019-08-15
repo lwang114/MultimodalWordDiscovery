@@ -536,7 +536,7 @@ if __name__ == '__main__':
   word_concept_align_file = '../data/flickr30k/word_level/flickr30k_gold_alignment.json'
   
   gold_align_file = datapath + "flickr30k_gold_alignment.json"
-  feat_to_wav_file = datapath + "flickr_mfcc_feat2wav.json" 
+  feat_to_wav_file = datapath + "flickr30k_gold_alignment.json_feat2wav.json"#"flickr_mfcc_cmvn_htk_feat2wav.json" 
   
   audio_dir = '/home/lwang114/data/flickr_audio/wavs/'
   bn_preproc = FlickrAudioPreprocessor(train_file, test_file, data_info_file, word_align_dir, phone_centroids_file=phnset)
