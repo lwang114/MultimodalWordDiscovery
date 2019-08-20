@@ -248,15 +248,16 @@ def convert_boundary_to_segmentation(binary_boundary_file, frame_boundary_file):
 
   np.save(frame_boundary_file, frame_boundaries) 
 
-def convert_landmark_to_10ms_segmentation(landmark_segment_file, landmarks_file, frame_segment_file):
+def convert_landmark_segment_to_10ms_segmentation(landmark_segment_file, landmarks_file, frame_segment_file):
   lm_segments = np.load(landmark_segment_file)
   lms = np.load(landmarks_file)
   utt_ids = sorted(lms.keys(), key=lambda x:int(x.split('_')[-1]))
   frame_segments = []
   for i, utt_id in enumerate(utt_ids):
+    lm_segment = lm_segments[i]
     f_seg = []
-    for i_lm in lm_segments[i]:
-      f_seg.append(lms[utt_id][i_lm])
+    for i_lm_seg in lm_segment:
+      f_seg.append(lms[utt_id][i_lm_seg])
     frame_segments.append(np.asarray(f_seg))
   np.save(frame_segment_file, frame_segments)
 
@@ -268,7 +269,8 @@ def convert_10ms_segmentation_to_landmark(segmentation_file, ids_to_utterance_la
   landmarks = {}
   assert len(segmentations) == len(ids_to_utterance_labels)
   for (utt, segmentation) in zip(ids_to_utterance_labels, segmentations):
-    print(utt)
+    if int(utt.split('_')[-1]) >= 1 and int(utt.split('_')[-1]) <= 4:
+      print(utt, segmentation[-1])
     landmark = [0]
     for seg in segmentation:
       if seg[1] == seg[0]:
@@ -279,7 +281,7 @@ def convert_10ms_segmentation_to_landmark(segmentation_file, ids_to_utterance_la
 
   np.savez(landmarks_file, **landmarks)
 
-def convert_sec_to_10ms_segmentation(real_time_segment_file, feat2wav_file, frame_segment_file, fs=16000, max_feat_len=2000):
+def convert_sec_to_10ms_landmark(real_time_segment_file, feat2wav_file, frame_segment_file, fs=16000, max_feat_len=2000):
   real_time_segments = np.load(real_time_segment_file) 
   with open(feat2wav_file, 'r') as f:
     feat2wavs = json.load(f)
@@ -301,28 +303,37 @@ def convert_sec_to_10ms_segmentation(real_time_segment_file, feat2wav_file, fram
   max_gap_segment = []
   for i_seg, r_seg in enumerate(real_time_segments.tolist()):
     feat_len = len(feat2wavs[utt_ids[i_seg]])
-    wav_len = len(wav2feats[i_seg])
     wav2feat = wav2feats[i_seg]
-    print('utt_id: ', utt_ids[i_seg])
-    print('wav_len from segmentation, wav_len from wav2feats: ', r_seg[-1] * fs, len(wav2feats[i_seg]))
-
+    wav_len = len(wav2feat)
+ 
     n_segs = len(r_seg)
     f_seg = [0]
     for i in range(n_segs):
       # XXX: Need thresholding since some syllable segmentation is slightly longer than the actual wavform 
       wav_frame_i = min(int(r_seg[i] * fs), wav_len - 1)
-      if wav2feat[wav_frame_i] <= 0 or wav2feat[wav_frame_i] - f_seg[-1] <= 0:
+      feat_frame_i = wav2feat[wav_frame_i]
+      prev_feat_frame = f_seg[-1]
+
+      # XXX: Prevent the segmentation to move backward
+      if feat_frame_i <= 0 or feat_frame_i - prev_feat_frame <= 0:
         continue
       else:
-        if wav2feat[wav_frame_i] - f_seg[-1] > max_gap[1]:
+        if feat_frame_i - prev_feat_frame > max_gap[1]:
           max_gap = [i_seg, wav2feat[wav_frame_i] - f_seg[-1]]
-          max_gap_segment = [f_seg[-1], wav2feat[wav_frame_i]] 
-        if wav2feat[wav_frame_i] >= min(feat_len - 1, max_feat_len):
+          max_gap_segment = [f_seg[-1], wav2feat[wav_frame_i]]
+        # XXX: Prevent the segmentation to exceends maxlen / length of the actual feature 
+        if feat_frame_i >= min(feat_len - 1, max_feat_len):
           continue
-
-        f_seg.append(wav2feat[wav_frame_i] + 1) 
         
+        f_seg.append(feat_frame_i + 1) 
     f_seg.append(min(feat_len, max_feat_len))
+      
+    if i_seg >= 1 and i_seg <= 4:
+      print('utt_id: ', utt_ids[i_seg])
+      print('feat_len, last segmentation frame: ', feat_len)
+      print('wav_len from segmentation, wav_len from wav2feats: ', r_seg[-1] * fs, len(wav2feats[i_seg]))
+      print("feat_len from segmentation: ", f_seg[-1])
+    
     frame_segments[utt_ids[i_seg]] = f_seg
   
   print("max_gap: ", max_gap)
@@ -401,16 +412,22 @@ if __name__ == '__main__':
   out_file = "../smt/exp/june_24_mfcc_kmeans_mixture=3/pred_alignment_resample.json"
   binary_boundary_file = "../comparison_models/exp/july_20_multimodal_kmeans/boundaries_multimodal-kmeans.npy"
   frame_boundary_file = "../data/flickr30k/audio_level/frame_boundaries_semkmeans.npy"
-  txt_syl_segment_file = "../data/flickr30k/audio_level/combined_syllable_boundaries.txt"
-  npy_syl_segment_file = "../data/flickr30k/audio_level/combined_syllable_segmentations.npy"
-  landmark_file = "flickr_landmarks_combined.npz"#"../data/flickr30k/audio_level/flickr_landmarks.npz" #"flickr_landmarks_mbn.npz" #"../data/flickr30k/audio_level/flickr_landmarks.npz" 
-  feat2wavs_htk_file = "../data/flickr30k/audio_level/flickr30k_gold_alignment.json_feat2wav.json" #"../data/flickr30k/audio_level/flickr_mfcc_cmvn_htk_feat2wav.json"  
+  txt_syl_segment_file = "../data/flickr30k/audio_level/syllable_boundaries.txt"
+  npy_syl_segment_file = "../data/flickr30k/audio_level/syllable_segmentations_osc.npy"
+  feat_type = "bn"
+  if feat_type == "bn":
+    landmark_file = "flickr_landmarks_mbn.npz" #"flickr_landmarks_osc_mbn.npz" #"../data/flickr30k/audio_level/flickr_landmarks.npz" #"flickr_landmarks_mbn.npz" #"../data/flickr30k/audio_level/flickr_landmarks.npz" 
+    feat2wavs_htk_file = "../data/flickr30k/audio_level/flickr30k_gold_alignment.json_feat2wav.json"  
+  elif feat_type == "mfcc":
+    landmark_file = "flickr_landmarks_osc.npz"
+    feat2wavs_htk_file = "../data/flickr30k/audio_level/flickr_mfcc_cmvn_htk_feat2wav.json"
   audio_cluster_file = "../comparison_models/exp/aug1_mkmeans/pred_clusters.json"
   ids_to_utterance_file = "../data/flickr30k/audio_level/ids_to_utterance_labels.json"
   wav_dir = "/home/lwang114/data/flickr/flickr_audio/wavs/" 
-  gold_seg_file = "../data/flickr30k/audio_level/flickr30k_gold_segmentation_mfcc_htk.npy"
+  gold_seg_file = "../data/flickr30k/audio_level/flickr30k_gold_segmentation_mbn.npy"
+  #"../data/flickr30k/audio_level/flickr30k_gold_segmentation_mfcc_htk.npy"
   #convert_boundary_to_segmentation(binary_boundary_file, frame_boundary_file)
   #resample_alignment(alignment_file, src_feat2wavs_file, ref_feat2wavs_file, out_file)
   #convert_txt_to_npy_segment(txt_syl_segment_file, npy_syl_segment_file)
-  #convert_sec_to_10ms_segmentation(npy_syl_segment_file, feat2wavs_htk_file, landmark_file)
-  convert_10ms_segmentation_to_landmark(gold_seg_file, ids_to_utterance_file, "flickr30k_gold_landmarks.npz")
+  convert_sec_to_10ms_landmark(npy_syl_segment_file, feat2wavs_htk_file, landmark_file)
+  #convert_10ms_segmentation_to_landmark(gold_seg_file, ids_to_utterance_file, "flickr30k_gold_landmarks_mbn.npz")

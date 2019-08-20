@@ -6,7 +6,7 @@ from sklearn.cluster import MiniBatchKMeans
 from nltk.corpus import cmudict
 import scipy.io.wavfile as wavfile
 
-DEBUG = True
+DEBUG = False
 NONWORD = ['$']
 NULL = 'NULL'
 PUNCT = ['.', ',', '?', '!', '`', '\'', ';']
@@ -93,7 +93,7 @@ class FlickrAudioPreprocessor:
       json.dump(bnf_data_info, fp, indent=4, sort_keys=True)
   
   # TODO: create frame-level gold alignment from word-level gold alignment and word segmentation
-  def create_gold_alignment(self, audio_dir, word_segment_file, word_concept_align_file, out_file='gold_alignment.json'):
+  def create_gold_alignment(self, audio_dir, word_segment_file, word_concept_align_file, downsample_rate=160, out_file='gold_alignment.json'):
     begin = time.time()
     audio_concept_alignments = []
     feat2wavs = {}
@@ -169,8 +169,9 @@ class FlickrAudioPreprocessor:
       audio_concept_align = [0]*nframes 
       
       # Create a mapping between the feature frames and audio frames
-      feat2wav, wav2feat = self.create_feat_to_wav_map(audio_dir, feat_id, nframes, return_wav_to_feat=True)
-
+      feat2wav, wav2feat = self.create_feat_to_wav_map(audio_dir, feat_id, nframes, return_wav_to_feat=True, downsample_rate=downsample_rate)
+      wav_len = len(wav2feat)
+      
       for pos, a in enumerate(word_align):
         word, st, end = a[0], a[1], a[2]
         st_frame, end_frame = wav2feat[int(st * FSAMPLE)], wav2feat[int(end * FSAMPLE)] 
@@ -186,9 +187,10 @@ class FlickrAudioPreprocessor:
           else:
             cur_concept = img_concepts[word_concept_align[trg2ref[pos][0]]]
             audio_concept_align[i_f] = concept_order[cur_concept]
-      
+
       print('Create %d alignments after seeing %d examples' % (i_a, idx))
-      if DEBUG:
+      # if DEBUG:
+      if i_a == 1:
         #print(len(feat2wav))
         print("idx: ", idx)
         print("nframes: ", nframes)
@@ -214,8 +216,8 @@ class FlickrAudioPreprocessor:
       json.dump(feat2wavs, f, indent=4, sort_keys=True)
     print('Take %0.5f to generate audio-concept alignment', time.time() - begin)
 
-  # TODO
-  def create_gold_word_segmentation(self, bnf_data_info_file, gold_alignment_file, feat_to_wav_file, out_file="gold_segmentation.npy"):
+  # TODO: 
+  def create_gold_word_landmarks(self, bnf_data_info_file, gold_alignment_file, feat_to_wav_file, downsample_rate=160, out_file="gold_landmarks.npz", max_feat_len=2000):
     with open(gold_alignment_file, "r") as f:
       gold_alignments = json.load(f)
     
@@ -228,10 +230,11 @@ class FlickrAudioPreprocessor:
     with open(bnf_data_info_file, "r") as f:
       bnf_data_info = json.load(f)
 
-    segmentations = []
+    landmarks = {}
     for i, align_info in enumerate(gold_alignments):
       img_id = align_info["image_id"]
-      print("image_id: ", img_id)
+      if i >= 1 and i <= 4:
+        print("image_id: ", img_id)
       capt_id = align_info["capt_id"].split("_")[-1]
       
       for feat_id in sorted(bnf_data_info, key=lambda x:bnf_data_info[x]["index"]):
@@ -240,31 +243,44 @@ class FlickrAudioPreprocessor:
 
       segment_info = bnf_data_info[feat_id]["caption_texts"][capt_id]
       feat_to_wav = feat_to_wavs[feat_to_wavs_ids[i]]
-      segmentation = []
-      
+
+      nframes = len(feat_to_wav)
+      wav_len = feat_to_wav[-1][1]
+      wav_to_feat = np.zeros((wav_len,))
+      for i_frame in range(nframes):
+        start, end = feat_to_wav[i_frame]
+        wav_to_feat[start:end] = i_frame    
+  
+      landmark = [0]
       for segment in segment_info:
         start_second, end_second = segment[1], segment[2]
         start, end = int(start_second * FSAMPLE), int(end_second * FSAMPLE)
-        nframes = len(feat_to_wav)
+        start_frame, end_frame = wav_to_feat[start], wav_to_feat[end]
+        if end_frame <= 0 or end_frame >= min(nframes - 1, max_feat_len):
+          continue  
+        landmark.append(end_frame+1)
+      landmark.append(min(nframes, max_feat_len))
+      landmarks[feat_to_wavs_ids[i]] = landmark
 
+      '''        
         start_frame, end_frame = None, None
         
         for frame in range(nframes):
           if start >= feat_to_wav[frame][0] and start <= feat_to_wav[frame][1]:
             start_frame = frame
           if end >= feat_to_wav[frame][0] and end <= feat_to_wav[frame][1]:
-            end_frame = frame
+            end_frame = frame + 1
         if start_frame is not None and end_frame is not None:
           segmentation.append((start_frame, end_frame))
         elif start_frame is not None:
           segmentation.append((start_frame, nframes))
-      
-      if DEBUG: 
-        print("feat_to_wav end, end: ", feat_to_wav[nframes-1][1], end)
-        print(segmentation)
-      segmentations.append(np.asarray(segmentation))
+      '''
 
-    np.save(out_file, segmentations)
+      if i >= 1 and i <= 4:
+        print("nframes, last segmentation: ", nframes, landmark[-1]) 
+        print("landmark: ", landmark)
+
+    np.savez(out_file, **landmarks)
 
   # TODO: Multiple captions for one image (so do not need to use the gold alignment file)
   def json_to_xnmt_format(self, bnf_data_info_file, gold_align_file, out_prefix='flickr_bnf', train_test_split=False):
@@ -339,12 +355,13 @@ class FlickrAudioPreprocessor:
     else:
       np.savez(out_prefix+"_all_src.npz", **feats)
 
-  def create_feat_to_wav_map(self, audio_dir, feat_id, feat_len, return_wav_to_feat=False):    
+  def create_feat_to_wav_map(self, audio_dir, feat_id, feat_len, return_wav_to_feat=False, downsample_rate=None):    
     # Create a mapping between the feature frames and audio frames
     audio_file = "{}{}.wav".format(audio_dir, '_'.join(feat_id.split('_')[:-1]))
     fs, y = wavfile.read(audio_file)
     wav_len = y.shape[0]
-    downsample_rate = int(wav_len / feat_len)
+    if downsample_rate is None:
+      downsample_rate = int(wav_len / feat_len)
     #print(wav_len, downsample_rate)
     feat2wav = []
     wav2feat = np.zeros((wav_len,), dtype=int)
@@ -535,8 +552,9 @@ if __name__ == '__main__':
   out_file = '../data/flickr30k/audio_level/flickr_bnf_concept_info.json'
   word_concept_align_file = '../data/flickr30k/word_level/flickr30k_gold_alignment.json'
   
-  gold_align_file = datapath + "flickr30k_gold_alignment.json"
-  feat_to_wav_file = datapath + "flickr30k_gold_alignment.json_feat2wav.json"#"flickr_mfcc_cmvn_htk_feat2wav.json" 
+  gold_align_file = datapath + "flickr30k_gold_alignment.json" #"flickr30k_gold_alignment.json" #
+  gold_lm_file = "flickr30k_gold_landmarks_mbn"
+  feat_to_wav_file = datapath + "flickr30k_gold_alignment.json_feat2wav.json" #"flickr30k_gold_alignment.json_feat2wav.json" #"flickr_mfcc_cmvn_htk_feat2wav.json" 
   
   audio_dir = '/home/lwang114/data/flickr_audio/wavs/'
   bn_preproc = FlickrAudioPreprocessor(train_file, test_file, data_info_file, word_align_dir, phone_centroids_file=phnset)
@@ -545,6 +563,6 @@ if __name__ == '__main__':
   #bn_preproc.create_gold_alignment(audio_dir, out_file, word_concept_align_file, out_file=gold_align_file)
   #bn_preproc.json_to_xnmt_format(out_file, gold_align_file)
   #bn_preproc.create_feat_to_wav_maps(audio_dir, gold_align_file)
-  bn_preproc.create_gold_word_segmentation(out_file, gold_align_file, feat_to_wav_file)
+  bn_preproc.create_gold_word_landmarks(out_file, gold_align_file, feat_to_wav_file, out_file=gold_lm_file)
   #wrd_segment_loader = WordSegmentationLoader(word_align_dir)
   #wrd_segment_loader.extract_info()  wrd_segment_loader.generate_gold_audio_concept_alignment(word_concept_align_file, bn_info_file, word_align_dir)
