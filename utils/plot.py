@@ -173,7 +173,7 @@ def plot_word_len_distribution(json_file, out_file='word_len_distribution', cuto
     plt.show()
   
   plt.close()
-  
+  print("Average word length: ", np.dot(np.arange(len(len_dist))+1, len_dist))
   return np.arange(max_len+1), len_dist
 
 def generate_nmt_attention_plots(align_info_file, indices, out_dir='', normalize=False):
@@ -210,7 +210,7 @@ def generate_smt_alignprob_plots(in_file, indices, out_dir='', T=100, log_prob=F
     if 'align_probs' in ali:
       align_prob = np.array(ali['align_probs'])
       if log_prob:
-        align_prob = np.exp(align_prob)
+        align_prob = np.exp((align_prob.T - np.amax(align_prob, axis=1)) / T).T
     elif 'align_scores' in ali:
       align_scores = np.array(ali['align_scores'])
       align_prob = np.exp((align_scores.T - np.amax(align_scores, axis=1)) / T).T
@@ -389,15 +389,15 @@ def plot_acoustic_features(utterance_idx, audio_dir, feat_dir, out_file=None):
 '''
 
 if __name__ == '__main__':
-  '''labels = []
+  labels = []
   #top_classes, _ = plot_img_concept_distribution('../data/flickr30k/phoneme_level/flickr30k_gold_alignment.json', '../data/flickr30k/concept2idx.json', cutoff=30)
-  
   fig, ax = plt.subplots(figsize=(15, 10))
-  top_classes, top_freqs = plot_word_len_distribution('../data/flickr30k/phoneme_level/flickr30k_gold_alignment.json', draw_plot=False)
+  top_classes, top_freqs = plot_word_len_distribution('../data/flickr30k/audio_level/flickr30k_gold_alignment.json', draw_plot=False, phone_level=False)
   plt.plot(top_classes[:50], top_freqs[:50])
   print(np.sum(top_freqs))
   labels.append('Groundtruth')
 
+'''
   top_classes, top_freqs = plot_word_len_distribution('../smt/exp/ibm1_phoneme_level_clustering/flickr30k_pred_alignment.json', draw_plot=False)
   plt.plot(top_classes[:50], top_freqs[:50])
   print(np.sum(top_freqs))
@@ -443,9 +443,9 @@ if __name__ == '__main__':
   generate_smt_alignprob_plots(pred_json, indices, 'smt_')
   generate_gold_alignment_plots(gold_json, indices, 'gold_')
   
-  #plot_avg_roc(pred_json, gold_json, concept2idx='../data/flickr30k/concept2idx.json', out_file='nmt_roc')'''
+  #plot_avg_roc(pred_json, gold_json, concept2idx='../data/flickr30k/concept2idx.json', out_file='nmt_roc')
 
   audio_dir = "/home/lwang114/data/flickr_audio/wavs/"
   feat_dir = "../data/flickr30k/audio_level/"
   utterance_idx = 0
-  plot_acoustic_features(utterance_idx, audio_dir, feat_dir, "%d_features" % utterance_idx)
+  plot_acoustic_features(utterance_idx, audio_dir, feat_dir, "%d_features" % utterance_idx)'''
