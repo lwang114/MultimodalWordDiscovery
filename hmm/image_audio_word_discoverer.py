@@ -6,32 +6,36 @@ from scipy.misc import logsumexp
 from scipy.misc import imresize 
 from scipy.special import digamma
 from scipy.special import kl_div
+from scipy import signal
 from sklearn.cluster import KMeans
 import json
 from PIL import Image
 
+ORDER='C'
 class ImageAudioWordDiscoverer:
   def __init__(self, speech_feature_file, image_feature_file, model_configs, model_name='image_audio_word_discoverer'):
     self.model_name = model_name
     self.a_corpus = []
     self.v_corpus = []
     
-    self.read_corpus(speech_feature_file, image_feature_file)
-
     # Prior parameters
     self.Kmax = model_configs.get('Kmax', 1000) # Maximum number of vocabs
     self.Mmax = model_configs.get('Mmax', 5) # Maximum number of mixtures per word
     self.embed_dim = model_configs.get('embedding_dim', 130)
     
     # TODO: Match dimensions
-    self.g_sb0 = model_configs.get('gamma_sb', np.tile(np.array([1., 1.]), (self.Kmax, 1))) # Stick-breaking beta distribution parameter
+    self.g_sb0 = model_configs.get('gamma_sb', np.ones((self.Kmax, 2))) # Stick-breaking beta distribution parameter
     self.g_a0 = model_configs.get('gamma_a', 0.1)
     self.g_at0 = model_configs.get('gamma_a_trans', 0.1) # Alignment transition Dirichlet priors parameter
     self.g_ma0 = model_configs.get('gamma_ma', 0.1) # Audio mixture weight prior parameter
     self.g_mv0 = model_configs.get('gamma_mv', 0.1) # Visual mixture weight prior parameter
-    self.k_a0 = model_configs.get('k_a', 0.1) # Ratio between prior variance and obs variance
-    self.k_v0 = model_configs.get('k_v', 0.1) # Ratio between prior variance and obs variance
+    self.k_a0 = model_configs.get('k_a', 0.1) # Ratio between obs variance and prior variance
+    self.k_v0 = model_configs.get('k_v', 0.1) # Ratio between obs variance and prior variance
     alignments = model_configs.get('alignments', None)
+    segmentations = model_configs.get('segmentations', None)
+    self.has_null = model_configs.get('has_null', True)
+
+    self.read_corpus(speech_feature_file, image_feature_file, segmentations)
     self.estimate_prior_mean_var()
 
     self.len_probs = {}
@@ -48,19 +52,32 @@ class ImageAudioWordDiscoverer:
                             'n_mixures': None
                             }    
     
-  def read_corpus(self, speech_feat_file, image_feat_file):
+  def read_corpus(self, speech_feat_file, image_feat_file, segmentations=None):
     a_npz = np.load(speech_feat_file)
     v_npz = np.load(image_feat_file)
-    self.a_corpus = [np.array(a_npz[k]) for k in sorted(a_npz, key=lambda x:int(x.split('_')[-1]))]
+    
+    if segmentations is not None: 
+      # XXX
+      a_feat_corpus = [np.array(a_npz[k]) for k in sorted(a_npz, key=lambda x:int(x.split('_')[-1]))]
+      self.a_corpus = [self.get_sent_embeds(a_feat, segmentation) for a_feat, segmentation in zip(a_feat_corpus, segmentations)]
+    else:
+      # XXX
+      self.a_corpus = [np.array(a_npz[k]) for k in sorted(a_npz, key=lambda x:int(x.split('_')[-1]))]
+
     self.v_corpus = [np.array(v_npz[k]) for k in sorted(v_npz, key=lambda x:int(x.split('_')[-1]))] 
-    #print('a_corpus[0]: ', self.a_corpus[0])
-    #print('v_corpus[0]: ', self.v_corpus[0])
+    #print('a_corpus: ', self.a_corpus)
+    #print('v_corpus: ', self.v_corpus)
     if len(self.a_corpus[0].shape) == 1:
       self.a_corpus = [afeat[np.newaxis, :] for afeat in self.a_corpus]
       self.v_corpus = [vfeat[np.newaxis, :] for vfeat in self.v_corpus]
 
     self.image_feat_dim = self.v_corpus[0].shape[-1]  
-    self.v_corpus = [[np.zeros((self.image_feat_dim,))] + v_npz[k] for k in sorted(v_npz, key=lambda x:int(x.split('_')[-1]))]  
+    if self.has_null:
+      for ex, vfeat in enumerate(self.v_corpus):
+        if vfeat.shape[-1] != self.image_feat_dim:
+          print('ex: ', ex)
+          print('vfeat.shape is not the same: ', vfeat.shape) 
+      self.v_corpus = [np.concatenate((np.zeros((1, self.image_feat_dim)), vfeat), axis=0) for vfeat in self.v_corpus]  
     
     assert len(self.v_corpus) == len(self.a_corpus)
 
@@ -68,6 +85,7 @@ class ImageAudioWordDiscoverer:
     n_frames_a, n_frames_v = 0., 0.
     self.mu_a0, self.mu_v0 = np.zeros((self.embed_dim,)), np.zeros((self.image_feat_dim,))
     for afeat, vfeat in zip(self.a_corpus, self.v_corpus):
+      #print('afeat.shape, vfeat.shape: ', afeat.shape, vfeat.shape)
       self.mu_a0 += np.sum(afeat, axis=0)
       self.mu_v0 += np.sum(vfeat, axis=0)
       n_frames_a += afeat.shape[0]
@@ -85,7 +103,7 @@ class ImageAudioWordDiscoverer:
       self.fixed_variance_v += np.sum((vfeat - self.mu_v0)**2) / (c * n_frames_v * self.image_feat_dim)
     
     # XXX: Check if the means and variance look reasonable
-    #print('self.mu_a0, self.mu_v0: ', self.mu_a0, self.mu_v0)
+    #print('self.mu_a0.shape, self.mu_v0.shape: ', self.mu_a0.shape, self.mu_v0.shape)
     #print('Var(a), Var(v): ', self.fixed_variance_a, self.fixed_variance_v) 
   
   def initialize_model(self, alignments=None):
@@ -205,8 +223,8 @@ class ImageAudioWordDiscoverer:
     for i in range(n_state):
       counts_concept[i] = deepcopy(self.digammas_concept)
     
-    probs_afeat_given_z = np.sum(probs_afeat_given_zm, axis=-1) #np.sum(np.exp(counts_audio_mixture) * probs_afeat_given_zm, axis=-1)
-    counts_concept += counts_align_init.T @ probs_afeat_given_z 
+    probs_afeat_given_z = np.sum(probs_afeat_given_zm, axis=-1) 
+    counts_concept += np.exp(counts_align_init).T @ probs_afeat_given_z 
     counts_concept += np.sum(probs_vfeat_given_zm, axis=-1)
  
     # Normalize
@@ -233,7 +251,7 @@ class ImageAudioWordDiscoverer:
     return counts_image_mixture 
 
   def update_alignment_initial_counts(self, forward_probs, backward_probs):
-    T = len(forward_probs)
+    T = forward_probs.shape[0]
     n_state = forward_probs.shape[1]
     prob_i_given_obs = forward_probs + backward_probs 
     counts_align = -np.inf * np.ones((T, n_state))
@@ -246,33 +264,30 @@ class ImageAudioWordDiscoverer:
     return counts_align 
 
   def update_alignment_transition_counts(self, forward_probs, backward_probs, obs_probs):  
-    T = len(forward_probs)
-    n_state = len(forward_probs)
+    T = forward_probs.shape[0]
+    n_state = forward_probs.shape[1]
     counts_align_trans = -np.inf * np.ones((T, n_state, n_state))
     prob_ij_given_obs = -np.inf * np.ones((T, n_state, n_state))
-    # XXX: assume n_state <= T
-    counts_jump = {}
-    if T <= 1:
-      counts_jump[0] = -np.inf
-    else:
-      for t in range(T-1):
-        prob_ij_given_obs[t] = (forward_probs[t] + self.digammas_trans[n_state].T).T + obs_probs[t+1] + backward_probs[t+1] 
-        for s in range(n_state):
-          prob_ij_given_obs[t, s] -= logsumexp(prob_ij_given_obs[t])
+    
+    for t in range(T-1):
+      prob_ij_given_obs[t] = (forward_probs[t] + self.digammas_trans[n_state].T).T + obs_probs[t+1] + backward_probs[t+1] 
+      for s in range(n_state):
+        prob_ij_given_obs[t, s] -= logsumexp(prob_ij_given_obs[t])
 
-        for s in range(n_state):
-          for next_s in range(n_state):
-            jump = next_s - s
-            if jump not in counts_jump:
-              counts_jump[jump] = [prob_ij_given_obs[t, s, next_s]]
-            else:
-              counts_jump[jump].append(prob_ij_given_obs[t, s, next_s])  
+      counts_jump = {}
+      for s in range(n_state):
+        for next_s in range(n_state): 
+          jump = next_s - s
+          if jump not in counts_jump:
+            counts_jump[jump] = [prob_ij_given_obs[t, s, next_s]]
+          else:
+            counts_jump[jump].append(prob_ij_given_obs[t, s, next_s])  
 
-    for s in range(n_state):
-      for next_s in range(n_state):
-        jump = next_s - s  
-        print('counts_jump: ', counts_jump[jump]) 
-        counts_align_trans[:, s, next_s] = np.asarray(counts_jump[jump])
+      for s in range(n_state):
+        for next_s in range(n_state):
+          jump = next_s - s  
+          #print('counts_jump: ', counts_jump[jump]) 
+          counts_align_trans[t, s, next_s] = logsumexp(counts_jump[jump])
     
     assert not np.isnan(counts_align_trans).any()
     return counts_align_trans
@@ -299,7 +314,7 @@ class ImageAudioWordDiscoverer:
     aggregated_counts_init = {n_states:[] for n_states in self.len_probs}
     aggregated_counts_trans = {n_states:[] for n_states in self.len_probs}
     for counts_init, counts_trans in zip(self.counts_align, self.counts_align_trans):
-      n_states = counts_init.shape[0]
+      n_states = counts_init.shape[1]
       aggregated_counts_init[n_states].append(logsumexp(counts_init, axis=0))
       aggregated_counts_trans[n_states].append(logsumexp(counts_trans, axis=0))
 
@@ -404,7 +419,8 @@ class ImageAudioWordDiscoverer:
     for n in range(num_iterations):
       begin_time = time.time()
       new_counts_concept = [] # length-Nd list of Nv x K x Ma x Mv array
-      new_counts_audio_mixture, new_counts_image_mixture = [], []
+      new_counts_audio_mixture = []
+      new_counts_image_mixture = []
       new_counts_align = []
       new_counts_align_trans = []
 
@@ -439,10 +455,10 @@ class ImageAudioWordDiscoverer:
         #print('backward_probs:', backward_probs)
         
         # XXX
-        #counts_align = self.update_alignment_initial_counts(forward_probs, backward_probs)
-        #counts_align_trans = self.update_alignment_transition_counts(forward_probs, backward_probs, log_probs_a_given_i)
-        #new_counts_align.append(counts_align)
-        #new_counts_align_trans.append(counts_align_trans)
+        counts_align = self.update_alignment_initial_counts(forward_probs, backward_probs)
+        counts_align_trans = self.update_alignment_transition_counts(forward_probs, backward_probs, log_probs_a_given_i)
+        new_counts_align.append(counts_align)
+        new_counts_align_trans.append(counts_align_trans)
 
         #print('counts_align: ', counts_align)
         #print('counts_align_trans: ', counts_align_trans)
@@ -453,9 +469,10 @@ class ImageAudioWordDiscoverer:
       self.counts_concept = deepcopy(new_counts_concept)
       self.counts_audio_mixture = deepcopy(new_counts_audio_mixture)
       self.counts_image_mixture = deepcopy(new_counts_image_mixture)
+      
       # XXX
-      #self.counts_align = deepcopy(new_counts_align)
-      #self.counts_align_trans = deepcopy(new_counts_align_trans)
+      self.counts_align = deepcopy(new_counts_align)
+      self.counts_align_trans = deepcopy(new_counts_align_trans)
 
       # Update posterior hyperparameters
       self.update_posterior_hyperparameters()
@@ -471,8 +488,7 @@ class ImageAudioWordDiscoverer:
       #print('audio_obs_means: ', self.audio_obs_model['means'])
       #print('image_obs_means: ', self.image_obs_model['means'])
       #print('sum(audio_obs_means): ', np.sum(self.audio_obs_model['means'], axis=0))
-      #print('sum(image_obs_means): ', np.sum(self.image_obs_model['means'], axis=0))
-      
+      #print('sum(image_obs_means): ', np.sum(self.image_obs_model['means'], axis=0))      
       #print('sum(p(m_at|z_t)): ', np.sum(np.exp(self.audio_obs_model['weights']), axis=-1))
       #print('sum(p(m_vt|z_t)): ', np.sum(np.exp(self.image_obs_model['weights']), axis=-1))
 
@@ -510,12 +526,14 @@ class ImageAudioWordDiscoverer:
 
     kl_div_ma_prob = KL_divergence(self.audio_obs_model['weights'], np.log(1. / self.Mmax) * np.ones((self.Kmax, self.Mmax)), log_prob=True)
     kl_div_mv_prob = KL_divergence(self.image_obs_model['weights'], np.log(1. / self.Mmax) * np.ones((self.Kmax, self.Mmax)), log_prob=True)
+    #print('kl_div_ma_prob, kl_div_mv_prob: ', kl_div_ma_prob, kl_div_mv_prob)
+    
     for n_state in self.len_probs:
       kl_div_align_prob = KL_divergence(self.align_init[n_state], np.log(1. / n_state) * np.ones((n_state,)), log_prob=True)
       kl_div_align_trans_prob = KL_divergence(self.align_trans[n_state], np.log(1. / n_state) * np.ones((n_state, n_state)), log_prob=True) 
       #print('self.align_trans, n_state', self.align_trans[n_state], n_state) 
-      print('kl_div_align_prob: ', kl_div_align_prob)
-      print('kl_div_align_trans_prob: ', kl_div_align_trans_prob)
+      #print('kl_div_align_prob: ', kl_div_align_prob)
+      #print('kl_div_align_trans_prob: ', kl_div_align_trans_prob)
       # XXX
       kl_div_align_prob = 0.
       elbo -= (kl_div_align_prob + kl_div_align_trans_prob)
@@ -524,34 +542,38 @@ class ImageAudioWordDiscoverer:
                                             self.fixed_variance_a * np.tile(np.eye(self.embed_dim)[np.newaxis, np.newaxis, :, :], (self.Kmax, self.Mmax, 1, 1)),
                                             np.tile(self.mu_a0[np.newaxis, np.newaxis, :], (self.Kmax, self.Mmax, 1)),
                                             self.fixed_variance_a / self.k_a0 * np.tile(np.eye(self.embed_dim)[np.newaxis, np.newaxis, :, :], (self.Kmax, self.Mmax, 1, 1)), 
-                                            cov_type='standard_prior')
+                                            cov_type='diag')
     kl_div_mean_v = gaussian_KL_divergence(self.image_obs_model['means'], 
                                             self.fixed_variance_v * np.tile(np.eye(self.image_feat_dim)[np.newaxis, np.newaxis, :, :], (self.Kmax, self.Mmax, 1, 1)),
                                             np.tile(self.mu_v0[np.newaxis, np.newaxis, :], (self.Kmax, self.Mmax, 1)), 
                                             self.fixed_variance_v / self.k_v0 * np.tile(np.eye(self.image_feat_dim)[np.newaxis, np.newaxis, :, :], (self.Kmax, self.Mmax, 1, 1)), 
-                                            cov_type='standard_prior')
+                                            cov_type='diag')
+    # TODO: correct this
     kl_div_concept_prob = KL_divergence(self.concept_prior, init_concept_prior)  
+    #kl_div_concept_prob = 0. 
+
     kl_div_parameters = kl_div_mean_a + kl_div_mean_v + kl_div_ma_prob + kl_div_mv_prob + kl_div_concept_prob
     elbo -= kl_div_parameters  
-    print('KL divergence of audio means: ', kl_div_mean_a)
-    print('KL divergence of image means: ', kl_div_mean_v)
+    #print('KL divergence of audio means: ', kl_div_mean_a)
+    #print('KL divergence of image means: ', kl_div_mean_v)
 
     for ex, (afeats, vfeats) in enumerate(zip(self.a_corpus, self.v_corpus)):
       T = afeats.shape[0]
       n_state = vfeats.shape[0]
       log_probs_a_given_zm = self.log_probs_afeat_given_z_m(afeats)
       log_probs_v_given_zm = self.log_probs_vfeat_given_z_m(vfeats)
-      log_probs_afeat_align = np.sum(np.exp(self.counts_align[ex]) * self.log_probs_afeat_given_i(log_probs_a_given_zm, self.counts_concept[ex], self.counts_audio_mixture[ex]))  
+      log_probs_afeat_given_i = self.log_probs_afeat_given_i(log_probs_a_given_zm, self.counts_concept[ex], self.counts_audio_mixture[ex])
+      log_probs_afeat = np.sum(np.exp(self.counts_align[ex]) * log_probs_afeat_given_i)  
       log_probs_vfeat = np.sum(np.tile(np.exp(self.counts_concept[ex])[:, :, np.newaxis], (1, 1, self.Mmax)) * np.exp(self.counts_image_mixture[ex]) * log_probs_v_given_zm) 
-      elbo += log_probs_afeat_align + log_probs_vfeat
+      elbo += log_probs_afeat + log_probs_vfeat
       
       kl_div_ma = KL_divergence(self.counts_audio_mixture[ex], np.tile(self.audio_obs_model['weights'][np.newaxis, :, :], (T, 1, 1)), log_prob=True)
       kl_div_mv = KL_divergence(self.counts_image_mixture[ex], np.tile(self.image_obs_model['weights'][np.newaxis, :, :], (n_state, 1, 1)), log_prob=True)
       
-      kl_div_align = KL_divergence(self.counts_align[ex][0], np.tile(self.align_init[n_state][np.newaxis, :], (T, 1)))
-      kl_div_concept = KL_divergence(self.counts_concept[ex], np.tile(self.concept_prior[np.newaxis, :], (T, 1)))
+      kl_div_align = KL_divergence(self.counts_align[ex][0], self.align_init[n_state][np.newaxis, :])
+      kl_div_concept = KL_divergence(self.counts_concept[ex], np.tile(self.concept_prior[np.newaxis, :], (n_state, 1)))
 
-      counts_trans_given_prev = np.transpose(np.transpose(self.counts_align_trans[ex], (0, 2, 1)) - self.counts_align[ex], (0, 2, 1))
+      counts_trans_given_prev = np.transpose(np.transpose(self.counts_align_trans[ex], (0, 2, 1)) - self.counts_align[ex][:, np.newaxis, :], (0, 2, 1))
       kl_div_align_trans = KL_divergence(counts_trans_given_prev, np.tile(self.align_trans[n_state][np.newaxis, :, :], (T, 1, 1)))       
       
       # XXX
@@ -646,8 +668,84 @@ class ImageAudioWordDiscoverer:
     #print('log_probs_v: ', log_probs_v)
     
     return log_probs_a_given_i + log_probs_v
+ 
+  def get_sent_embeds(self, x, segmentation, frame_dim=12):
+    if segmentations is None:
+      return x
+    n_words = len(segmentation) - 1
+    embeddings = []
+    for i_w in range(n_words):
+      seg = x[segmentation[i_w]:segmentation[i_w+1]]
+      #print("seg.shape", seg.shape)
+      #print("seg:", segmentation[i_w+1])
+      #print("embed of seg:", self.embed(seg))
+      embeddings.append(self.embed(seg, frame_dim=frame_dim))  
+    return np.array(embeddings)
+   
+  def embed(self, y, frame_dim=None, technique="resample"):
+    #assert self.embed_dim % self.audio_feat_dim == 0
+    if frame_dim:
+      y = y[:, :frame_dim].T
+    else:
+      y = y.T
+      frame_dim = self.audio_feat_dim
+
+    n = int(self.embed_dim / frame_dim)
+    if y.shape[0] == 1: 
+      y_new = np.repeat(y, n)   
+
+    #if y.shape[0] <= n:
+    #  technique = "interpolate" 
+         
+    #print(xLen, self.embed_dim / self.feat_dim)
+    if technique == "interpolate":
+        x = np.arange(y.shape[1])
+        f = interpolate.interp1d(x, y, kind="linear")
+        x_new = np.linspace(0, y.shape[1] - 1, n)
+        y_new = f(x_new).flatten(ORDER) #.flatten("F")
+    elif technique == "resample":
+        y_new = signal.resample(y.astype("float32"), n, axis=1).flatten(ORDER) #.flatten("F")
+    elif technique == "rasanen":
+        # Taken from Rasenen et al., Interspeech, 2015
+        n_frames_in_multiple = int(np.floor(y.shape[1] / n)) * n
+        y_new = np.mean(
+            y[:, :n_frames_in_multiple].reshape((d_frame, n, -1)), axis=-1
+            ).flatten(ORDER) #.flatten("F")
+    return y_new
   
+  # Align the i-th example in the training set
+  def align_i(self, i, decode_method='viterbi'): 
+    T = self.a_corpus[i].shape[0]
+    n_states = self.v_corpus[i].shape[0]
+     
+    concept_scores = self.counts_concept[i]
+    align_init_scores = self.counts_align[i]
+    align_trans_scores = self.counts_align_trans[i]
+    
+    best_concepts = np.argmax(concept_scores, axis=1).tolist()
+    
+    align_best_scores = deepcopy(align_init_scores[0]).tolist()
+    align_scores = [align_best_scores]
+    back_ptrs = np.zeros((T, n_states), dtype=int)
+    for t in range(1, T):
+      align_score_candidates = align_best_scores+align_trans_scores[t].T 
+      align_best_scores = np.max(align_score_candidates, axis=1) 
+      align_scores.append(align_best_scores.tolist())
+      #print('align_score_candidates: ', align_score_candidates)
+      back_ptrs[t] = np.argmax(align_score_candidates, axis=1) 
+
+    cur_state = np.argmax(align_best_scores)
+    best_path = [int(cur_state)]
+    for t in range(T-1, 0, -1):
+      cur_state = back_ptrs[t, cur_state]
+      best_path.append(int(cur_state))
+   
+    return best_concepts, concept_scores.tolist(), best_path, align_scores
+ 
   def align(self, afeats, vfeats, decode_method='viterbi'):
+    if self.has_null:
+      vfeats = np.concatenate((np.zeros((1, self.image_feat_dim)), vfeats), axis=0)
+
     T = len(afeats)
     n_states = len(vfeats)   
     back_ptrs = np.zeros((T, n_states), dtype=int)
@@ -655,7 +753,6 @@ class ImageAudioWordDiscoverer:
     align_scores = None
     concept_scores = None 
     align_probs = []
-    concept_probs = []
 
     log_probs_a_given_zm = self.log_probs_afeat_given_z_m(afeats)
     log_probs_v_given_zm = self.log_probs_vfeat_given_z_m(vfeats)
@@ -674,56 +771,30 @@ class ImageAudioWordDiscoverer:
         log_probs_a_given_v = logsumexp(log_probs_z_given_v + log_probs_a_given_z_t, axis=-1) 
         align_score_candidates = (align_scores[np.newaxis, :] + self.align_trans[n_states].T).T + log_probs_a_given_v
         #print('align_score_candidates: ', align_score_candidates)
-        back_ptrs[t] = np.argmax(align_score_candidates, axis=0)
-        align_scores = np.max(align_score_candidates, axis=0)
+        back_ptrs[t] = np.argmax(align_score_candidates, axis=1)
+        align_scores = np.max(align_score_candidates, axis=1)
         align_probs.append(align_scores.tolist())
 
         align_trans_t = np.tile(np.array([[self.align_trans[n_states][back_ptrs[t][i], i]] for i in range(n_states)]), (1, self.Kmax))
-        concept_scores = concept_scores + align_trans_t + log_probs_a_given_z_t
-
-    elif decode_method == 'auxiliary posterior':
-      # TODO: Implement the auxiliary posterior distribution decoding with KL-divergence metric
-      # TODO: Compute the concept posterior over time
-
-      counts_align = np.log(1./n_states) * np.ones((T, n_states))
-      counts_concept = None
-      n_iterations = 5
-      for i in range(n_iterations):      
-        log_probs_a_given_zm = self.log_probs_afeat_given_z_m(afeats)
-        log_probs_v_given_zm = self.log_probs_vfeat_given_z_m(vfeats)
-        counts_audio_mixture = self.update_audio_mixture_counts(log_probs_a_given_zm)
-        counts_image_mixture = self.update_image_mixture_counts(log_probs_v_given_zm)
-              
-        # Estimate counts
-        counts_concept = self.update_concept_counts(counts_audio_mixture, counts_image_mixture, counts_align, log_probs_a_given_zm, log_probs_v_given_zm)
-        #print('counts_concept: ', counts_concept)
-        log_probs_a_given_i = self.log_probs_afeat_given_i(log_probs_a_given_zm, counts_concept, counts_audio_mixture)  
-        forward_probs = self.forward(log_probs_a_given_i)
-        backward_probs = self.backward(log_probs_a_given_i)
-        #print('forward_probs: ', forward_probs)
-        #print('backward_probs:', backward_probs)
-        # XXX
-        #counts_align = self.update_alignment_counts(forward_probs, backward_probs)
-        #counts_align_trans = self.update_alignment_transition_counts(forward_probs, backward_probs, log_probs_a_given_i)
-      
-      align_scores = deepcopy(counts_align[0])
-      align_probs.append(align_scores.tolist())
-      for t in range(1, T):
-        align_scores_candiates = (align_scores + (counts_align_trans[t].T - counts_align[t-1])).T
-        align_scores = np.max(align_scores_candidates, axis=0)
-        back_ptrs = np.argmax(align_scores_candidates, axis=0)
-        align_probs.append(align_scores)
-      concept_scores = counts_concept.tolist() 
-      
-    cur_state = np.argmax(align_scores)
-    best_path = [int(cur_state)]
-    for t in range(T-1, 0, -1):
-      cur_state = back_ptrs[t, cur_state]
-      best_path.append(int(cur_state))
+     
+      cur_state = np.argmax(align_scores)
+      best_path = [int(cur_state)]
+      for t in range(T-1, 0, -1):
+        cur_state = back_ptrs[t, cur_state]
+        best_path.append(int(cur_state))
     
+    concept_scores = -np.inf * np.ones((n_states, self.Kmax)) 
+    align_matrix = np.zeros((T, n_states))
+    align_matrix[best_path] = 1.
+    log_prob_a_given_z = logsumexp(self.audio_obs_model['weights'] + log_probs_a_given_zm, axis=-1)
+
+    for k in range(n_states):
+      concept_scores[k] = deepcopy(log_probs_z_given_v[k])
+      log_prob_a_all_given_z = np.sum(align_matrix[:, k] * log_prob_a_given_z.T, axis=1) 
+      concept_scores[k] += log_prob_a_all_given_z
+
     best_concepts = np.argmax(concept_scores, axis=1).tolist()
-    concept_probs = deepcopy(concept_scores)
-    return best_path[::-1], best_concepts, align_probs, concept_probs 
+    return best_concepts, concept_scores, best_path[::-1], align_probs 
     #return best_path[::-1], align_probs
 
   def print_model(self, filename):
@@ -748,12 +819,12 @@ class ImageAudioWordDiscoverer:
     np.savez(obs_v_file, **self.image_obs_models)
     np.savez(concept_prob_file, self.concept_prior)
 
-  # TODO: Save the concepts as well
   def print_alignment(self, file_prefix):
     f = open(file_prefix+'.txt', 'w')
     alignments = []
-    for ex, (afeat, vfeat) in enumerate(zip(self.a_corpus, self.v_corpus)):
-      alignment, concepts, align_probs, concept_probs = self.align(afeat, vfeat)
+    n_data = len(self.a_corpus)
+    for ex in range(n_data):
+      concepts, concept_probs, alignment, align_probs = self.align_i(ex)
       #concepts = None
       #alignment, align_probs = self.align(afeat, vfeat)
       align_info = {
@@ -840,7 +911,7 @@ if __name__ == '__main__':
   np.savez('tiny_a.npz', **audio_feats)
 
   alignments = None
-  model_configs = {'Kmax':3, 'Mmax':1, 'embedding_dim':3, 'k_a0':0, 'k_v0':0}
+  model_configs = {'Kmax':3, 'Mmax':1, 'embedding_dim':3, 'k_a0':0, 'k_v0':0, 'has_null':False}
   speechFeatureFile = 'tiny_a.npz'
   imageFeatureFile = 'tiny_v.npz'
   model = ImageAudioWordDiscoverer(speechFeatureFile, imageFeatureFile, model_configs=model_configs, model_name='image_audio')
@@ -848,30 +919,51 @@ if __name__ == '__main__':
   print(model.align(image_feats['0'], image_feats['0']))
   print(model.align(image_feats['1'], image_feats['1']))
   print(model.align(image_feats['2'], image_feats['2']))
+  print(model.align_i(0))
+  print(model.align_i(1))
+  print(model.align_i(2))
   model.print_alignment('tiny')
-
+  
   img = Image.open('../1000268201.jpg')
   width = 64
   height = 64
   img = imresize(np.array(img), size=(width, height)).reshape(width*height, 3)
   np.savez("img.npz", **{'arr_0':img})
-  '''
 
   # Test on image pixels
   alignments = None
-  model_configs = {'Kmax':100, 'Mmax':1, 'embedding_dim':3, 'k_a0':0, 'k_v0':0, 'alignments':[alignments]}  
+  #model_configs = {'Kmax':3, 'Mmax':1, 'embedding_dim':3, 'gamma_sb':10*np.ones((3, 2)), 'alignments':[alignments], 'has_null':False}  
+  model_configs = {'Kmax':3, 'Mmax':1, 'embedding_dim':3, 'alignments':[alignments], 'has_null':False}  
+  
   speechFeatureFile = '../img_vec1.npz'
   imageFeatureFile = '../img_vec1.npz'
   model = ImageAudioWordDiscoverer(speechFeatureFile, imageFeatureFile, model_configs=model_configs, model_name='image_audio')
   model.train_using_EM(num_iterations=10)
   model.print_alignment('image_segmentation')
-  
-  # Test on a single example with known alignment
-  align_file = '../data/flickr30k/audio_level/flickr30k_gold_landmarks.npz'
-  speech_feature_file = '../data/flickr30k/audio_level/flickr30k_.npz'
-  image_feature_file = '../data/flickr30k/audio_level/'
-  
-  npz_file = np.load(align_file)
-  alignments = [npz_file[k] for k in sorted(npz_file, key=lambda x:int(x.split('_')[-1]))[0]]
-  print('alignments: ', alignments)
+  '''
    
+  # Test on a single example with known alignment
+  align_file = '../data/flickr30k/audio_level/flickr30k_gold_alignment.json'
+  segment_file = '../data/flickr30k/audio_level/flickr30k_gold_landmarks_mfcc.npz'
+  speech_feature_file = '../data/flickr30k/audio_level/flickr_mfcc_cmvn_htk.npz'
+  image_feature_file = '../data/flickr30k/sensory_level/flickr30k_vgg_penult.npz'
+   
+  npz_file = np.load(segment_file)
+  segmentations = []
+  for k in sorted(npz_file, key=lambda x:int(x.split('_')[-1]))[:1]:
+    segmentations.append(npz_file[k])
+  
+  alignments = []
+  with open(align_file, 'r') as f:
+    align_dicts = json.load(f)
+  alignments.append(align_dicts[0]['alignment'])
+  
+  segment_alignments = [] 
+  for start, end in zip(segmentations[0][:-1], segmentations[0][1:]):    
+    segment_alignments.append(alignments[0][start]) 
+         
+  print('segment_alignments: ', segment_alignments)
+  model_configs = {'Kmax':5, 'Mmax':1, 'embedding_dim':120, 'alignments':[segment_alignments], 'segmentations':segmentations}  
+  model = ImageAudioWordDiscoverer(speech_feature_file, image_feature_file, model_configs=model_configs, model_name='image_audio')
+  model.train_using_EM(num_iterations=5)
+  model.print_alignment('flickr1') 
