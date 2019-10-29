@@ -72,11 +72,18 @@ class ImageAudioWordDiscoverer:
       self.v_corpus = [vfeat[np.newaxis, :] for vfeat in self.v_corpus]
 
     self.image_feat_dim = self.v_corpus[0].shape[-1]  
+    for ex, (afeat, vfeat) in enumerate(zip(self.a_corpus, self.v_corpus)):
+      if afeat.shape[-1] == 0:
+        print('ex: ', ex)
+        print('afeat empty: ', afeat.shape) 
+        self.a_corpus[ex] = np.zeros((1, self.embed_dim))
+
+      if vfeat.shape[-1] == 0:
+        print('ex: ', ex)
+        print('vfeat empty: ', vfeat.shape) 
+        self.v_corpus[ex] = np.zeros((1, self.image_feat_dim))
+      
     if self.has_null:
-      for ex, vfeat in enumerate(self.v_corpus):
-        if vfeat.shape[-1] != self.image_feat_dim:
-          print('ex: ', ex)
-          print('vfeat.shape is not the same: ', vfeat.shape) 
       self.v_corpus = [np.concatenate((np.zeros((1, self.image_feat_dim)), vfeat), axis=0) for vfeat in self.v_corpus]  
     
     assert len(self.v_corpus) == len(self.a_corpus)
@@ -494,8 +501,9 @@ class ImageAudioWordDiscoverer:
 
       print('Take %.5f for M step' % (time.time() - begin_time))  
       print('Log likelihood after iteration %d: %.5f' % (n, self.compute_log_likelihood()))
-      print('ELBO after iteration %d: %.5f' % (n, self.compute_ELBO()))
-     
+      #print('ELBO after iteration %d: %.5f' % (n, self.compute_ELBO()))
+      self.print_alignment(self.model_name)
+
   # Compute log likelihood using the formula: \log p(a, v) = \sum_i=1^n \log p(v_i) + \log \sum_{A} p(A|v) * p(x|A, v)
   def compute_log_likelihood(self):
     ll = 0.
@@ -515,7 +523,7 @@ class ImageAudioWordDiscoverer:
       log_prob_v_tot = np.sum(log_probs_v)
       log_probs_a_i_given_v = self.log_prob_afeats_align_given_vfeats(log_probs_a_given_zm, log_probs_z_given_v)
       log_prob_a_given_v_tot = logsumexp(log_probs_a_i_given_v[-1])
-      ll += log_prob_v_tot + log_prob_a_given_v_tot
+      ll += 1. / len(self.a_corpus) * (log_prob_v_tot + log_prob_a_given_v_tot)
     return ll
   
   def compute_ELBO(self):
@@ -945,10 +953,11 @@ if __name__ == '__main__':
   # Test on a single example with known alignment
   align_file = '../data/flickr30k/audio_level/flickr30k_gold_alignment.json'
   segment_file = '../data/flickr30k/audio_level/flickr30k_gold_landmarks_mfcc.npz'
-  speech_feature_file = '../data/flickr30k/audio_level/flickr_mfcc_cmvn_htk.npz'
+  speech_feature_file = '../data/flickr30k/sensory_level/flickr_concept_kamper_embeddings.npz'
   image_feature_file = '../data/flickr30k/sensory_level/flickr30k_vgg_penult.npz'
+  exp_dir = 'exp/oct_28_flickr_mfcc/'
    
-  npz_file = np.load(segment_file)
+  '''npz_file = np.load(segment_file)
   segmentations = []
   for k in sorted(npz_file, key=lambda x:int(x.split('_')[-1]))[:1]:
     segmentations.append(npz_file[k])
@@ -961,9 +970,17 @@ if __name__ == '__main__':
   segment_alignments = [] 
   for start, end in zip(segmentations[0][:-1], segmentations[0][1:]):    
     segment_alignments.append(alignments[0][start]) 
-         
+      
   print('segment_alignments: ', segment_alignments)
-  model_configs = {'Kmax':5, 'Mmax':1, 'embedding_dim':120, 'alignments':[segment_alignments], 'segmentations':segmentations}  
-  model = ImageAudioWordDiscoverer(speech_feature_file, image_feature_file, model_configs=model_configs, model_name='image_audio')
-  model.train_using_EM(num_iterations=5)
-  model.print_alignment('flickr1') 
+  
+  model_configs = {'Kmax':300, 'Mmax':1, 'embedding_dim':120, 'alignments':[segment_alignments], 'segmentations':segmentations}  
+  '''
+  model_configs = {'Kmax':300, 'Mmax':1, 'embedding_dim':120}  
+  model = ImageAudioWordDiscoverer(speech_feature_file, image_feature_file, model_configs=model_configs, model_name=exp_dir+'image_audio')
+  model.train_using_EM(num_iterations=10)
+  
+  # TODO
+  #with open()
+  #model_configs = {'Kmax':300, 'Mmax':1, 'embedding_dim':120}  
+  #model = ImageAudioWordDiscoverer(speech_feature_file, image_feature_file, model_configs=model_configs, model_name=exp_dir+'image_audio')
+   
