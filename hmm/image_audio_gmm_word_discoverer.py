@@ -33,6 +33,7 @@ class ImageAudioGMMWordDiscoverer:
     alignments = model_configs.get('alignments', None)
     segmentations = model_configs.get('segmentations', None)
     self.has_null = model_configs.get('has_null', True)
+    self.init_method = model_configs.get('initialize_method', 'rand')
 
     self.read_corpus(speech_feature_file, image_feature_file, segmentations)
     self.estimate_prior_mean_var()
@@ -118,18 +119,18 @@ class ImageAudioGMMWordDiscoverer:
     for lv in self.len_probs:
       self.align_init[lv] = np.log(1./lv) * np.ones((lv,))
 
-    # TODO: Make this more general
-    self.vs = 1./2 * np.ones((self.Kmax,)) 
-    self.vs[-1] = 1.
+    self.vs = np.zeros((self.Kmax,)) 
+    for k in range(self.Kmax):
+      self.vs[k] = 1. / (self.Kmax-k)
     self.concept_prior = np.log(compute_stick_break_prior(self.vs)) 
-
+    print('concept_prior', np.exp(self.concept_prior))
     self.audio_obs_model['weights'] = np.log(1./self.Mmax) * np.ones((self.Kmax, self.Mmax)) 
     self.audio_obs_model['n_mixtures'] = self.Mmax * np.ones((self.Kmax,))
     self.image_obs_model['weights'] = np.log(1./self.Mmax) * np.ones((self.Kmax, self.Mmax))
     self.image_obs_model['n_mixtures'] = self.Mmax * np.ones((self.Kmax,))
-    self.audio_obs_model['means'], self.image_obs_model['means'] = self.initialize_mixture_means()
+    self.audio_obs_model['means'], self.image_obs_model['means'] = self.initialize_mixture_means(method=self.init_method)
     # XXX
-    self.audio_obs_model['means'] = deepcopy(self.image_obs_model['means'])
+    #self.audio_obs_model['means'] = deepcopy(self.image_obs_model['means'])
    
     # Initialize hyperparameters for the approximate parameter posteriors
     self.g_aN = {l: (self.g_a0 - np.log(l)) * np.ones((l,)) for l in self.len_probs}  # size-L dict of Nv-d array
@@ -178,8 +179,8 @@ class ImageAudioGMMWordDiscoverer:
 
       return cluster_centers_a, cluster_centers_v
     else:
-      kmeans_a = KMeans(n_clusters=self.Mmax * self.Kmax, max_iter=0).fit(np.concatenate(self.a_corpus, axis=0))
-      kmeans_v = KMeans(n_clusters=self.Mmax * self.Kmax, max_iter=0).fit(np.concatenate(self.v_corpus, axis=0))
+      kmeans_a = KMeans(n_clusters=self.Mmax * self.Kmax, max_iter=10).fit(np.concatenate(self.a_corpus, axis=0))
+      kmeans_v = KMeans(n_clusters=self.Mmax * self.Kmax, max_iter=10).fit(np.concatenate(self.v_corpus, axis=0))
       #print('kmeans_a.means.shape, kmeans_v.shape: ', kmeans_a.cluster_centers_.shape, kmeans_v.cluster_centers_.shape)
       return kmeans_a.cluster_centers_.reshape(self.Kmax, self.Mmax, -1), kmeans_v.cluster_centers_.reshape(self.Kmax, self.Mmax, -1)
 
@@ -483,8 +484,8 @@ class ImageAudioGMMWordDiscoverer:
       kl_div_concept = KL_divergence(self.counts_concept[ex], np.tile(self.concept_prior[np.newaxis, :], (n_state, 1)))
  
       # XXX
-      kl_div_ma = 0.
-      kl_div_mv = 0.
+      #kl_div_ma = 0.
+      #kl_div_mv = 0.
       kl_div_latent_variables = kl_div_ma + kl_div_mv + kl_div_align + kl_div_concept  
       elbo -= kl_div_latent_variables 
 
@@ -783,7 +784,7 @@ if __name__ == '__main__':
   # Test on image pixels
   alignments = None
   #model_configs = {'Kmax':3, 'Mmax':1, 'embedding_dim':3, 'gamma_sb':10*np.ones((3, 2)), 'alignments':[alignments], 'has_null':False}  
-  model_configs = {'Kmax':3, 'Mmax':1, 'embedding_dim':3, 'alignments':[alignments], 'has_null':False}  
+  model_configs = {'Kmax':3, 'Mmax':1, 'embedding_dim':3, 'alignments':[alignments], 'has_null':False, 'initialize_method':'kmeans'}  
   
   speechFeatureFile = '../img_vec1.npz'
   imageFeatureFile = '../img_vec1.npz'
