@@ -10,6 +10,8 @@ from scipy import signal
 from sklearn.cluster import KMeans
 import json
 from PIL import Image
+from scipy.stats import multivariate_normal
+import multiprocessing as mp
 
 ORDER='C'
 class ImageAudioWordDiscoverer:
@@ -56,14 +58,13 @@ class ImageAudioWordDiscoverer:
     a_npz = np.load(speech_feat_file)
     v_npz = np.load(image_feat_file)
     
-    if segmentations is not None: 
-      # XXX
+    if segmentations is not None:  
       a_feat_corpus = [np.array(a_npz[k]) for k in sorted(a_npz, key=lambda x:int(x.split('_')[-1]))]
       self.a_corpus = [self.get_sent_embeds(a_feat, segmentation) for a_feat, segmentation in zip(a_feat_corpus, segmentations)]
     else:
       # XXX
       self.a_corpus = [np.array(a_npz[k]) for k in sorted(a_npz, key=lambda x:int(x.split('_')[-1]))]
-
+    # XXX
     self.v_corpus = [np.array(v_npz[k]) for k in sorted(v_npz, key=lambda x:int(x.split('_')[-1]))] 
     #print('a_corpus: ', self.a_corpus)
     #print('v_corpus: ', self.v_corpus)
@@ -109,7 +110,6 @@ class ImageAudioWordDiscoverer:
       self.fixed_variance_a += np.sum((afeat - self.mu_a0)**2) / (c * n_frames_a * self.embed_dim)
       self.fixed_variance_v += np.sum((vfeat - self.mu_v0)**2) / (c * n_frames_v * self.image_feat_dim)
     
-    # XXX: Check if the means and variance look reasonable
     #print('self.mu_a0.shape, self.mu_v0.shape: ', self.mu_a0.shape, self.mu_v0.shape)
     #print('Var(a), Var(v): ', self.fixed_variance_a, self.fixed_variance_v) 
   
@@ -122,13 +122,11 @@ class ImageAudioWordDiscoverer:
 
     for lv in self.len_probs:
       self.align_trans[lv] = np.log(1./lv) * np.ones((lv, lv))
-    
-    # TODO: Make this more general
+     
     self.vs = 1./2 * np.ones((self.Kmax,)) 
     self.vs[-1] = 1.
     self.concept_prior = np.log(compute_stick_break_prior(self.vs)) 
-
-    # TODO: Randomly initialize the model
+ 
     self.audio_obs_model['weights'] = np.log(1./self.Mmax) * np.ones((self.Kmax, self.Mmax)) 
     self.audio_obs_model['n_mixtures'] = self.Mmax * np.ones((self.Kmax,))
     self.image_obs_model['weights'] = np.log(1./self.Mmax) * np.ones((self.Kmax, self.Mmax))
@@ -241,7 +239,6 @@ class ImageAudioWordDiscoverer:
     return counts_concept
 
   def update_audio_mixture_counts(self, probs_afeat_given_zm):
-    # XXX
     counts_audio_mixture = self.digammas_ma + probs_afeat_given_zm
     #print('after adding the digamma_ma: ', counts_audio_mixture)
     # Normalize
@@ -362,7 +359,7 @@ class ImageAudioWordDiscoverer:
     self.digammas_mv = np.zeros((self.Kmax, self.Mmax))
     
     for k in range(self.Kmax):
-      for j in range(k+1, self.Kmax):
+      for j in range(k-1):
         self.digammas_concept[k] += digamma(np.exp(self.g_sbN[j, 1])) - digamma(np.exp(logsumexp(self.g_sbN[j])))
       self.digammas_concept[k] += digamma(np.exp(self.g_sbN[k, 0])) - digamma(np.exp(logsumexp(self.g_sbN[k])))
       
@@ -433,7 +430,10 @@ class ImageAudioWordDiscoverer:
 
       for ex, (afeats, vfeats) in enumerate(zip(self.a_corpus, self.v_corpus)):
         log_probs_a_given_zm = self.log_probs_afeat_given_z_m(afeats)
+        #print('Finish log_probs_afeat_given_z_m after %.5f s: ' % (time.time()-begin_time))
         log_probs_v_given_zm = self.log_probs_vfeat_given_z_m(vfeats)
+        #print('Finish log_probs_vfeat_given_z_m after %.5f s: ' % (time.time()-begin_time))
+        
         #print('afeats: ', afeats)
         #print('vfeats: ', vfeats)
         #print('log_probs_a_given_zm: ', log_probs_a_given_zm)
@@ -444,26 +444,31 @@ class ImageAudioWordDiscoverer:
         #print('sum(counts_image_mixture): ', np.sum(np.exp(counts_image_mixture), axis=-1))
         
         # Estimate counts
-        # TODO: match inputs
+        # TODO: match inputs 
         counts_concept = self.update_concept_counts(self.counts_align[ex], log_probs_a_given_zm, log_probs_v_given_zm)
+        #print('Finish update_concept_counts after %.5f s' % (time.time()-begin_time))
         #print('counts_concept: ', counts_concept)
         new_counts_concept.append(counts_concept)
        
         counts_audio_mixture = self.update_audio_mixture_counts(log_probs_a_given_zm)
         counts_image_mixture = self.update_image_mixture_counts(log_probs_v_given_zm)
+        #print('Finish counts_audio_mixture and counts_image_mixture after %.5f s' % (time.time()-begin_time))
         new_counts_audio_mixture.append(counts_audio_mixture)
         new_counts_image_mixture.append(counts_image_mixture)
 
         log_probs_a_given_i = self.log_probs_afeat_given_i(log_probs_a_given_zm, counts_concept, counts_audio_mixture)  
+        #print('Finish log_probs_a_given_i after %.5f s' % (time.time()-begin_time))
         forward_probs = self.forward(log_probs_a_given_i)
         backward_probs = self.backward(log_probs_a_given_i)
+        #print('Finish forward and backward after %.5f s' % (time.time()-begin_time))
         #print('log_probs_a_given_i: ', log_probs_a_given_i)
         #print('forward_probs: ', forward_probs)
         #print('backward_probs:', backward_probs)
         
-        # XXX
         counts_align = self.update_alignment_initial_counts(forward_probs, backward_probs)
+        #print('Finish counts_align after %.5f s' % (time.time()-begin_time))
         counts_align_trans = self.update_alignment_transition_counts(forward_probs, backward_probs, log_probs_a_given_i)
+        #print('Finish counts_align_trans after %.5f s' % (time.time()-begin_time))
         new_counts_align.append(counts_align)
         new_counts_align_trans.append(counts_align_trans)
 
@@ -471,13 +476,12 @@ class ImageAudioWordDiscoverer:
         #print('counts_align_trans: ', counts_align_trans)
         #print('sum(counts_align_init): ', np.sum(np.exp(counts_align), axis=-1))    
         #print('sum(counts_align_trans): ', np.sum(np.exp(counts_align_trans), axis=-1)) 
-
+        #print('Finish processing example %d after %.5f s' % (ex, time.time()-begin_time))
       print('Take %.5f for E step' % (time.time() - begin_time)) 
       self.counts_concept = deepcopy(new_counts_concept)
       self.counts_audio_mixture = deepcopy(new_counts_audio_mixture)
       self.counts_image_mixture = deepcopy(new_counts_image_mixture)
       
-      # XXX
       self.counts_align = deepcopy(new_counts_align)
       self.counts_align_trans = deepcopy(new_counts_align_trans)
 
@@ -541,8 +545,7 @@ class ImageAudioWordDiscoverer:
       kl_div_align_trans_prob = KL_divergence(self.align_trans[n_state], np.log(1. / n_state) * np.ones((n_state, n_state)), log_prob=True) 
       #print('self.align_trans, n_state', self.align_trans[n_state], n_state) 
       #print('kl_div_align_prob: ', kl_div_align_prob)
-      #print('kl_div_align_trans_prob: ', kl_div_align_trans_prob)
-      # XXX
+      #print('kl_div_align_trans_prob: ', kl_div_align_trans_prob) 
       kl_div_align_prob = 0.
       elbo -= (kl_div_align_prob + kl_div_align_trans_prob)
 
@@ -584,7 +587,6 @@ class ImageAudioWordDiscoverer:
       counts_trans_given_prev = np.transpose(np.transpose(self.counts_align_trans[ex], (0, 2, 1)) - self.counts_align[ex][:, np.newaxis, :], (0, 2, 1))
       kl_div_align_trans = KL_divergence(counts_trans_given_prev, np.tile(self.align_trans[n_state][np.newaxis, :, :], (T, 1, 1)))       
       
-      # XXX
       kl_div_align_trans = 0.
       kl_div_ma = 0.
       kl_div_mv = 0.
@@ -623,14 +625,13 @@ class ImageAudioWordDiscoverer:
         self.len_probs[l][m] /= tot_count 
      
   def log_prob_afeat_given_z_m(self, afeat, k, m):
-    return gaussian(afeat, self.audio_obs_model['means'][k, m], self.fixed_variance_a * np.ones((self.embed_dim, self.embed_dim)), log_prob=True)
+    return compute_diagonal_gaussian(afeat, self.audio_obs_model['means'][k, m], self.fixed_variance_a * np.ones((self.embed_dim,)), log_prob=True)
 
   def log_prob_vfeat_given_z_m(self, vfeat, k, m):
-    return gaussian(vfeat, self.image_obs_model['means'][k, m], self.fixed_variance_v * np.ones((self.image_feat_dim, self.image_feat_dim)), log_prob=True)
+    return compute_diagonal_gaussian(vfeat, self.image_obs_model['means'][k, m], self.fixed_variance_v * np.ones((self.image_feat_dim,)), log_prob=True)
 
   #def log_prob_afeat_given_z_m(self, afeat):
   # Compute approximate p(afeat_t|i) for all t and i and store them in a T x N(v) matrix 
-  # XXX: Match arguments
   def log_probs_afeat_given_i(self, log_probs_a_given_zm, counts_concept, counts_audio_mixture):
     T = log_probs_a_given_zm.shape[0]
     n_states = counts_concept.shape[0] 
@@ -653,21 +654,55 @@ class ImageAudioWordDiscoverer:
     return np.transpose(np.asarray(log_probs), (2, 0, 1))
   
   def log_probs_vfeat_given_z_m(self, vfeats):
+    n_states = vfeats.shape[0]
     log_probs = []
-    for k in range(self.Kmax):
+    
+    #for k in range(self.Kmax):
+    #begin_time = time.time()
+    for m in range(self.Mmax):   
       log_probs_m = []
-      for m in range(self.Mmax):
-        log_prob_m = self.log_prob_vfeat_given_z_m(vfeats, k, m)
-        log_probs_m.append(log_prob_m)
-       
+      for i in range(n_states):
+        log_probs_m.append(compute_diagonal_gaussian(vfeats[i], self.image_obs_model['means'][:, m], self.fixed_variance_v * np.ones((self.Kmax, self.image_feat_dim)), log_prob=True))
       log_probs.append(log_probs_m)
-    return np.transpose(np.asarray(log_probs), (2, 0, 1))
- 
+    #print('Takes %.5s to compute log_probs_vfeat_given_z_m for k=%d' % (time.time()-begin_time))
+    
+    return np.transpose(np.asarray(log_probs), (1, 2, 0))
+    '''
+    pool = mp.Pool(mp.cpu_count())
+
+    for m in range(self.Mmax):
+      log_probs_m = pool.starmap_async(self.log_prob_vfeat_given_z_m, [(vfeats, k, m) for k in range(self.Kmax)]).get()
+      print('log_probs_m.shape: ', np.asarray(log_probs_m).shape)
+      log_probs.append(log_probs_m)
+    pool.close()
+    
+    return np.transpose(np.asarray(log_probs), (2, 1, 0))    
+    
+    q = mp.Queue()
+    jobs = []
+    for m in range(self.Mmax):
+      log_prob_m = []
+      for k in range(self.Kmax):
+        p = mp.Process(target=self.log_prob_vfeat_given_z_m, args=(vfeats, k, m))
+        jobs.append(p)
+        p.start()
+
+      for job in jobs:
+        job.join()
+
+      for job in jobs:
+        log_prob_k_m = q.get()
+        log_prob_m.append(log_prob_k_m)
+      log_probs.append(log_prob_m)
+
+    return np.transpose(np.asarray(log_probs), (2, 1, 0))
+    '''
+
+
   # Compute approximate p(afeat_t, vfeat_i|i) for all t and i and store them in a T x N(v) matrix 
   def log_probs_afeat_vfeat_given_i(self, log_probs_a_given_zm, log_probs_v_given_zm, counts_concept, counts_audio_mixture, counts_image_mixture):
     log_probs = []
-    n_states = log_probs_v_given_zm.shape[0]
-    # XXX: match arguments
+    n_states = log_probs_v_given_zm.shape[0] 
     log_probs_a_given_i = self.log_probs_afeat_given_i(log_probs_a_given_zm, counts_concept, counts_audio_mixture)
     
     log_probs_v = -np.inf*np.ones((n_states,))
@@ -858,12 +893,25 @@ def compute_stick_break_prior(vs):
   prior[1:] = pvs[:-1] * vs[1:]
   return prior
 
+def compute_diagonal_gaussian(x, mean, cov, log_prob=False):
+  d = mean.shape[0]
+  assert np.min(cov) > 0.
+  if log_prob:
+    log_norm_const = float(d) / 2. * np.log(2. * math.pi) + np.sum(np.log(cov)) / 2.
+    prob = - log_norm_const - np.sum((x - mean) ** 2 / (2. * cov), axis=-1)
+  else:
+    norm_const = np.sqrt(2. * math.pi) ** float(d)
+    norm_const *= np.prod(np.sqrt(cov), axis=-1)
+    x_z = x - mean
+    prob = np.exp(- np.sum(x_z ** 2 / (2. * cov), axis=-1)) / norm_const
+  return prob
+
 def gaussian(x, mean, cov, cov_type='diag', log_prob=False):
   d = mean.shape[0]
   if cov_type == 'diag':
     assert np.min(np.diag(cov)) > 0.
     if log_prob:
-      log_norm_const = float(d) / 2. * np.log(2. * math.pi) + np.sum(np.log(np.diag(cov))) / 2.
+      log_norm_const = float(d) / 2. * np.log(2. * math.pi) + np.sum(np.log(np.diag(cov))) / 2. 
       prob = - log_norm_const - np.sum((x - mean) ** 2 / (2. * np.diag(cov)), axis=-1) 
     else:
       norm_const = np.sqrt(2. * math.pi) ** float(d)
@@ -901,13 +949,32 @@ def gaussian_KL_divergence(mean1, cov1, mean2, cov2, cov_type='diag'):
   if cov_type == 'standard_prior':
     return 1./2 * np.sum(np.diagonal(cov1, axis1=-1, axis2=-2) + mean1**2 - np.log(np.diagonal(cov1, axis1=-1, axis2=-2)) - 1.)      
   
-if __name__ == '__main__':
-  '''  
+if __name__ == '__main__':  
+  '''
   # Test KL-divergence
   p = np.array([0.1, 0.4, 0.5])
   q = np.array([0.2, 0.6, 0.2])
   print('my KL_divergence: ', KL_divergence(np.log(p), np.log(q)))
   print('scipy KL_divergence: ', np.sum(kl_div(p, q)))
+  
+  # Test gaussian
+  d = 4096
+  mean = np.zeros((d,))
+  sigma = 50 
+  x = mean + np.sqrt(sigma)*np.random.normal(size=(5, d)) 
+  begin_time = time.time()
+  p = gaussian(x, mean=mean, cov=sigma*np.eye(d), log_prob=True)
+  print('Takes %0.5f to compute gaussian: ' % (time.time()-begin_time))
+  print(p)
+  
+  p = compute_diagonal_gaussian(x, mean=mean, cov=sigma*np.ones((d,)), log_prob=True)
+  print('Takes %0.5f to compute diagonal gaussian: ' % (time.time()-begin_time))
+  print(p)
+   
+  begin_time = time.time()
+  p = multivariate_normal.logpdf(x, mean=mean, cov=sigma*np.eye(d,))
+  print('Takes %.5f to compute scipy multivariate_normal: ', time.time()-begin_time)
+  print(p)
   
   # Test on noisy one-hot vectors
   eps = 0.
@@ -917,7 +984,7 @@ if __name__ == '__main__':
   audio_feats = {'0':np.array([[1-eps, eps/2., eps/2.], [eps/2., 1.-eps, eps/2.]]), '1':np.array([[eps/2., 1.-eps, eps/2.], [eps/2., eps/2., 1.-eps]]), '2':np.array([[eps/2., eps/2., 1.-eps], [1.-eps, eps/2., eps/2.]])}
   np.savez('tiny_v.npz', **image_feats)
   np.savez('tiny_a.npz', **audio_feats)
-
+  
   alignments = None
   model_configs = {'Kmax':3, 'Mmax':1, 'embedding_dim':3, 'k_a0':0, 'k_v0':0, 'has_null':False}
   speechFeatureFile = 'tiny_a.npz'
@@ -955,9 +1022,10 @@ if __name__ == '__main__':
   segment_file = '../data/flickr30k/audio_level/flickr30k_gold_landmarks_mfcc.npz'
   speech_feature_file = '../data/flickr30k/sensory_level/flickr_concept_kamper_embeddings.npz'
   image_feature_file = '../data/flickr30k/sensory_level/flickr30k_vgg_penult.npz'
-  exp_dir = 'exp/oct_28_flickr_mfcc/'
+  exp_dir = 'exp/nov_8_flickr_hmm_mfcc/'
    
-  '''npz_file = np.load(segment_file)
+  
+  npz_file = np.load(segment_file)
   segmentations = []
   for k in sorted(npz_file, key=lambda x:int(x.split('_')[-1]))[:1]:
     segmentations.append(npz_file[k])
@@ -973,14 +1041,7 @@ if __name__ == '__main__':
       
   print('segment_alignments: ', segment_alignments)
   
-  model_configs = {'Kmax':300, 'Mmax':1, 'embedding_dim':120, 'alignments':[segment_alignments], 'segmentations':segmentations}  
-  '''
-  model_configs = {'Kmax':300, 'Mmax':1, 'embedding_dim':120}  
+  #model_configs = {'Kmax':300, 'Mmax':1, 'embedding_dim':120, 'alignments':[segment_alignments], 'segmentations':segmentations}  
+  model_configs = {'Kmax':300, 'Mmax':1, 'embedding_dim':120, 'has_null':False}  
   model = ImageAudioWordDiscoverer(speech_feature_file, image_feature_file, model_configs=model_configs, model_name=exp_dir+'image_audio')
-  model.train_using_EM(num_iterations=10)
-  
-  # TODO
-  #with open()
-  #model_configs = {'Kmax':300, 'Mmax':1, 'embedding_dim':120}  
-  #model = ImageAudioWordDiscoverer(speech_feature_file, image_feature_file, model_configs=model_configs, model_name=exp_dir+'image_audio')
-   
+  model.train_using_EM(num_iterations=20)
