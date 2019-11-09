@@ -23,9 +23,10 @@ UNK = 'UNK'
 DELIMITER = '('
 FSAMPLE = 16000
 class MSCOCO_Preprocessor():
-  def __init__(self, instance_file, caption_file, pronun_dict=None):
+  def __init__(self, instance_file, caption_file, speech_file=None, pronun_dict=None):
     self.instance_file = instance_file
     self.caption_file = caption_file
+    self.speech_file = speech_file
     if pronun_dict is None:
       self.pronun_dict = cmudict.dict()
     else:
@@ -37,9 +38,12 @@ class MSCOCO_Preprocessor():
     try:
       coco_api = COCO(self.instance_file)
       coco_api_caption = COCO(self.caption_file)
+      speech_api = None
+      if self.speech_file is not None:
+        speech_api = SpeechCoco(self.speech_file)
     except:
       raise RuntimeError("Please Run make in the cocoapi before running this") 
-    
+
     for ex, img_id in enumerate(coco_api.imgToAnns.keys()):
       # XXX
       #if ex > 2:
@@ -49,8 +53,8 @@ class MSCOCO_Preprocessor():
       anns = coco_api.loadAnns(ann_ids)
       img_info = coco_api.loadImgs(img_id)
       img_filename = img_info[0]['file_name']
-      print(img_id, img_filename)      
-      
+      print(img_id, img_filename)       
+
       captions = coco_api_caption.loadAnns(capt_ids)
       bboxes = []
       
@@ -73,12 +77,33 @@ class MSCOCO_Preprocessor():
         caption = ' '.join(word_tokenize(caption))
         caption_list.append(caption)
 
-      # TODO: Add functionalities to extract alignment info
+      acapt_ids = []
+      spk_ids = []
+      word_aligns = []  
+      if self.speech_file is not None:
+        audio_caption_info = speech_api.getImgCaptions(img_id)
+        caption_list = [] # XXX: overwrite the text caption from the text API
+        for acapt in audio_caption_info:
+          audio_filename = acapt.filename
+          acapt_ids.append(audio_filename.split('.')[0])
+          caption = acapt.text
+          caption = ' '.join(word_tokenize(caption))
+          caption_list.append(caption)
+
+          spk_ids.append(acapt.speaker.name)
+          word_align_info = acapt.timecode.parse()
+          word_align = []
+          for ali in word_align_info:
+            word_align.append((ali['value'], ali['begin'], ali['end'])) 
+          word_aligns.append(word_align)
+
       pair_info = {'image_id': str(img_filename.split('.')[0]),
-                   'caption_id': str(img_filename.split('.')[0]), # XXX
+                   'caption_ids': acapt_ids,
+                   'speaker_ids': spk_ids,
                    'coco_id': img_id,
                    'caption_texts': caption_list,
-                   'bboxes': bboxes
+                   'bboxes': bboxes,
+                   'word_alignments':word_aligns
                   }
       pair_info_list.append(pair_info)
   
