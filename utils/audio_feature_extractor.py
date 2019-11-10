@@ -206,7 +206,8 @@ class MSCOCOAudioFeaturePreprocessor:
     self.mfcc2wavs = {} 
     self.spk_means = {}
     self.spk_vars = {}
-    self.spkr_counts = {}
+    self.utt2spk = {}
+    self.spk_counts = {}
 
   def extractMFCC(self, feat_configs, out_dir):
     n_mfcc = feat_configs.get("n_mfcc", 14)
@@ -216,16 +217,15 @@ class MSCOCOAudioFeaturePreprocessor:
     compute_cmvn = feat_configs.get("compute_cmvn", True)
 
     # XXX
-    for i, audio_info_i in enumerate(self.audio_info[:2]):
+    for i, audio_info_i in enumerate(self.audio_info):
       index = 'arr_'+str(i)
       data_ids = audio_info_i["data_ids"]
       print(data_ids)
       self.mfccs[index] = []
       for data_id in data_ids:
-        audio_id = data_id[1]
+        audio_id = '_'.join(data_id[1].split('_')[:-1])
         print(audio_id)
-        # XXX
-        sr, y = io.wavfile.read(self.audio_dir + 'wavs/' + audio_id+'.wav') 
+        sr, y = io.wavfile.read(self.audio_dir + 'wav/' + audio_id+'.wav') 
         start_ms, end_ms = data_id[2], data_id[3]
         spk = data_id[-1]
         start = int(start_ms * sr / 1000.)
@@ -234,51 +234,58 @@ class MSCOCOAudioFeaturePreprocessor:
         y = preemphasis(y, coeff)
         y = y[start:end]
         mfcc = librosa.feature.mfcc(y, sr=sr, n_mfcc=n_mfcc, dct_type=dct_type)
+        if order >= 1:
+          mfcc_delta = librosa.feature.delta(mfcc, mode='nearest')
+          mfcc = np.concatenate([mfcc, mfcc_delta], axis=0)
+        if order >= 2:
+          mfcc_delta2 = librosa.feature.delta(mfcc[:n_mfcc], order=2, mode='nearest')
+          mfcc = np.concatenate([mfcc, mfcc_delta2], axis=0)
+
         n_frames_mfcc = mfcc.shape[1]
+        
         self.mfccs[index].append(mfcc.T)
         if spk in self.spk_counts:
           self.spk_counts[spk] += 1
         else:
           self.spk_counts[spk] = 1
-        
-    np.savez(out_dir + "flickr_mfcc.npz", **self.mfccs)
+
+        if index in self.utt2spk:
+          self.utt2spk[index].append(spk)
+        else: 
+          self.utt2spk[index] = [spk]
+    np.savez(out_dir + "mscoco_mfcc.npz", **self.mfccs)
     
     if compute_cmvn:
       self.cmvn(feat_configs, out_dir)
     
-    np.savez(out_dir + "flickr_mfcc_cmvn.npz", **self.mfccs)     
+    np.savez(out_dir + "mscoco_mfcc_cmvn.npz", **self.mfccs)     
 
   def cmvn(self, feat_configs, out_dir):
-    n_mfcc = feat_configs.get("n_mfcc", 13)
+    n_mfcc = feat_configs.get("n_mfcc", 14)
     order = feat_configs.get("order", 2)
     
     feat_dim = n_mfcc * (order + 1)
-    self.spk_means = {spk: np.zeros((feat_dim,)) for spk in self.spk_count}
-    self.spk_vars = {spk: np.zeros((feat_dim,)) for spk in self.spk_count}
+    self.spk_means = {spk: np.zeros((feat_dim,)) for spk in self.spk_counts}
+    self.spk_vars = {spk: np.zeros((feat_dim,)) for spk in self.spk_counts}
 
-    for feat_id in sorted(self.mfccs, key=lambda x:x.split('_')[-1]):
-      example_id = int(feat.split('_')[-1])
-      data_ids = self.audio_info[example_id]
-      for data_id in data_ids:
-        spk_id = data_id[-1] 
-        self.spk_means[spk_id] += 1. / self.spk_counts[spk_id] * np.sum(self.mfccs[feat_id], axis=0)
+    # XXX
+    for feat_id in sorted(self.mfccs, key=lambda x:int(x.split('_')[-1])):
+      spk_ids = self.utt2spk[feat_id]
+      for afeat, spk_id in zip(self.mfccs[feat_id], spk_ids):
+        self.spk_means[spk_id] += 1. / self.spk_counts[spk_id] * np.sum(afeat, axis=0)
       
-    for feat_id in sorted(self.mfccs, key=lambda x:x.split('_')[-1]):
-      example_id = int(feat.split('_')[-1])
-      data_ids = self.audio_info[example_id]
-      for data_id in data_ids:
-        spk_id = data_id[-1]
-        self.spk_vars[spk_id] += 1. / self.spk_counts[spk_id] * np.sum((self.mfccs[feat_id] - self.spk_means[spk_id]) ** 2, axis=0)
+    for feat_id in sorted(self.mfccs, key=lambda x:int(x.split('_')[-1])):
+      spk_ids = self.utt2spk[feat_id]
+      for afeat, spk_id in zip(self.mfccs[feat_id], spk_ids):
+        self.spk_vars[spk_id] += 1. / self.spk_counts[spk_id] * np.sum((afeat - self.spk_means[spk_id]) ** 2, axis=0)
 
-    np.savez(out_dir+"flickr_mfcc_spk_means.npz")
-    np.savez(out_dir+"flickr_mfcc_spk_variance.npz")
+    np.savez(out_dir+"mscoco_mfcc_spk_means.npz")
+    np.savez(out_dir+"mscoco_mfcc_spk_variance.npz")
     
-    for feat_id in sorted(self.mfccs, key=lambda x:x.split('_')[-1]):
-      utt_id = "_".join(feat_id.split('_')[:-1]) + ".wav"
-      spk_id = self.utt2spk[utt_id]
-      if (self.spk_vars[spk_id] == 0).any():
-        print(spk_id)
-      self.mfccs[feat_id] = (self.mfccs[feat_id] - self.spk_means[spk_id]) / np.sqrt(self.spk_vars[spk_id]) 
+    for feat_id in sorted(self.mfccs, key=lambda x:int(x.split('_')[-1])):
+      spk_ids = self.utt2spk[feat_id]
+      for i, (afeat, spk_id) in enumerate(zip(self.mfccs[feat_id], spk_ids)):
+        self.mfccs[feat_id][i] = (afeat - self.spk_means[spk_id]) / np.sqrt(self.spk_vars[spk_id]) 
 
 def preemphasis(signal, coeff=0.97):
   return np.append(signal[0], signal[1:] - coeff * signal[:-1])
@@ -328,8 +335,8 @@ if __name__ == "__main__":
   #out_dir = data_dir
   #feat_extractor = FlickrFeaturePreprocessor(audio_info_file, audio_dir, utt2spk_file)
   out_dir = '.'
-  audio_dir = '/home/lwang114/data/mscoco/val2014_wavs/'
-  audio_info_file = 'mscoco_subset_concept_info_power_law.json' 
+  audio_dir = '/home/lwang114/data/mscoco/val2014/'
+  audio_info_file = '../data/mscoco/mscoco_subset_concept_info_power_law.json' 
   feat_extractor = MSCOCOAudioFeaturePreprocessor(audio_info_file, audio_dir)
   feat_extractor.extractMFCC(feat_configs, out_dir)
 
