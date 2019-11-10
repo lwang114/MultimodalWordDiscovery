@@ -108,7 +108,48 @@ class FlickrFeaturePreprocessor:
       if (self.spk_vars[spk_id] == 0).any():
         print(spk_id)
       self.mfccs[feat_id] = (self.mfccs[feat_id] - self.spk_means[spk_id]) / np.sqrt(self.spk_vars[spk_id]) 
-   
+  
+  def extract_concept_word_kamper_embeddings(self, feat_file, alignment_file, segmentation_file, embed_dim, file_prefix='flickr_concept_kamper_embeddings', save_segmentation=True):
+    feat_npz = np.load(feat_file)
+    segment_npz = np.load(segmentation_file)
+    segment_ids = [k for k in sorted(segment_npz, key=lambda x:int(x.split('_')[-1]))]
+    # XXX
+    with open(alignment_file, 'r') as f:
+      align_info = json.load(f)
+    align_info = align_info 
+
+    concept_word_segments = {}
+    concept_word_embeddings = {} 
+    for i, seg_id in enumerate(segment_ids):
+      print(seg_id)
+      feats = feat_npz[seg_id]
+      segs = segment_npz[seg_id]
+      aligns = align_info[i]['alignment'] 
+      concept_segs = []
+      concept_feats = []
+      for start, end in zip(segs[:-1], segs[1:]):
+        if len(set(aligns[start:end])) > 1:
+          print('non-uniform alignment within segment: ', start, end, aligns[start:end])
+        
+        if np.sum(np.asarray(aligns[start:end]) > 0) > 1./2 * (end-start):
+          concept_segs.append([start, end])
+          concept_feats.append(feats[start:end])
+      concept_word_segments[seg_id] = concept_segs
+      concept_embeds = self.get_concept_embeds(concept_feats, embed_dim)
+      concept_word_embeddings[seg_id] = concept_embeds
+    np.savez(file_prefix+'.npz', **concept_word_embeddings)
+    if save_segmentation:
+      np.savez(file_prefix+'_segmentation.npz', **concept_word_segments) 
+
+  def get_concept_embeds(self, x, embed_dim, frame_dim=12):
+    embeddings = []
+    for seg in x:
+      #print("seg.shape", seg.shape)
+      #print("seg:", segmentation[i_w+1])
+      #print("embed of seg:", self.embed(seg))
+      embeddings.append(embed(seg, embed_dim, frame_dim=frame_dim))  
+    return np.array(embeddings)
+     
   def convertMatToNpz(feat_mat_file, feat_npz_file, utterance_ids_file=None, feat2wav_file=None):
     feat_mat = io.loadmat(feat_mat_file)['F']
     n_feats = len(feat_mat)
@@ -155,21 +196,141 @@ class FlickrFeaturePreprocessor:
       with open(feat2wav_file, 'w') as f:
         json.dump(feat2wavs, f)
 
+class MSCOCOAudioFeaturePreprocessor:
+  def __init__(self, audio_info_file, audio_dir):
+    with open(audio_info_file, 'r') as f:
+      audio_info = json.load(f)
+      self.audio_info = [audio_info[k] for k in sorted(audio_info, key=lambda x:int(x.split('_')[-1]))]
+    self.audio_dir = audio_dir
+    self.mfccs = {}
+    self.mfcc2wavs = {} 
+    self.spk_means = {}
+    self.spk_vars = {}
+    self.spkr_counts = {}
+
+  def extractMFCC(self, feat_configs, out_dir):
+    n_mfcc = feat_configs.get("n_mfcc", 14)
+    order = feat_configs.get("order", 2)
+    coeff = feat_configs.get("coeff", 0.97)
+    dct_type = feat_configs.get("dct_type", 3)
+    compute_cmvn = feat_configs.get("compute_cmvn", True)
+
+    # XXX
+    for i, audio_info_i in enumerate(self.audio_info[:2]):
+      index = 'arr_'+str(i)
+      data_ids = audio_info_i["data_ids"]
+      print(data_ids)
+      self.mfccs[index] = []
+      for data_id in data_ids:
+        audio_id = data_id[1]
+        print(audio_id)
+        # XXX
+        sr, y = io.wavfile.read(self.audio_dir + 'wavs/' + audio_id+'.wav') 
+        start_ms, end_ms = data_id[2], data_id[3]
+        spk = data_id[-1]
+        start = int(start_ms * sr / 1000.)
+        end = int(end_ms * sr / 1000.)
+
+        y = preemphasis(y, coeff)
+        y = y[start:end]
+        mfcc = librosa.feature.mfcc(y, sr=sr, n_mfcc=n_mfcc, dct_type=dct_type)
+        n_frames_mfcc = mfcc.shape[1]
+        self.mfccs[index].append(mfcc.T)
+        if spk in self.spk_counts:
+          self.spk_counts[spk] += 1
+        else:
+          self.spk_counts[spk] = 1
+        
+    np.savez(out_dir + "flickr_mfcc.npz", **self.mfccs)
+    
+    if compute_cmvn:
+      self.cmvn(feat_configs, out_dir)
+    
+    np.savez(out_dir + "flickr_mfcc_cmvn.npz", **self.mfccs)     
+
+  def cmvn(self, feat_configs, out_dir):
+    n_mfcc = feat_configs.get("n_mfcc", 13)
+    order = feat_configs.get("order", 2)
+    
+    feat_dim = n_mfcc * (order + 1)
+    self.spk_means = {spk: np.zeros((feat_dim,)) for spk in self.spk_count}
+    self.spk_vars = {spk: np.zeros((feat_dim,)) for spk in self.spk_count}
+
+    for feat_id in sorted(self.mfccs, key=lambda x:x.split('_')[-1]):
+      example_id = int(feat.split('_')[-1])
+      data_ids = self.audio_info[example_id]
+      for data_id in data_ids:
+        spk_id = data_id[-1] 
+        self.spk_means[spk_id] += 1. / self.spk_counts[spk_id] * np.sum(self.mfccs[feat_id], axis=0)
+      
+    for feat_id in sorted(self.mfccs, key=lambda x:x.split('_')[-1]):
+      example_id = int(feat.split('_')[-1])
+      data_ids = self.audio_info[example_id]
+      for data_id in data_ids:
+        spk_id = data_id[-1]
+        self.spk_vars[spk_id] += 1. / self.spk_counts[spk_id] * np.sum((self.mfccs[feat_id] - self.spk_means[spk_id]) ** 2, axis=0)
+
+    np.savez(out_dir+"flickr_mfcc_spk_means.npz")
+    np.savez(out_dir+"flickr_mfcc_spk_variance.npz")
+    
+    for feat_id in sorted(self.mfccs, key=lambda x:x.split('_')[-1]):
+      utt_id = "_".join(feat_id.split('_')[:-1]) + ".wav"
+      spk_id = self.utt2spk[utt_id]
+      if (self.spk_vars[spk_id] == 0).any():
+        print(spk_id)
+      self.mfccs[feat_id] = (self.mfccs[feat_id] - self.spk_means[spk_id]) / np.sqrt(self.spk_vars[spk_id]) 
+
 def preemphasis(signal, coeff=0.97):
   return np.append(signal[0], signal[1:] - coeff * signal[:-1])
 
+def embed(y, embed_dim, frame_dim=None, technique="resample"):
+  #assert embed_dim % self.audio_feat_dim == 0
+  if frame_dim: 
+    y = y[:, :frame_dim].T
+  else:
+    y = y.T
+    frame_dim = y.shape[-1]
+
+  n = int(embed_dim / frame_dim)
+  if y.shape[0] == 1: 
+    y_new = np.repeat(y, n)   
+
+  #if y.shape[0] <= n:
+  #  technique = "interpolate" 
+       
+  #print(embed_dim / frame_dim)
+  if technique == "interpolate":
+      x = np.arange(y.shape[1])
+      f = interpolate.interp1d(x, y, kind="linear")
+      x_new = np.linspace(0, y.shape[1] - 1, n)
+      y_new = f(x_new).flatten(ORDER) #.flatten("F")
+  elif technique == "resample":
+      y_new = signal.resample(y.astype("float32"), n, axis=1).flatten(ORDER) #.flatten("F")
+  elif technique == "rasanen":
+      # Taken from Rasenen et al., Interspeech, 2015
+      n_frames_in_multiple = int(np.floor(y.shape[1] / n)) * n
+      y_new = np.mean(
+          y[:, :n_frames_in_multiple].reshape((d_frame, n, -1)), axis=-1
+          ).flatten(ORDER) #.flatten("F")
+  return y_new
+ 
+
 if __name__ == "__main__":
-  data_dir = "../data/flickr30k/audio_level/"
-  audio_info_file = data_dir + "flickr30k_gold_alignment.json"
-  audio_dir = "/home/lwang114/data/flickr_audio/"#"/ws/ifp-53_2/hasegawa/lwang114/data/flickr_audio/"
-  utt2spk_file = audio_dir + "wav2spk.txt"
-  feat_mat_file = data_dir + "flickr_mfcc_cmvn_htk.mat"
-  feat_npz_file = data_dir + "flickr_mfcc_cmvn_htk.npz"
-  utterance_ids_file = data_dir + "ids_to_utterance_labels.json"
-
+  #data_dir = "../data/flickr30k/audio_level/"
+  #audio_info_file = data_dir + "flickr30k_gold_alignment.json"
+  #audio_dir = "/home/lwang114/data/flickr_audio/"#"/ws/ifp-53_2/hasegawa/lwang114/data/flickr_audio/"
+  #utt2spk_file = audio_dir + "wav2spk.txt"
+  #feat_mat_file = data_dir + "flickr_embeddings.mat" #"flickr_mfcc_cmvn_htk.mat"
+  #feat_npz_file = data_dir + "flickr_embeddings.npz" #"flickr_mfcc_cmvn_htk.npz"
+  #utterance_ids_file = data_dir + "ids_to_utterance_labels.json"
+  
   feat_configs = {} 
-  out_dir = data_dir
-  feat_extractor = FlickrFeaturePreprocessor(audio_info_file, audio_dir, utt2spk_file)
-  #feat_extractor.extractMFCC(feat_configs, out_dir)
+  #out_dir = data_dir
+  #feat_extractor = FlickrFeaturePreprocessor(audio_info_file, audio_dir, utt2spk_file)
+  out_dir = '.'
+  audio_dir = '/home/lwang114/data/mscoco/val2014_wavs/'
+  audio_info_file = 'mscoco_subset_concept_info_power_law.json' 
+  feat_extractor = MSCOCOAudioFeaturePreprocessor(audio_info_file, audio_dir)
+  feat_extractor.extractMFCC(feat_configs, out_dir)
 
-  feat_extractor.convertMatToNpz(feat_mat_file, feat_npz_file, utterance_ids_file)
+  #feat_extractor.convertMatToNpz(feat_mat_file, feat_npz_file, utterance_ids_file)
