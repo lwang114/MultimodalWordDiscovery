@@ -25,7 +25,7 @@ class ImageAudioWordDiscoverer:
     self.Mmax = model_configs.get('Mmax', 5) # Maximum number of mixtures per word
     self.embed_dim = model_configs.get('embedding_dim', 130)
     
-    # TODO: Match dimensions
+    # TODO: Make names match the distribution name
     self.g_sb0 = model_configs.get('gamma_sb', np.ones((self.Kmax, 2))) # Stick-breaking beta distribution parameter
     self.g_a0 = model_configs.get('gamma_a', 0.1)
     self.g_at0 = model_configs.get('gamma_a_trans', 0.1) # Alignment transition Dirichlet priors parameter
@@ -33,6 +33,11 @@ class ImageAudioWordDiscoverer:
     self.g_mv0 = model_configs.get('gamma_mv', 0.1) # Visual mixture weight prior parameter
     self.k_a0 = model_configs.get('k_a', 0.1) # Ratio between obs variance and prior variance
     self.k_v0 = model_configs.get('k_v', 0.1) # Ratio between obs variance and prior variance
+    self.b_a0 = model_configs.get('beta_a0', 0.1) # Parameters for the gamma prior of the inverse variances for audio
+    self.b_a1 = model_configs.get('beta_a1', 0.1) # Parameters for the gamma prior of the inverse variances for audio 
+    self.b_v0 = model_configs.get('beta_v0', 0.1) # Parameters for the gamma prior of the inverse variances for image
+    self.b_v1 = model_configs.get('beta_v1', 0.1) # Parameters for the gamma prior of the inverse variances for image
+
     alignments = model_configs.get('alignments', None)
     segmentations = model_configs.get('segmentations', None)
     self.has_null = model_configs.get('has_null', True)
@@ -46,11 +51,12 @@ class ImageAudioWordDiscoverer:
     self.align_trans = {}
     self.audio_obs_model = {'weights': None,
                             'means': None,
-                            'variance': None,
+                            'variances': None,
                             'n_mixtures': None
                             }
     self.image_obs_model = {'weights': None,
                             'means': None,
+                            'variances': None,
                             'n_mixures': None
                             }    
     
@@ -102,14 +108,16 @@ class ImageAudioWordDiscoverer:
     self.mu_a0 /= n_frames_a
     self.mu_v0 /= n_frames_v
 
-    self.fixed_variance_a = 0. # XXX: Assume fixed variances  
-    self.fixed_variance_v = 0. # XXX: Assume fixed variances  
+    #self.fixed_variance_a = 0. # XXX: Assume fixed variances  
+    #self.fixed_variance_v = 0. # XXX: Assume fixed variances  
 
     c = 3.
     for afeat, vfeat in zip(self.a_corpus, self.v_corpus):
-      self.fixed_variance_a += np.sum((afeat - self.mu_a0)**2) / (c * n_frames_a * self.embed_dim)
-      self.fixed_variance_v += np.sum((vfeat - self.mu_v0)**2) / (c * n_frames_v * self.image_feat_dim)
-    
+      #self.fixed_variance_a += np.sum((afeat - self.mu_a0)**2) / (c * n_frames_a * self.embed_dim)
+      #self.fixed_variance_v += np.sum((vfeat - self.mu_v0)**2) / (c * n_frames_v * self.image_feat_dim)
+      self.audio_obs_model['variances'] = np.sum((afeat - self.mu_a0)**2) / (c * n_frames_a * self.embed_dim)
+      self.image_obs_model['variances'] = np.sum((vfeat - self.mu_v0)**2) / (c * n_frames_v * self.image_feat_dim)
+
     #print('self.mu_a0.shape, self.mu_v0.shape: ', self.mu_a0.shape, self.mu_v0.shape)
     #print('Var(a), Var(v): ', self.fixed_variance_a, self.fixed_variance_v) 
   
@@ -337,7 +345,7 @@ class ImageAudioWordDiscoverer:
       aggregated_counts_gt.append(logsumexp(counts_gt, axis=0))
     new_g_sbN[:, 0] = logsumexp(np.array([new_g_sbN[:, 0]]+aggregated_counts), axis=0)
     new_g_sbN[:, 1] = logsumexp(np.array([new_g_sbN[:, 1]]+aggregated_counts_gt), axis=0)
-    
+     
     self.g_maN = new_g_maN
     self.g_mvN = new_g_mvN
     self.g_aN = new_g_aN
@@ -387,31 +395,40 @@ class ImageAudioWordDiscoverer:
   def update_observation_models(self):
     self.audio_obs_model['weights'] = -np.inf * np.ones(self.g_maN.shape)
     self.image_obs_model['weights'] = -np.inf * np.ones(self.g_mvN.shape)
-    exp_audio_mixture_means = np.tile(self.k_a0 * self.mu_a0, (self.audio_obs_model['means'].shape[0], self.audio_obs_model['means'].shape[1], 1))
-    exp_image_mixture_means = np.tile(self.k_v0 * self.mu_v0, (self.image_obs_model['means'].shape[0], self.image_obs_model['means'].shape[1], 1))
+    exp_audio_mixture_means = np.tile(self.k_a0 * self.mu_a0, (self.K_max, self.M_max, 1))
+    exp_image_mixture_means = np.tile(self.k_v0 * self.mu_v0, (self.K_max, self.M_max, 1))
+    exp_audio_mixture_variances = np.tile(self.b_a0 * np.ones((self.embed_dim,)), (self.K_max, self.M_max, 1))
+    exp_image_mixture_variances = np.tile(self.b_v0 * np.ones((self.embed_dim,)), (self.K_max, self.M_max, 1))
+
     exp_num_audio_mixture = np.zeros((self.Kmax, self.Mmax))
     exp_num_image_mixture = np.zeros((self.Kmax, self.Mmax))
 
     for ex, (afeats, vfeats) in enumerate(zip(self.a_corpus, self.v_corpus)):
       for k in range(self.Kmax):
         counts_z_a = logsumexp(self.counts_align[ex] + self.counts_concept[ex][:, k], axis=-1)
-        counts_ma_z = (counts_z_a + self.counts_audio_mixture[ex][:, k, :].T).T
-        counts_mv_z = (self.counts_concept[ex][:, k] + self.counts_image_mixture[ex][:, k, :].T).T
-        exp_audio_mixture_means[k] += np.exp(counts_ma_z).T @ afeats
-        exp_image_mixture_means[k] += np.exp(self.counts_concept[ex][:, k] + self.counts_image_mixture[ex][:, k, :].T) @ vfeats
-
-        exp_num_audio_mixture[k] += np.sum(np.exp(counts_ma_z), axis=0)
-        exp_num_image_mixture[k] += np.sum(np.exp(counts_mv_z), axis=0)
+        counts_ma_z = (counts_z_a + self.counts_audio_mixture[ex][:, k, :].T)
+        counts_mv_z = (self.counts_concept[ex][:, k] + self.counts_image_mixture[ex][:, k, :].T)
         
-    #print('exp_audio_mixture_means.shape, exp_num_audio_mixture.shape: ', exp_audio_mixture_means.shape, exp_num_audio_mixture.shape)
+        exp_audio_mixture_means[k] += np.exp(counts_ma_z) @ afeats
+        exp_image_mixture_means[k] += np.exp(self.counts_mv_z) @ vfeats      
+        exp_audio_mixture_variances[k] += np.exp(counts_ma_z) @ (afeats ** 2)
+        exp_image_mixture_variances[k] += np.exp(counts_mv_z) @ (vfeats ** 2)
 
+        exp_num_audio_mixture[k] += 1./2 * np.sum(np.exp(counts_ma_z), axis=0)
+        exp_num_image_mixture[k] += 1./2 * np.sum(np.exp(counts_mv_z), axis=0)
+
+    #print('exp_audio_mixture_means.shape, exp_num_audio_mixture.shape: ', exp_audio_mixture_means.shape, exp_num_audio_mixture.shape)
     self.audio_obs_model['means'] = np.transpose(np.transpose(exp_audio_mixture_means, (2, 0, 1)) / (self.k_a0 + exp_num_audio_mixture), (1, 2, 0))
     self.image_obs_model['means'] = np.transpose(np.transpose(exp_image_mixture_means, (2, 0, 1)) / (self.k_v0 + exp_num_image_mixture), (1, 2, 0))
+    self.audio_obs_model['variances'] = np.transpose(np.transpose(exp_audio_mixture_variances - self.audio_obs_model['means'] ** 2, (2, 0, 1)) / (self.b_a1 + exp_num_audio_mixture), (1, 2, 0))
+    self.image_obs_model['variances'] = np.transpose(np.transpose(exp_image_mixture_variances - self.image_obs_model['means'] ** 2, (2, 0, 1)) / (self.b_v1 + exp_num_image_mixture), (1, 2, 0))
+
     # Normalize
     self.audio_obs_model['weights'] = (self.g_maN.T - logsumexp(self.g_maN, axis=1)).T
     self.image_obs_model['weights'] = (self.g_mvN.T - logsumexp(self.g_mvN, axis=1)).T 
 
   def train_using_EM(self, num_iterations=10, write_model=True):
+
     self.initialize_model()
     #print('initial audio_obs_means: ', self.audio_obs_model['means'])
     #print('initial image_obs_means: ', self.image_obs_model['means'])
