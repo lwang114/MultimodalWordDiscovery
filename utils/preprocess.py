@@ -17,90 +17,6 @@ UNK = 'UNK'
 PUNCT = ['.', ',', '?', '!', '`', '\'', ';'] #'\"']
 
 # TODO: Add config options
-'''class MSCOCO_Preprocessor():
-  def __init__(self, instance_file, caption_file, pronun_dict=None):
-    self.instance_file = instance_file
-    self.caption_file = caption_file
-    self.pronun_dict = pronun_dict
-
-  def extract_info(self, out_file='mscoco_info.json'):
-    pair_info_list = []
-    try:
-      coco_api = COCO(self.instance_file)
-      coco_api_caption = COCO(self.caption_file)
-    except:
-      raise RuntimeError("Please Run make in the cocoapi before running this") 
-    
-    for img_id in coco_api.imgToAnns.keys():
-      print(img_id)      
-      ann_ids = coco_api.getAnnIds(img_id)
-      capt_ids = coco_api_caption.getAnnIds(img_id)
-      anns = coco_api.loadAnns(ann_ids)
-      captions = coco_api_caption.loadAnns(capt_ids)
-      bboxes = []
-      
-      for ann in anns:
-        cat = coco_api.loadCats(ann['category_id'])[0]['name']
-        if DEBUG:
-          print(ann)
-        x, y, w, h = ann['bbox']
-        # If the concept class is a compound, combine the words
-        if len(cat.split()) > 1:
-          cat = '_'.join(cat.split())
-        
-        bboxes.append((cat, x, y, w, h))
-      
-      caption_list = []
-      for capt in captions:
-        if DEBUG:
-          print(capt)
-        caption = capt['caption']
-        caption = ' '.join(word_tokenize(caption))
-        caption_list.append(caption)
-
-      pair_info = {'img_id': img_id,
-                  'text': caption_list,
-                  'bboxes': bboxes
-                  }
-      pair_info_list.append(pair_info)
-  
-    with open(out_file, 'w') as f:
-      json.dump(pair_info_list, f)
-
-  def word_to_phoneme(self, sent):
-    pass
-
-  def json_to_text(self, json_file, text_file, 
-                  allow_repeated_concepts=False):
-    json_pairs = None
-    text_pairs = []
-    with open(json_file, 'r') as f:
-      json_pairs = json.load(f)
-    
-    ### Temporary: comment this line out once the json file is in proper format
-    #json_pairs = json_pairs['data']
-
-    for pair in json_pairs:
-      concepts = []
-      sent = '' 
-      bboxes = pair['bboxes']
-      for bb in bboxes:
-        concept = bb[0]
-        concepts.append(concept)
-      
-      if not allow_repeated_concepts:
-        concepts = list(set(concepts))
-
-      # TODO: Retokenize
-      sents = pair['text'] 
-      for sent in sents:
-        text_pair = '%s\n%s\n' % (' '.join(concepts), sent)
-        text_pairs.append(text_pair)
-    
-    with open(text_file, 'w') as f:
-      f.write('\n'.join(text_pairs))   
-'''
-
 class Flickr_Preprocessor(object):
   def __init__(self, instance_file, alignment_file, caption_file, image_path='./', category_file='imagenet_class_index.json'):
     self.img_path = image_path
@@ -112,9 +28,10 @@ class Flickr_Preprocessor(object):
     with open(alignment_file, 'r') as f:
       self.align_list = f.read().strip().split('\n')
     
-    with open(category_file, 'r') as f:
-      class_idx = json.load(f)
-      self.idx2label = [class_idx[str(k)][1] for k in range(len(class_idx))] 
+    # XXX
+    #with open(category_file, 'r') as f:
+    #  class_idx = json.load(f)
+    #  self.idx2label = [class_idx[str(k)][1] for k in range(len(class_idx))] 
     
     self.pronun_dict = cmudict.dict()
 
@@ -149,8 +66,7 @@ class Flickr_Preprocessor(object):
         pair = {'image_id': img_id,
                 'image_filename': img_filename,
                 'caption_texts': [sent],
-                'image_concepts': img_concepts,
-        }
+                'image_concepts': img_concepts}
         pairs.append(pair)
       else:
         for i, pair in enumerate(pairs):
@@ -269,6 +185,82 @@ class Flickr_Preprocessor(object):
     
     with open(text_file, 'w') as f:
       f.write('\n'.join(text_pairs))   
+
+  def json_to_text_gclda(self, json_file, text_file_prefix, allow_repeated_concepts=False):
+    json_pairs = None
+    text_pairs = []
+    with open(json_file, 'r') as f:
+      json_pairs = json.load(f)
+    
+    # Temporary: comment this line out once the json file is in proper format
+    #json_pairs = json_pairs['data']
+    src = ['document id, phone id']
+    trg = ['document id, concept id']
+    img_ids = []  
+
+    word_labels = []    
+    # XXX
+    for ex, pair in enumerate(json_pairs[:10]):
+      sents = None
+      if 'text' in pair.keys():
+        sents = pair['text'] 
+      elif 'caption_phonemes' in pair.keys():
+        sents = pair['caption_phonemes']
+      else:
+        sents = pair['caption_texts']
+
+      for sent in sents:
+        for w in sent.split():
+          if w not in word_labels:
+            word_labels.append(w)
+    
+    word_labels = sorted(word_labels)
+    print('len(word_labels): ', len(word_labels))
+    w2idx = {w: i for i, w in enumerate(word_labels)}
+
+    # XXX
+    for ex, pair in enumerate(json_pairs[:10]):
+      concepts = []
+      sent = '' 
+      bboxes = None
+      img_ids.append(pair['image_id'])
+      if 'bboxes' in pair.keys():
+        bboxes = pair['bboxes']
+      else:
+        bboxes = pair['image_concepts']
+
+      for bb in bboxes:
+        concept = bb[0]
+        concepts.append(concept)
+      
+      if not allow_repeated_concepts:
+        concepts = sorted(list(set(concepts)))
+      
+      # TODO: Retokenize
+      sents = None
+      if 'text' in pair.keys():
+        sents = pair['text'] 
+      elif 'caption_phonemes' in pair.keys():
+        sents = pair['caption_phonemes']
+      else:
+        sents = pair['caption_texts']
+ 
+      for sent in sents:
+        #print(sent)
+        single_src = [str(ex+1)+','+str(w2idx[w]) for w in sent.split()]
+        single_trg = [str(ex+1)+','+c for c in concept.split()] 
+        
+        src += single_src
+        trg += single_trg
+    
+    with open(text_file_prefix+'/wordindices.txt', 'w') as f:
+      f.write('\n'.join(src))
+    with open(text_file_prefix+'/conceptindices.txt', 'w') as f:
+      f.write('\n'.join(trg))
+    with open(text_file_prefix+'/pmids.txt', 'w') as f:
+      f.write('\n'.join(img_ids))
+    with open(text_file_prefix+'/wordlabels.txt', 'w') as f:
+      f.write('\n'.join(word_labels))
 
   def json_to_xnmt_text(self, json_file, text_file, 
                   allow_repeated_concepts=False):
@@ -520,7 +512,9 @@ class Flickr_Preprocessor(object):
         aligns.append([align, int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3])])
     
     return aligns
-
+  
+  # XXX
+  '''
   # Get the category of a bounding box using VGG16 classifier 
   def _getImgConcept(self, bbox, img_file):
     # TODO: Double check this
@@ -544,6 +538,7 @@ class Flickr_Preprocessor(object):
     idx = out[0].sort()[1][-1]
     return self.idx2label[idx]
     #return bbox
+  '''
 
   # Get the category of a bounding box using wordnet  
   def _getImgConceptWordnet(self, align):
@@ -591,17 +586,22 @@ if __name__ == '__main__':
   instance_file = datapath + 'flickr30k/bboxes.mat'
   alignment_file = datapath + 'flickr30k/flickr30k_phrases.txt'
   caption_file = datapath + 'flickr30k/results_20130124.token'
-  json_file = datapath + 'flickr30k/word_level/flickr30k_info_text_concept.json'
-  category_file = datapath + 'imagenet_class_index.json'
+  #json_file = datapath + 'flickr30k/word_level/flickr30k_info_text_concept.json'
+  json_file = datapath+'flickr30k/phoneme_level/flickr30k_info_phoneme_concept.json' 
+  category_file = 'vgg16_model/imagenet_class_index.json'
   preproc = Flickr_Preprocessor(instance_file, alignment_file, caption_file, category_file=category_file, image_path='../../data/flickr30k/flickr30k-images/')
   #preproc.train_test_split(datapath+'flickr30k/phoneme_level/flickr30k.txt', 100)
-  preproc.train_test_split_from_file(datapath+'flickr30k/phoneme_level/flickr30k_info_phoneme_concept.json', test_file_list='/Users/liming/research/data/flickr/flickr8k_test.txt')
+  #preproc.json_to_text_gclda(json_file, text_file_prefix='../data/flickr30k/phoneme_level/gclda')
+  # XXX
+  preproc.json_to_text_gclda(json_file, text_file_prefix='../data/flickr30k/phoneme_level/gclda_subset')
 
   '''
+  preproc.train_test_split_from_file(datapath+'flickr30k/phoneme_level/flickr30k_info_phoneme_concept.json', test_file_list='/Users/liming/research/data/flickr/flickr8k_test.txt')
+  
   preproc.extract_info(json_file)
   preproc.json_to_text(json_file, 'flickr30k.txt')
   preproc.json_to_xnmt_text(json_file, 'flickr30k.txt')
-
+  
   preproc.create_gold_alignment(json_file, 'flickr30k_gold_alignment.json')
   preproc.create_gold_alignment(json_file, 'flickr30k_alignment.ref')
   preproc.word_to_phoneme(json_file, 'flickr30k_info_phoneme_concept.json')
@@ -611,7 +611,7 @@ if __name__ == '__main__':
   preproc.create_gold_alignment(datapath + 'flickr30k/word_level/flickr30k_info_text_concept.json', datapath + 'flickr30k/word_level/flickr30k_gold_alignment.json')
   preproc.alignment_to_clusters(datapath + 'flickr30k/word_level/flickr30k_gold_alignment.json', datapath + 'flickr30k/word_level/flickr30k_gold_clusters.json')
   preproc.alignment_to_clusters(datapath + 'flickr30k/phoneme_level/flickr30k_gold_alignment.json', datapath + 'data/flickr30k/phoneme_level/flickr30k_gold_clusters.json')
-  preproc.alignment_to_clusters('../smt/exp/ibm1_phoneme_level_clustering/flickr30k_pred_alignment.json', '../smt/exp/ibm1_phoneme_level_clustering/flickr30k_pred_clusters.json')'''
+  preproc.alignment_to_clusters('../smt/exp/ibm1_phoneme_level_clustering/flickr30k_pred_alignment.json', '../smt/exp/ibm1_phoneme_level_clustering/flickr30k_pred_clusters.json')
+  
   preproc.to_xnmt_text(datapath + 'flickr30k/phoneme_level/flickr30k.train', 'flickr30k.train', database_start_index=0)
-  preproc.to_xnmt_text(datapath + 'flickr30k/phoneme_level/flickr30k.test', 'flickr30k.test', database_start_index=6998)
-   
+  preproc.to_xnmt_text(datapath + 'flickr30k/phoneme_level/flickr30k.test', 'flickr30k.test', database_start_index=6998)''' 

@@ -42,7 +42,8 @@ class HMMWordDiscoverer:
         if i == 0:
             tTokenized = s.split() #word_tokenize(s)
             # Add null word in position zero
-            tTokenized.insert(0, NULL)
+            # XXX
+            #tTokenized.insert(0, NULL)
             self.tCorpus.append(tTokenized)
         elif i == 1:
             fTokenized = s.split()
@@ -57,10 +58,10 @@ class HMMWordDiscoverer:
     self.computeTranslationLengthProbabilities()
     
     for m in self.lenProb:
-      self.init[m] = 1 / m * np.ones((m,))
+      self.init[m] = 1. / m * np.ones((m,))
 
     for m in self.lenProb:
-      self.trans[m] = 1 / m * np.ones((m, m))
+      self.trans[m] = 1. / m * np.ones((m, m))
   
   # Set initial values for the translation probabilities p(f|e)
   def initializeModel(self):
@@ -94,7 +95,10 @@ class HMMWordDiscoverer:
               self.obs[tw] = {}  
             if fw not in self.obs[tw].keys():
               self.obs[tw][fw] = 1
-    
+            # XXX
+            else:
+              self.obs[tw][fw] += 1
+   
       for tw in self.obs:
         totCount = sum(self.obs[tw].values())
         for fw in self.obs[tw].keys():
@@ -140,8 +144,10 @@ class HMMWordDiscoverer:
     # Update the initial prob  
     initExpCounts = np.zeros((nState,))  
     for t in range(T):
-      initExpCounts += forwardProbs[t] * backwardProbs[t]
-    
+      initExpCount = forwardProbs[t] * backwardProbs[t]
+      initExpCount /= np.sum(initExpCount)
+      initExpCounts += initExpCount
+      
     return initExpCounts
 
   def updateTransitionCounts(self, forwardProbs, backwardProbs, eSen, fSen):
@@ -153,6 +159,7 @@ class HMMWordDiscoverer:
       obs_arr = np.array([self.obs[eSen[j]][fSen[t+1]] if fSen[t+1] in self.obs[eSen[j]] else 0 for j in range(nState)])
       #transExpCounts += np.tile(forwardProbs[t], (nState, 1)).T * (obs_arr * backwardProbs[t+1]) * self.trans  
       transExpCount = np.tile(forwardProbs[t], (nState, 1)).T * (obs_arr * backwardProbs[t+1]) * self.trans[nState]
+      transExpCount /= np.sum(transExpCount) 
       # Maintain Toeplitz assumption
       # TODO: Make this more efficient
       transJumpCount = {}
@@ -243,11 +250,12 @@ class HMMWordDiscoverer:
       self.printModel('initial_model.txt')
  
     self.initializeModel()
-    initCounts = {m: np.zeros((m,)) for m in self.lenProb}
-    transCounts = {m: np.zeros((m, m)) for m in self.lenProb}
-    obsCounts = {tw: {fw: 0. for fw in self.obs[tw]} for tw in self.obs}  
-    
+   
     for epoch in range(numIterations): 
+      initCounts = {m: np.zeros((m,)) for m in self.lenProb}
+      transCounts = {m: np.zeros((m, m)) for m in self.lenProb}
+      obsCounts = {tw: {fw: 0. for fw in self.obs[tw]} for tw in self.obs}  
+ 
       AvgLogProb = self.computeAvgLogLikelihood()
       print('Epoch', epoch, 'Average Log Likelihood:', self.computeAvgLogLikelihood())  
       
@@ -375,16 +383,17 @@ class HMMWordDiscoverer:
       json.dump(aligns, f, indent=4, sort_keys=True)            
 
 if __name__ == '__main__':
-  trainingCorpusFile = 'test_translation.txt' 
+  #trainingCorpusFile = 'tiny2.txt' 
+  trainingCorpusFile = '../data/mscoco/mscoco_subset_subword_level_power_law.txt' 
   #'../data/flickr30k/phoneme_level/flickr30k.txt'
-  initProbFile = 'models/apr18_tiny_hmm_translate/A_iter=9.txt_initialprobs.txt'
+  #initProbFile = 'models/apr18_tiny_hmm_translate/A_iter=9.txt_initialprobs.txt'
   #'hmm_word_discoverer_iter=9.txt_initialprobs.txt'
-  transProbFile = 'models/apr18_tiny_hmm_translate/A_iter=9.txt_transitionprobs.txt'
+  #transProbFile = 'models/apr18_tiny_hmm_translate/A_iter=9.txt_transitionprobs.txt'
   #'hmm_word_discoverer_iter=9.txt_transitionprobs.txt'
-  obsProbFile = 'models/apr18_tiny_hmm_translate/A_iter=9.txt_observationprobs.txt'
+  #obsProbFile = 'models/apr18_tiny_hmm_translate/A_iter=9.txt_observationprobs.txt'
   #'hmm_word_discoverer_iter=9.txt_observationprobs.txt'
 
-  model = HMMWordDiscoverer(trainingCorpusFile, modelName='A')
+  model = HMMWordDiscoverer(trainingCorpusFile, modelName='exp/nov_20_mscoco_mfcc_phone_concept/subword_concept')
   #model = HMMWordDiscoverer(trainingCorpusFile, initProbFile, transProbFile, obsProbFile, modelName='A')
-  model.trainUsingEM(50, writeModel=True)
-  model.printAlignment('alignment')
+  model.trainUsingEM(20, writeModel=True)
+  model.printAlignment('exp/nov_20_mscoco_mfcc_phone_concept/alignment')

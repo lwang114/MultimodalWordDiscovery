@@ -143,7 +143,7 @@ def plot_word_len_distribution(json_file, out_file='word_len_distribution', cuto
       for i, ph in enumerate(phrases):
         if concepts[concept_indices[i]] == NULL or concepts[concept_indices[i]] == END:
           continue
-        labels.append(len(ph))
+        labels.append(len(ph.split()))
         tot += 1
     else:  
       boundaries = _findWords(ali)
@@ -159,6 +159,7 @@ def plot_word_len_distribution(json_file, out_file='word_len_distribution', cuto
       
   max_len = max(labels)  
   len_dist = np.zeros((max_len+1,))   
+  
   for l in labels:
     len_dist[l] += 1. / float(tot)
 
@@ -360,7 +361,6 @@ def plot_avg_roc(pred_json, gold_json, concept2idx=None, freq_cutoff=100, out_fi
   #avg_fpr += fpr
   #avg_tpr += tpr
 
-'''
 def plot_acoustic_features(utterance_idx, audio_dir, feat_dir, out_file=None):
   mfccs = np.load(feat_dir+"flickr_mfcc_cmvn.npz", "r")
   bnfs = np.load(feat_dir+"flickr_bnf_all_src.npz", "r")
@@ -386,66 +386,66 @@ def plot_acoustic_features(utterance_idx, audio_dir, feat_dir, out_file=None):
   else:
     plt.show()
   plt.close()
-'''
 
 if __name__ == '__main__':
   labels = []
   #top_classes, _ = plot_img_concept_distribution('../data/flickr30k/phoneme_level/flickr30k_gold_alignment.json', '../data/flickr30k/concept2idx.json', cutoff=30)
-  fig, ax = plt.subplots(figsize=(15, 10))
-  top_classes, top_freqs = plot_word_len_distribution('../data/flickr30k/audio_level/flickr30k_gold_alignment.json', draw_plot=False, phone_level=False)
-  plt.plot(top_classes[:50], top_freqs[:50])
-  print(np.sum(top_freqs))
-  labels.append('Groundtruth')
+  test_case = -1
+  if test_case == 0:
+    fig, ax = plt.subplots(figsize=(15, 10))
+    top_classes, top_freqs = plot_word_len_distribution('../data/flickr30k/phoneme_level/flickr30k_gold_alignment.json', draw_plot=False, phone_level=True)
+    plt.plot(top_classes[:50], top_freqs[:50])
+    print(np.sum(top_freqs))
+    labels.append('Groundtruth')
 
-'''
-  top_classes, top_freqs = plot_word_len_distribution('../smt/exp/ibm1_phoneme_level_clustering/flickr30k_pred_alignment.json', draw_plot=False)
-  plt.plot(top_classes[:50], top_freqs[:50])
-  print(np.sum(top_freqs))
-  labels.append('SMT')
+    top_classes, top_freqs = plot_word_len_distribution('../smt/exp/ibm1_phoneme_level_clustering/flickr30k_pred_alignment.json', draw_plot=False)
+    plt.plot(top_classes[:50], top_freqs[:50])
+    print(np.sum(top_freqs))
+    labels.append('SMT')
 
-  top_classes, top_freqs = plot_word_len_distribution('../nmt/exp/feb28_phoneme_level_clustering/output/alignment.json', draw_plot=False)
-  plt.plot(top_classes[:50], top_freqs[:50])
-  print(np.sum(top_freqs))
-  labels.append('NMT (Norm over concepts)')
+    top_classes, top_freqs = plot_word_len_distribution('../nmt/exp/feb28_phoneme_level_clustering/output/alignment.json', draw_plot=False)
+    plt.plot(top_classes[:50], top_freqs[:50])
+    print(np.sum(top_freqs))
+    labels.append('NMT (Norm over concepts)')
 
-  top_classes, top_freqs = plot_word_len_distribution('../nmt/exp/feb26_normalize_over_time/output/alignment.json', draw_plot=False)
-  plt.plot(top_classes[:50], top_freqs[:50])
-  print(np.sum(top_freqs))
-  labels.append('NMT (Norm over time)')
+    top_classes, top_freqs = plot_word_len_distribution('../nmt/exp/feb26_normalize_over_time/output/alignment.json', draw_plot=False)
+    plt.plot(top_classes[:50], top_freqs[:50])
+    print(np.sum(top_freqs))
+    labels.append('NMT (Norm over time)')
 
-  ax.set_xticks(np.arange(0, max(top_classes[:50]), 5))
-  for tick in ax.get_xticklabels():
-    tick.set_fontsize(20)
-  for tick in ax.get_yticklabels():
-    tick.set_fontsize(20)
+    ax.set_xticks(np.arange(0, max(top_classes[:50]), 5))
+    for tick in ax.get_xticklabels():
+      tick.set_fontsize(20)
+    for tick in ax.get_yticklabels():
+      tick.set_fontsize(20)
+    
+    plt.xlabel('Word Length', fontsize=30) 
+    plt.ylabel('Normalized Frequency', fontsize=30)
+    plt.legend(labels, fontsize=30)  
+    plt.savefig('word_len_compare.png')
+    plt.close()
+    
+    exp_dir = '../../status_report_mar8th/outputs/samples/'
+    pred_json = '../smt/exp/ibm1_phoneme_level_clustering/flickr30k_pred_alignment.json'
+    #'../nmt/exp/feb26_normalize_over_time/output/alignment.json'
+    #'../nmt/exp/feb28_phoneme_level_clustering/output/alignment.json' 
+    gold_json = '../data/flickr30k/phoneme_level/flickr30k_gold_alignment.json'
+    trg_idx = 1090
+    filenames_ov_time = [exp_dir+'nmt_samples_norm_ov_time/'+fn for fn in os.listdir(exp_dir+'nmt_samples_norm_ov_time/') if fn.split('.')[-2] == str(trg_idx)]
+    filenames_ov_concept = [exp_dir+'nmt_samples_norm_ov_concept/'+fn for fn in os.listdir(exp_dir+'nmt_samples_norm_ov_concept/') if fn.split('.')[-2] == str(trg_idx)]
+    
+    indices = [trg_idx]
+    #for fn in filenames_ov_time:
+    #  indices.append(fn.split('.')[-2])
+
+    generate_nmt_attention_plots(filenames_ov_concept, 'nmt_ov_concept_')
+    generate_nmt_attention_plots(filenames_ov_time, 'nmt_ov_time_', normalize=True)
+    generate_smt_alignprob_plots(pred_json, indices, 'smt_')
+    generate_gold_alignment_plots(gold_json, indices, 'gold_')
   
-  plt.xlabel('Word Length', fontsize=30) 
-  plt.ylabel('Normalized Frequency', fontsize=30)
-  plt.legend(labels, fontsize=30)  
-  plt.savefig('word_len_compare.png')
-  plt.close()
-  
-  exp_dir = '../../status_report_mar8th/outputs/samples/'
-  pred_json = '../smt/exp/ibm1_phoneme_level_clustering/flickr30k_pred_alignment.json'
-  #'../nmt/exp/feb26_normalize_over_time/output/alignment.json'
-  #'../nmt/exp/feb28_phoneme_level_clustering/output/alignment.json' 
-  gold_json = '../data/flickr30k/phoneme_level/flickr30k_gold_alignment.json'
-  trg_idx = 1090
-  filenames_ov_time = [exp_dir+'nmt_samples_norm_ov_time/'+fn for fn in os.listdir(exp_dir+'nmt_samples_norm_ov_time/') if fn.split('.')[-2] == str(trg_idx)]
-  filenames_ov_concept = [exp_dir+'nmt_samples_norm_ov_concept/'+fn for fn in os.listdir(exp_dir+'nmt_samples_norm_ov_concept/') if fn.split('.')[-2] == str(trg_idx)]
-  
-  indices = [trg_idx]
-  #for fn in filenames_ov_time:
-  #  indices.append(fn.split('.')[-2])
-
-  generate_nmt_attention_plots(filenames_ov_concept, 'nmt_ov_concept_')
-  generate_nmt_attention_plots(filenames_ov_time, 'nmt_ov_time_', normalize=True)
-  generate_smt_alignprob_plots(pred_json, indices, 'smt_')
-  generate_gold_alignment_plots(gold_json, indices, 'gold_')
-  
-  #plot_avg_roc(pred_json, gold_json, concept2idx='../data/flickr30k/concept2idx.json', out_file='nmt_roc')
-
-  audio_dir = "/home/lwang114/data/flickr_audio/wavs/"
-  feat_dir = "../data/flickr30k/audio_level/"
-  utterance_idx = 0
-  plot_acoustic_features(utterance_idx, audio_dir, feat_dir, "%d_features" % utterance_idx)'''
+    #plot_avg_roc(pred_json, gold_json, concept2idx='../data/flickr30k/concept2idx.json', out_file='nmt_roc')
+  elif test_case == 1:
+    audio_dir = "/home/lwang114/data/flickr_audio/wavs/"
+    feat_dir = "../data/flickr30k/audio_level/"
+    utterance_idx = 0
+    plot_acoustic_features(utterance_idx, audio_dir, feat_dir, "%d_features" % utterance_idx)

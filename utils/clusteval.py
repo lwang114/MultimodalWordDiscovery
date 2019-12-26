@@ -4,57 +4,72 @@ from nltk.metrics import recall, precision, f_measure
 from nltk.metrics.distance import edit_distance
 from sklearn.metrics import roc_curve 
 import logging
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+import os
 
 DEBUG = False
 NULL = 'NULL'
 END = '</s>'
+EPS = 1e-17
 
 #logging.basicConfig(filename="clusteval.log", format="%(asctime)s %(message)s", level=logging.DEBUG)
-logging.basicConfig(format="%(asctime)s %(message)s", level=logging.DEBUG)
+#logging.basicConfig(format="%(asctime)s %(message)s", level=logging.DEBUG)
 
 #
 # Parameters:
 # ----------  
 # pred (clusters) --- A list of cluster indices corresponding to each sample
 # gold (classes) --- A list of class indices corresponding to each sample
-#
-def cluster_purity(pred, gold):
-  score = 0
-  if DEBUG:
-    logging.debug('pred[0]: ' + str(pred[0]))
-    logging.debug('gold[0]: ' + str(gold[0]))
-    logging.debug('len(pred), len(gold): ' + str(len(pred)) + ' ' + str(len(gold)))
+def cluster_confusion_matrix(pred, gold, create_plot=True, alignment=None, file_prefix='cluster_confusion_matrix'):
+  assert len(pred) == len(gold) 
+  n = len(pred)
+  if alignment is not None:
+    for i, a in enumerate(alignment):
+      pred[i] = np.array(pred[i])[a['alignment']].tolist()
+
+  n_cp, n_cg = 1, 1
+  for p, g in zip(pred, gold):
+    # XXX: Assume p, q are lists and class indices are zero-based
+    for c_p, c_g in zip(p, g):
+      if c_g + 1 > n_cg:
+        n_cg = c_g + 1
+      
+      if c_p + 1 > n_cp:
+        n_cp = c_p + 1
+  cm = np.zeros((n_cp, n_cg))
   
-  assert len(pred) == len(gold)
-  N = len(pred)
-  for i, (p, g) in enumerate(zip(pred, gold)):
-    if DEBUG:
-      logging.debug('pred: ' + str(p))
-      logging.debug('gold: ' + str(g))
-    #assert len(p) == len(g)
-    L = len(p)
-    n_g = len(set(g))
-    n_p = len(set(p))
+  for p, g in zip(pred, gold):
+    for c_p, c_g in zip(p, g):
+      cm[c_p, c_g] += 1.
 
-    pred_id2pos = {c:i for i, c in enumerate(list(set(p)))}
-    gold_id2pos = {c:i for i, c in enumerate(list(set(g)))}
-     
-    confusion_matrix = np.zeros((n_p, n_g))
-    for p_id, g_id in zip(p, g):
-      p_pos = pred_id2pos[p_id]
-      g_pos = gold_id2pos[g_id]
-      confusion_matrix[p_pos, g_pos] += 1
-      #print(confusion_matrix)
-    score += 1/L * confusion_matrix.max(axis=1).sum()
-  return score / N
+  cm = (cm.T / np.maximum(np.sum(cm, axis=-1), EPS)).T
+  print('Cluster purity: ', np.mean(np.max(cm, axis=-1)))
+  if create_plot:
+    fig, ax = plt.subplots(figsize=(20, 30))
+    ax.set_xticks(np.arange(cm.shape[1])+0.5, minor=False)
+    ax.set_yticks(np.arange(cm.shape[0])+0.5, minor=False)
+    ax.set_xticklabels([str(c) for c in range(n_cg)], minor=False)
+    ax.set_yticklabels([str(c) for c in range(n_cp)], minor=False) 
+    plt.pcolor(cm, cmap=plt.cm.Blues, vmin=0, vmax=1)
+    plt.savefig(file_prefix, dpi=100)
+    plt.close()
+  np.savez(file_prefix+'.npz', cm)
 
+#
+# Parameters:
+# ----------  
+# pred (clusters) --- A list of cluster indices corresponding to each sample
+# gold (classes) --- A list of class indices corresponding to each sample
 def cluster_purity(pred, gold):
   cp = 0.
   n = 0.
-  for p in pred.values():
-    n_intersects = []  
-    for g in gold.values():
-      n_intersects.append(len(set(p).intersection(set(g))))
+
+  cm = np.zeros
+  for p, g in enumerate(pred, gold):
+    n_intersects = [] 
+    n_intersects.append(len(set(p).intersection(set(g))))
 
     cp += max(n_intersects)
     n += len(set(p))
@@ -144,12 +159,12 @@ def accuracy(pred, gold, max_len=2000):
   for n_ex, (p, g) in enumerate(zip(pred, gold)):
     ali_p = p['alignment'][:max_len]
     ali_g = g['alignment'][:max_len]
-    if DEBUG:
-      logging.debug("examples " + str(n_ex)) 
-      print("examples " + str(n_ex))
-      #logging.debug("# of frames in predicted alignment and gold alignment: %d %d" % (len(ali_p), len(ali_g))) 
-      print("# of frames in predicted alignment and gold alignment: %d %d" % (len(ali_p), len(ali_g)))
-
+    #if DEBUG:
+    logging.debug("examples " + str(n_ex)) 
+    print("examples " + str(n_ex))
+    #logging.debug("# of frames in predicted alignment and gold alignment: %d %d" % (len(ali_p), len(ali_g))) 
+    print("# of frames in predicted alignment and gold alignment: %d %d" % (len(ali_p), len(ali_g)))
+    
     assert len(ali_p) == len(ali_g)
     for a_p, a_g in zip(ali_p, ali_g):
       acc += (a_p == a_g)
@@ -181,7 +196,7 @@ def word_IoU(pred, gold):
   return iou / n
 
 # Boundary retrieval metrics for word segmentation
-def segmentation_retrieval_metrics(pred, gold, tolerance=3):
+def segmentation_retrieval_metrics(pred, gold, tolerance=4):
   assert len(pred) == len(gold)
   n = len(pred)
   prec = 0.
@@ -189,7 +204,7 @@ def segmentation_retrieval_metrics(pred, gold, tolerance=3):
 
   # Local retrieval metrics
   for n_ex, (p, g) in enumerate(zip(pred, gold)):
-    print(p, g)
+    #print(p, g)
     overlaps = 0.
     for i, p_wb in enumerate(p.tolist()[:-1]):
       for g_wb in g.tolist()[:-1]:
@@ -236,79 +251,128 @@ def _findWords(alignment):
       boundaries.append((start, i))
       start = i
       cur = a_i
-    print(i, a_i, start, cur)
+    if DEBUG:
+      print(i, a_i, start, cur)
 
   boundaries.append((start, len(alignment)))
   return boundaries
 
-
 if __name__ == '__main__':
-  #clsts = [2, 2, 2, 2, 2, 2, 1, 1, 1, 1, 1, 1, 3, 3, 3, 3, 3]
-  #classes = [1, 1, 1, 1, 1, 2, 1, 2, 2, 2, 2, 3, 1, 3, 3, 3, 1]
-  '''data_dir = '../data/'
-  exp_dir = '../smt/exp/ibm1_phoneme_level_clustering/' 
-  #'../nmt/exp/feb28_phoneme_level_clustering/output/'
-  pred_align_file = exp_dir + 'flickr30k_pred_alignment.json' 
-  'alignment.json' 
-  #'mscoco/mscoco_val_pred_alignment.json'
-  gold_align_file = data_dir + 'flickr30k/phoneme_level/flickr30k_gold_alignment.json'
-  #'mscoco/mscoco_val_gold_alignment.json'
-  
-  clsts = []
-  classes = []
-  with open(pred_align_file, 'r') as f:   
-    clsts_info = json.load(f)
-  for c in clsts_info:
-    clsts.append(c['alignment'])
-
-  with open(gold_align_file, 'r') as f:
-    classes_info = json.load(f) 
-  for c in classes_info:
-    classes.append(c['alignment'])
-
-  gold_clst_file = data_dir + 'flickr30k/phoneme_level/flickr30k_gold_clusters.json'
-  pred_clst_file = exp_dir + 'flickr30k_pred_clusters.json'
-
-  #'cluster.json' 
-  
-  pred_clsts = []
-  gold_clsts = []
-  with open(pred_clst_file, 'r') as f:
-    pred_clsts = json.load(f)
+  test_case = 3
+  if test_case == 0:
+    data_dir = '../data/'
+    exp_dir = '../smt/exp/ibm1_phoneme_level_clustering/' 
+    #'../nmt/exp/feb28_phoneme_level_clustering/output/'
+    pred_align_file = exp_dir + 'flickr30k_pred_alignment.json' 
+    'alignment.json' 
+    #'mscoco/mscoco_val_pred_alignment.json'
+    gold_align_file = data_dir + 'flickr30k/phoneme_level/flickr30k_gold_alignment.json'
+    #'mscoco/mscoco_val_gold_alignment.json'
     
-  with open(gold_clst_file, 'r') as f:
-    gold_clsts = json.load(f)
-   
-  print(local_cluster_purity(clsts, classes))
-  print(cluster_purity(clsts_info, classes_info))
-  retrieval_metrics(pred_clsts, gold_clsts)
+    clsts = []
+    classes = []
+    with open(pred_align_file, 'r') as f:   
+      clsts_info = json.load(f)
+    for c in clsts_info:
+      clsts.append(c['alignment'])
 
-  pred_seg_file = "../data/flickr30k/audio_level/flickr_landmarks_combined.npz" 
-  gold_seg_file = "../data/flickr30k/audio_level/flickr30k_gold_segmentation_mfcc_htk.npy"
-  pred_seg = np.load(pred_seg_file)
-  gold_seg = np.load(gold_seg_file, encoding="latin1")
-  seg_keys = sorted(pred_seg, key=lambda x:int(x.split('_')[-1]))
-  new_pred_seg = [pred_seg[k] for k in seg_keys]
-  pred_seg = []
-  for seg in new_pred_seg:
-    seg_ = []
-    for start, end in zip(seg[:-1].tolist(), seg[1:].tolist()):
-      seg_.append([start, end])
-    pred_seg.append(np.array(seg_))
-  np.save("flickr_pred_syllable_segmentation.npy", pred_seg)
-  segmentation_retrieval_metrics(pred_seg, gold_seg)'''
-  
-  a = [0, 0, 1, 1, 1, 3, 2, 2]
-  print(_findWords(a))
+    with open(gold_align_file, 'r') as f:
+      classes_info = json.load(f) 
+    for c in classes_info:
+      classes.append(c['alignment'])
 
-  pred_align_file = "../comparison_models/exp/aug1_mkmeans/flickr30k_pred_alignment.json"
-  gold_align_file = "../data/flickr30k/audio_level/flickr30k_gold_alignment.json"
-  concept2idx_file = "../data/flickr30k/concept2idx.json"
-  with open(concept2idx_file, "r") as f:
-    concept2idx = json.load(f)
-  with open(pred_align_file, "r") as f:
-    pred_aligns = json.load(f)
-  with open(gold_align_file, "r") as f:
-    gold_aligns = json.load(f)
+    gold_clst_file = data_dir + 'flickr30k/phoneme_level/flickr30k_gold_clusters.json'
+    pred_clst_file = exp_dir + 'flickr30k_pred_clusters.json'
+
+    #'cluster.json' 
+    
+    pred_clsts = []
+    gold_clsts = []
+    with open(pred_clst_file, 'r') as f:
+      pred_clsts = json.load(f)
+      
+    with open(gold_clst_file, 'r') as f:
+      gold_clsts = json.load(f)
+     
+    print(local_cluster_purity(clsts, classes))
+    print(cluster_purity(clsts_info, classes_info))
+    retrieval_metrics(pred_clsts, gold_clsts)
   
-  retrieval_metrics(pred_aligns, gold_aligns, concept2idx)
+  elif test_case == 1:
+    pred_seg_file = "../data/flickr30k/audio_level/flickr_landmarks_env.npz" 
+    gold_seg_file = "../data/flickr30k/audio_level/flickr30k_gold_segmentation_mfcc_htk.npy"
+    pred_seg = np.load(pred_seg_file)
+    gold_seg = np.load(gold_seg_file, encoding="latin1")
+    seg_keys = sorted(pred_seg, key=lambda x:int(x.split('_')[-1]))
+    new_pred_seg = [pred_seg[k] for k in seg_keys]
+    pred_seg = []
+    for seg in new_pred_seg:
+      seg_ = []
+      for start, end in zip(seg[:-1].tolist(), seg[1:].tolist()):
+        seg_.append([start, end])
+      pred_seg.append(np.array(seg_))
+    np.save("flickr_pred_syllable_segmentation.npy", pred_seg)
+    segmentation_retrieval_metrics(pred_seg, gold_seg)
+  elif test_case == 1:
+    pred_align_file = "../comparison_models/exp/aug1_mkmeans/flickr30k_pred_alignment.json"
+    gold_align_file = "../data/flickr30k/audio_level/flickr30k_gold_alignment.json"
+    concept2idx_file = "../data/flickr30k/concept2idx.json"
+    with open(concept2idx_file, "r") as f:
+      concept2idx = json.load(f)
+    with open(pred_align_file, "r") as f:
+      pred_aligns = json.load(f)
+    with open(gold_align_file, "r") as f:
+      gold_aligns = json.load(f)
+    
+    retrieval_metrics(pred_aligns, gold_aligns, concept2idx)
+  elif test_case == 2:
+    a = [0, 0, 1, 1, 1, 3, 2, 2]
+    print(_findWords(a))
+  elif test_case == 3:
+    pred_alignment_file = '../hmm/exp/nov_10_mscoco_mfcc/image_audio.json'
+    data_info_file = '../data/mscoco/mscoco_subset_concept_info_power_law.json'
+    concept_info_file = '../data/mscoco/mscoco_subset_concept_counts_power_law.json'
+    gold_alignment_file = '../data/mscoco/image_audio_gold_alignment.json'
+    
+    with open(pred_alignment_file, 'r') as f:
+      pred_info = json.load(f)
+    
+    gold_info = None
+    if os.path.isfile(gold_alignment_file):
+      with open(gold_alignment_file, 'r') as f:
+        gold_info = json.load(f)
+    else:
+      gold_info = []
+      with open(data_info_file, 'r') as f:
+        data_info = json.load(f)
+      with open(concept_info_file, 'r') as f:
+        concept_counts = json.load(f)
+        concept_names = sorted(concept_counts)
+        name2int = {c: i for i, c in enumerate(concept_names)} 
+
+      for i, data_id in enumerate(sorted(data_info, key=lambda x:int(x.split('_')[-1]))):
+        l = len(data_info[data_id]['concepts'])
+        concept_names = data_info[data_id]['concepts']
+        concepts = [name2int[name] for name in concept_names]
+        g_info = {
+                  'image_concepts': concepts,
+                  'image_concept_names': concept_names,
+                  'alignment': np.arange(l).tolist(),
+                  'index': i
+                }
+        gold_info.append(g_info)
+
+      with open(gold_alignment_file, 'w') as f:
+        json.dump(gold_info, f, indent=4, sort_keys=True)
+
+    pred, gold = [], []
+    #pred_alignment, gold_alignment = [], []
+    for p, g in zip(pred_info, gold_info):
+      pred.append(p['image_concepts'])
+      gold.append(g['image_concepts'])
+      #pred_alignment.append(p['alignment'])
+      #gold_alignment.append(g['alignment'])
+
+    cluster_confusion_matrix(gold, pred, file_prefix='image_confusion_matrix')
+    cluster_confusion_matrix(gold, pred, alignment=gold_info, file_prefix='audio_confusion_matrix')
+    boundary_retrieval_metrics(pred_info, gold_info)

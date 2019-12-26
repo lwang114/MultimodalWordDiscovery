@@ -23,8 +23,9 @@ flatten_order = "C"
 if os.path.exists("*.log"):
   os.system("rm *.log")
 
-random.seed(2)
-np.random.seed(2)
+# XXX
+#random.seed(2)
+#np.random.seed(2)
 logging.basicConfig(filename="audio_segembed_gmm_word_discoverer.log", format="%(asctime)s %(message)s", level=logging.DEBUG)
 #logging.basicConfig(format="%(asctime)s %(message)s", level=logging.DEBUG)
 
@@ -61,7 +62,7 @@ class SegEmbedGMMWordDiscoverer:
         self.mixturePriorFile = modelDir + "model_final_mixture_priors.json"
         self.transMeanFile = modelDir + "model_final_translation_means.json"
         self.transVarFile = modelDir + "model_final_translation_variances.json" 
-      self.initialize(landmarkFile, mixturePriorFile=self.mixturePriorFile, transMeanFile=self.transMeanFile, transVarFile=self.transVarFile, initMethod="kmeans++")
+      self.initialize(landmarkFile, mixturePriorFile=self.mixturePriorFile, transMeanFile=self.transMeanFile, transVarFile=self.transVarFile, initMethod="rand")
 
     # Tokenize the corpus 
     def parseCorpus(self, sourceFile, targetFile, maxLen=2000):
@@ -174,8 +175,8 @@ class SegEmbedGMMWordDiscoverer:
       if y.shape[0] == 1: 
         y_new = np.repeat(y, n)   
   
-      if y.shape[0] <= n:
-        technique = "interpolate" 
+      #if y.shape[0] <= n:
+      #  technique = "interpolate" 
            
       #print(xLen, self.embedDim / self.featDim)
       if technique == "interpolate":

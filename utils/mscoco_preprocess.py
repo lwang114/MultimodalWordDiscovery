@@ -5,7 +5,8 @@ from nltk.corpus import wordnet as wn
 from nltk.corpus import cmudict
 import numpy as np
 from scipy.io import loadmat, wavfile
-from pycocotools.coco import COCO
+# XXX
+#from pycocotools.coco import COCO
 from PIL import Image
 import random
 
@@ -150,7 +151,7 @@ class MSCOCO_Preprocessor():
     
     with open(text_file, 'w') as f:
       f.write('\n'.join(text_pairs)) 
- 
+  
   # XXX: Only find the first hit
   def find_concept_occurrence_time(self, c, word_aligns):
     # TODO: verify the format of word align
@@ -169,9 +170,7 @@ class MSCOCO_Preprocessor():
         if word.lower() == 'air' and i_w < len(word_aligns) - 1:
           if word_aligns[i_w+1][0] in ['plane', 'planes']:
             return word_align[0]+word_aligns[i_w+1][0], word_align[1], word_aligns[i_w+1][2] 
-    return None, -1, -1
-    
-    return  
+    return None, -1, -1 
     # TODO: compare wordnet similarity
    
   def extract_image_audio_subset(self, json_file, max_num_per_class=200, 
@@ -314,6 +313,35 @@ class MSCOCO_Preprocessor():
     # XXX
     #np.savez(file_prefix+'_audio_power_law.npz', **audio_dict) 
     np.savez(file_prefix+'_image_power_law.npz', **image_dict)
+    
+  def extract_phone_info(self, json_file, text_file_prefix, 
+                  allow_repeated_concepts=False):
+    pair_info = None
+    phone_info_all = {}
+    phone_sents = []
+    concepts_all = []
+    with open(json_file, 'r') as f:
+      pair_info = json.load(f)
+    
+    for k in sorted(pair_info, key=lambda x:int(x.split('_')[-1])):
+      pair = pair_info[k]
+      concepts = pair['concepts']
+      sent_info = pair['data_ids'] 
+      phone_sent = []  
+      for word_info in sent_info:
+        for phone_info in word_info[2]:
+          if phone_info[0] != '#':
+            phone_sent.append(phone_info[0])
+        print(phone_info)
+      phone_info_all[k] = phone_sent
+      phone_sents.append(' '.join(phone_sent))
+      concepts_all.append(' '.join(concepts))
+
+    with open(text_file_prefix+'_phones.json', 'w') as f:
+      json.dump(phone_info_all, f, indent=4, sort_keys=True)   
+    with open(text_file_prefix+'.txt', 'w') as f:
+      pairs = ['\n'.join([concepts, phns]) for concepts, phns in zip(concepts_all, phone_sents)]
+      f.write('\n\n'.join(pairs))   
 
 def random_draw(p):
   x = random.random()
@@ -341,4 +369,8 @@ if __name__ == '__main__':
   preproc = MSCOCO_Preprocessor(instance_file, caption_file)
   #preproc.extract_info(json_file)
   #preproc.extract_image_audio_subset(json_file, image_base_path=image_base_path)
-  preproc.extract_image_audio_subset_power_law()
+  #preproc.extract_image_audio_subset_power_law()
+  json_file = '../data/mscoco/mscoco_subset_phone_power_law_info.json'
+  preproc.extract_phone_info(json_file, 'mscoco_subset_subword_level_power_law')
+
+

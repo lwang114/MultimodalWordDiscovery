@@ -7,8 +7,8 @@ import random
 DEBUG = False
 NULL = 'NULL'
 ORD = 'C'
-random.seed(2)
-np.random.seed(2)
+#random.seed(2)
+#np.random.seed(2)
 
 # Randomly draw a sample according to a probability mass distribution
 def randomDraw(pmf):
@@ -223,11 +223,11 @@ class KMeansWordDiscoverer:
           if self.counts[tw][m] > 0:
             self.centroids[tw][m] /= self.counts[tw][m]
 
-    def trainUsingEM(self, maxIterations=100, modelPrefix='', writeModel=False):
+    def trainUsingEM(self, numIterations=100, modelPrefix='', writeModel=False):
       prev_assignments = deepcopy(self.assignments)
       n_iter = 0
       
-      while (n_iter < maxIterations and not self.checkConvergence(prev_assignments, self.assignments)) or n_iter == 0:
+      while (n_iter < numIterations and not self.checkConvergence(prev_assignments, self.assignments)) or n_iter == 0:
         print("Starting training iteration "+str(n_iter))
         begin_time = time.time()
         self.findAssignment()

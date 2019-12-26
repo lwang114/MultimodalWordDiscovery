@@ -3,7 +3,9 @@ import librosa
 import json
 import os
 import scipy.io as io
+import scipy.signal as signal
 
+ORDER = 'C' 
 class FlickrFeaturePreprocessor:
   def __init__(self, audio_info_file, audio_dir, utt2spk_file):
     with open(audio_info_file, 'r') as f:
@@ -286,11 +288,39 @@ class MSCOCOAudioFeaturePreprocessor:
       spk_ids = self.utt2spk[feat_id]
       for i, (afeat, spk_id) in enumerate(zip(self.mfccs[feat_id], spk_ids)):
         self.mfccs[feat_id][i] = (afeat - self.spk_means[spk_id]) / np.sqrt(self.spk_vars[spk_id]) 
+  
+  def get_concept_embeds(self, x, embed_dim, frame_dim=14):
+    embeddings = []
+    for seg in x:
+      if seg.shape[0] == 0:
+        print("Empty segment:", seg.shape)
+      #print("seg:", segmentation[i_w+1])
+      #print("embed of seg:", self.embed(seg))
+      embeddings.append(embed(seg, embed_dim, frame_dim=frame_dim))  
+    return np.array(embeddings)
+    
+  def extract_kamper_embeddings(self, feat_file, embed_dim, frame_dim=14, file_prefix='mscoco_kamper_embeddings', subword=False):
+    feat_npz = np.load(feat_file)
+    concept_word_embeddings = {}
+    for feat_id in sorted(feat_npz, key=lambda x:int(x.split('_')[-1])):
+      print(feat_id)
+      if subword:
+        feats = []
+        for word_feat in feat_npz[feat_id]:
+          for phn_feat in word_feat:
+            feats.append(phn_feat)
+        print('Num. of phones: ', len(feats)) 
+      else:
+        feats = feat_npz[feat_id]
+      
+      concept_embeds = self.get_concept_embeds(feats, embed_dim, frame_dim) 
+      concept_word_embeddings[feat_id] = concept_embeds
+    np.savez(file_prefix+'.npz', **concept_word_embeddings)  
 
 def preemphasis(signal, coeff=0.97):
   return np.append(signal[0], signal[1:] - coeff * signal[:-1])
 
-def embed(y, embed_dim, frame_dim=None, technique="resample"):
+def embed(y, embed_dim, frame_dim=None, technique="resample"): 
   #assert embed_dim % self.audio_feat_dim == 0
   if frame_dim: 
     y = y[:, :frame_dim].T
@@ -321,7 +351,6 @@ def embed(y, embed_dim, frame_dim=None, technique="resample"):
           ).flatten(ORDER) #.flatten("F")
   return y_new
  
-
 if __name__ == "__main__":
   #data_dir = "../data/flickr30k/audio_level/"
   #audio_info_file = data_dir + "flickr30k_gold_alignment.json"
@@ -337,7 +366,15 @@ if __name__ == "__main__":
   out_dir = '.'
   audio_dir = '/home/lwang114/data/mscoco/val2014/'
   audio_info_file = '../data/mscoco/mscoco_subset_concept_info_power_law.json' 
-  feat_extractor = MSCOCOAudioFeaturePreprocessor(audio_info_file, audio_dir)
-  feat_extractor.extractMFCC(feat_configs, out_dir)
+  #audio_info_file = '../data/mscoco/mscoco_subset_concept_info_syllabus_0.json' 
 
+  feat_extractor = MSCOCOAudioFeaturePreprocessor(audio_info_file, audio_dir)
+  #feat_extractor.extractMFCC(feat_configs, out_dir)
+  #feat_extractor.extract_kamper_embeddings('../data/mscoco/syllabus_0_mscoco_mfcc_cmvn.npz', embed_dim=140, file_prefix='mscoco_kamper_embeddings_syllabus_0')
   #feat_extractor.convertMatToNpz(feat_mat_file, feat_npz_file, utterance_ids_file)
+  #audio_info_file = '../data/mscoco/mscoco_subset_concept_info_syllabus_1.json' 
+  #feat_extractor = MSCOCOAudioFeaturePreprocessor(audio_info_file, audio_dir)
+  #feat_extractor.extractMFCC(feat_configs, out_dir)
+  #feat_extractor.extract_kamper_embeddings('../data/mscoco/syllabus_1_mscoco_mfcc_cmvn.npz', embed_dim=140, file_prefix='mscoco_kamper_embeddings_syllabus_1')
+  #feat_extractor.extract_kamper_embeddings('../data/mscoco/mscoco_subset_phone_power_law_mfcc_cmvn.npz', embed_dim=140, file_prefix='mscoco_kamper_embeddings_phone_power_law_cmvn', subword=True)
+  feat_extractor.extract_kamper_embeddings('../data/TIMIT/TIMIT_subset_mfcc.npz', embed_dim=140, file_prefix='TIMIT_subset_kamper_embeddings', subword=False)

@@ -11,7 +11,8 @@ except:
   from audio_kmeans_word_discoverer import *
 
 from sklearn.mixture import GaussianMixture
-from _cython_utils import *
+from scipy.misc import logsumexp
+#from _cython_utils import *
 
 # Constant for NULL word at position zero in target sentence
 NULL = "NULL"
@@ -111,9 +112,10 @@ class GMMWordDiscoverer:
                 mixturePriorFile=None, 
                 transMeanFile=None, 
                 transVarFile=None,
-                initMethod="kmeans++",
+                initMethod="rand",
                 contextWidth=0,
-                fixedVariance=0.002):
+                fixedVariance=0.02,
+                maxLen=2000):
         self.maxNumMixtures = numMixtures
         self.numMixtures = {} 
         # Initialize data structures for storing training data
@@ -121,7 +123,7 @@ class GMMWordDiscoverer:
         self.tCorpus = tCorpus                   # tCorpus is a list of target (e.g. English) sentences
         # Read the corpus
         if sourceCorpusFile and targetCorpusFile:
-          self.initialize(sourceCorpusFile, targetCorpusFile, contextWidth);
+          self.initialize(sourceCorpusFile, targetCorpusFile, contextWidth, maxLen=maxLen);
         else:
           self.data_ids = list(range(len(self.fCorpus)))
 
@@ -129,11 +131,12 @@ class GMMWordDiscoverer:
         self.transVars = {}                      # transVars[e_i] is initialized similarly as transMeans; assume diagonal covariance (TODO: general covariance) 
         self.alignProb = []                     # alignProb[i][k_e_k^s][m] is a list of probabilities containing expected counts for each sentence
         self.lenProb = {}
-        self.avgLogTransProb = float('-inf')
         self.featDim = self.fCorpus[0].shape[1]
         self.contextWidth = contextWidth
+        self.fixedVariance = fixedVariance
 
-        # Initialize any additional data structures here (e.g. for probability model)        
+        # Initialize any additional data structures here (e.g. for probability model)
+        print ("Initializing using KMeans ...")        
         self.initializeWordTranslationDensities(
                                         mixturePriorFile=mixturePriorFile, 
                                         transMeanFile=transMeanFile, 
@@ -145,20 +148,83 @@ class GMMWordDiscoverer:
     def initialize(self, fFileName, tFileName, contextWidth, maxLen=1000):
         fp = open(tFileName, 'r')
         tCorpus = fp.read().split('\n')
+        # XXX XXX
         self.tCorpus = [[NULL] + tw.split() for tw in tCorpus]
         fp.close()
         
         fCorpus = np.load(fFileName) 
+        # XXX XXX 
         self.fCorpus = [concatContext(fCorpus[k], contextWidth) for k in sorted(fCorpus.keys(), key=lambda x:int(x.split('_')[-1]))]
         self.fCorpus = [fSen[:maxLen] for fSen in self.fCorpus] 
         
         self.data_ids = [feat_id.split('_')[-1] for feat_id in sorted(fCorpus.keys(), key=lambda x:int(x.split('_')[-1]))]
-        self.featDim = self.fCorpus[0].shape[1]
-        
+        self.featDim = self.fCorpus[0].shape[1] 
         return
     
+    # Set initial values for the translation probabilities p(f|e)
+    def initializeWordTranslationDensities(self, mixturePriorFile=None, transMeanFile=None, transVarFile=None, initMethod="rand", fixedVariance=0.002):
+        # Initialize the translation mean and variance
+        self.transMeans = {}
+        self.transVars = {}
+        self.mixturePriors = {}
+        conceptCounts = {}
+        self.mkmeans = KMeansWordDiscoverer(fCorpus=self.fCorpus, tCorpus=self.tCorpus, numMixtures=self.maxNumMixtures, contextWidth=self.contextWidth, initMethod=initMethod) 
+
+        # Initialize mixture means and priors with simple cyclic assignment of centroids
+        if mixturePriorFile and transMeanFile and transVarFile:
+          with open(mixturePriorFile, 'r') as f:
+            self.mixturePriors = json.load(f)
+            self.mixturePriors = {tw:np.array(self.mixturePriors[tw]) for tw in self.mixturePriors}
+            self.numMixtures = {tw:self.mixturePriors[tw].shape[0] for tw in self.mixturePriors}
+
+          with open(transMeanFile, 'r') as f:
+            self.transMeans = json.load(f)
+            self.transMeans = {tw:np.array(self.transMeans[tw]) for tw in self.transMeans}
+          
+          with open(transVarFile, 'r') as f:
+            self.transVars = json.load(f)
+            self.transVars = {tw:np.array(self.transVars[tw]) for tw in self.transVars}
+
+        else:
+          #self.mkmeans.trainUsingEM(maxIterations=10)
+          self.transMeans = self.mkmeans.centroids
+          self.mixturePriors = {tw:np.log(1./centroid.shape[0]) * np.ones((centroid.shape[0],)) for tw, centroid in self.transMeans.items()}  
+          #self.transVars = {tw:np.ones((self.maxNumMixtures, self.featDim)) for tw in self.transMeans}
+          self.transVars = {tw:np.ones((self.maxNumMixtures, self.featDim)) for tw in self.transMeans}
+          
+          self.numMixtures = {tw:self.maxNumMixtures for tw in self.transMeans}
+
+          for i, (ts, fs) in enumerate(zip(self.tCorpus, self.fCorpus)):
+            fLen = fs.shape[0]
+            for k_f in range(fLen):
+              k_c = self.mkmeans.assignments[i][k_f]
+              k_t = int(k_c / self.maxNumMixtures)
+              m = k_c % self.maxNumMixtures
+              
+              if ts[k_t] not in conceptCounts:
+                conceptCounts[ts[k_t]] = np.zeros((self.maxNumMixtures,))
+              conceptCounts[ts[k_t]][m] += 1
+          
+          if fixedVariance <= 0.:
+            for i, (ts, fs) in enumerate(zip(self.tCorpus, self.fCorpus)):
+              fLen = fs.shape[0]
+              for k_f in range(fLen):
+                k_c = self.mkmeans.assignments[i][k_f]
+                k_t = int(k_c / self.maxNumMixtures)
+                m = k_c % self.maxNumMixtures
+                 
+                self.transVars[ts[k_t]][m] += np.sum((fs - self.transMeans[ts[k_t]][m]) ** 2, axis=0) / conceptCounts[ts[k_t]][m]
+          else:
+            for tw in self.transMeans:
+              self.transVars[tw] = fixedVariance * np.ones((self.maxNumMixtures, self.featDim))    
+
+              if DEBUG:
+                print("tw, transVars: ", tw, self.transVars[tw])              
+                print("# of mixturess: ", self.numMixtures[tw])
+
+
     # Uses the EM algorithm to learn the model's parameters
-    def trainUsingEM(self, numIterations=100, writeModel=False, modelPrefix='', epsilon=1e-5, smoothing=None, fixedVariance=0.002):
+    def trainUsingEM(self, numIterations=30, writeModel=False, modelPrefix='', epsilon=1e-5, smoothing=None):
         ###
         # Part 1: Train the model using the EM algorithm
         #
@@ -167,19 +233,14 @@ class GMMWordDiscoverer:
         ###
 
         # Compute translation length probabilities q(m|n)
-        self.computeTranslationLengthProbabilities(smoothing=smoothing)         # <you need to implement computeTranslationlengthProbabilities()>
-        # Set initial values for the translation probabilities p(f|e)
-        print ("Initializing using KMeans ...")
-        self.numMixtures = {tw: m.shape[0] for tw, m in self.transMeans.items()} 
+        self.computeTranslationLengthProbabilities(smoothing=smoothing)         # <you need to implement computeTranslationlengthProbabilities()> 
 
         #self.avgLogTransProb = self.averageTranslationProbability()
         # Write the initial distributions to file
         if writeModel:
             self.printModel('initial_model.txt')                 # <you need to implement printModel(filename)>
-        #for i in range(numIterations):
-        i = 0
-        while i == 0 or (not self.checkConvergence(epsilon) and i < numIterations):
-            print ("Average log translation probability: ", self.avgLogTransProb)
+        
+        for i in range(numIterations):
             print ("Starting training iteration "+str(i))
             begin_time = time.time()
             # Run E-step: calculate expected counts using current set of parameters
@@ -188,16 +249,15 @@ class GMMWordDiscoverer:
             
             begin_time = time.time()            
             # Run M-step: use the expected counts to re-estimate the parameters
-            self.updateTranslationDensities(fixedVariance=fixedVariance)            # <you need to implement updateTranslationProbabilities()>
+            self.updateTranslationDensities()            # <you need to implement updateTranslationProbabilities()>
             print('M-step takes %0.5f s to finish' % (time.time() - begin_time))
             
             # Write model distributions after iteration i to file
             if writeModel:
-                self.printModel(modelPrefix+'model_iter='+str(i)+'.txt')     # <you need to implement printModel(filename)>
-            i += 1
+                self.printModel(modelPrefix+'model_iter='+str(i)+'.txt')     # <you need to implement printModel(filename)>                        
+            print ("Average log translation probability: ", self.avgLogTransProb())
+      
             
-            begin_time = time.time()
-    
     # Compute translation length probabilities q(m|n)
     def computeTranslationLengthProbabilities(self, smoothing=None):
         # Implement this method
@@ -236,70 +296,7 @@ class GMMWordDiscoverer:
           for fl in self.lenProb[tl].keys():
             self.lenProb[tl][fl] = self.lenProb[tl][fl] / totCount 
 
-    # Set initial values for the translation probabilities p(f|e)
-    def initializeWordTranslationDensities(self, mixturePriorFile=None, transMeanFile=None, transVarFile=None, initMethod="kmeans++", fixedVariance=0.002):
-        # Initialize the translation mean and variance
-        self.transMeans = {}
-        self.transVars = {}
-        self.mixturePriors = {}
-        conceptCounts = {}
-        self.mkmeans = KMeansWordDiscoverer(fCorpus=self.fCorpus, tCorpus=self.tCorpus, numMixtures=self.maxNumMixtures, contextWidth=self.contextWidth, initMethod=initMethod) 
-
-        # Initialize mixture means and priors with simple cyclic assignment of centroids
-        if mixturePriorFile and transMeanFile and transVarFile:
-          with open(mixturePriorFile, 'r') as f:
-            self.mixturePriors = json.load(f)
-            self.mixturePriors = {tw:np.array(self.mixturePriors[tw]) for tw in self.mixturePriors}
-            self.numMixtures = {tw:self.mixturePriors[tw].shape[0] for tw in self.mixturePriors}
-
-          with open(transMeanFile, 'r') as f:
-            self.transMeans = json.load(f)
-            self.transMeans = {tw:np.array(self.transMeans[tw]) for tw in self.transMeans}
-          
-          with open(transVarFile, 'r') as f:
-            self.transVars = json.load(f)
-            self.transVars = {tw:np.array(self.transVars[tw]) for tw in self.transVars}
-
-        else:
-          self.mkmeans.trainUsingEM(maxIterations=10)
-          self.transMeans = self.mkmeans.centroids
-          self.mixturePriors = {tw:np.log(np.ones((centroid.shape[0],)) / float(centroid.shape[0])) for tw, centroid in self.transMeans.items()}  
-          #self.transVars = {tw:np.ones((self.maxNumMixtures, self.featDim)) for tw in self.transMeans}
-          self.transVars = {tw:np.zeros((self.maxNumMixtures, self.featDim)) for tw in self.transMeans}
-          
-          self.numMixtures = {tw:centroid.shape[0] for tw, centroid in self.transMeans.items()}
-
-          for i, (ts, fs) in enumerate(zip(self.tCorpus, self.fCorpus)):
-            fLen = fs.shape[0]
-            for k_f in range(fLen):
-              k_c = self.mkmeans.assignments[i][k_f]
-              k_t = int(k_c / self.maxNumMixtures)
-              m = k_c % self.maxNumMixtures
-              
-              if ts[k_t] not in conceptCounts:
-                conceptCounts[ts[k_t]] = np.zeros((self.maxNumMixtures,))
-              conceptCounts[ts[k_t]][m] += 1
-          
-          if fixedVariance <= 0.:
-            for i, (ts, fs) in enumerate(zip(self.tCorpus, self.fCorpus)):
-              fLen = fs.shape[0]
-              for k_f in range(fLen):
-                k_c = self.mkmeans.assignments[i][k_f]
-                k_t = int(k_c / self.maxNumMixtures)
-                m = k_c % self.maxNumMixtures
-                 
-                self.transVars[ts[k_t]][m] += np.sum((fs - self.transMeans[ts[k_t]][m]) ** 2, axis=0) / conceptCounts[ts[k_t]][m]
-          else:
-            for tw in self.transMeans:
-              self.transVars[tw] = fixedVariance * np.ones((self.maxNumMixtures, self.featDim))    
-
-          if DEBUG: 
-            print("fs: ", fs[0, :10])
-            for tw in self.transVars:
-              print("tw, transVars: ", tw, self.transVars[tw][0, :10])              
-              print("transMeans: ", self.transMeans[tw][0, :10])
-
-
+    
     # Run E-step: calculate expected counts using current set of parameters
     def computeExpectedCounts(self):
         # Implement this method
@@ -310,8 +307,7 @@ class GMMWordDiscoverer:
           # TODO: Double check this
           fLen = fs.shape[0]
           tLen = len(ts)
-          normFactor2D = np.zeros((tLen, fLen))           
-          #normFactor_ = np.zeros((tLen, fLen))           
+          #normFactor2D = np.zeros((tLen, fLen))                      
           
           for k_t, tw in enumerate(ts):    
             if tw not in align.keys():
@@ -320,27 +316,24 @@ class GMMWordDiscoverer:
             tKey = str(k_t)+'_'+tw
             for m in range(self.numMixtures[tw]):
               align[tKey][m] = self.mixturePriors[tw][m] + gaussian(fs, self.transMeans[tw][m], np.diag(self.transVars[tw][m]), log_prob=True)
-              
-            #normFactor_[k_t] = np.sum(np.exp(align[tKey]), axis=0) 
-            for k_f in range(fLen):
-              normFactor2D[k_t][k_f] = logsumexp(align[tKey][:, k_f].copy(order='C'))
-          
-          #normFactor_ = np.sum(normFactor_, axis=0)
-          normFactor = np.zeros((fLen,))           
+           
           for k_f in range(fLen):
-            normFactor[k_f] = logsumexp(normFactor2D[:, k_f].copy(order='C'))
-          
-          if DEBUG:
-            print("prob: ", gaussian(fs, self.transMeans[tw][0], np.diag(self.transVars[tw][0])))
-            print("prob converted from log prob: ", gaussian(fs, self.transMeans[tw][0], np.diag(self.transVars[tw][0]), log_prob=True))
-            #print("norm factor: ", normFactor_)
-            print("norm factor converted from log prob: ", np.exp(normFactor))
- 
-          
-          for k_t, tw in enumerate(ts):
-            tKey = str(k_t)+'_'+tw
-            #align[tKey] = np.exp(align[tKey] - normFactor)
-            align[tKey] = align[tKey] - normFactor
+            align_f = []
+            for tKey in align:
+              align_f.append(align[tKey][:, k_f])
+            align_f = np.asarray(align_f).copy(order='C')
+            normFactor = logsumexp(align_f.flatten(order='C'))
+            
+            for tKey in align:
+              align[tKey][:, k_f] -= normFactor 
+            
+            if DEBUG:
+              align_f = []
+              for tKey in align:
+                align_f.append(align[tKey][:, k_f])
+
+              if np.sum(np.exp(np.array(align_f))) != 1.:
+                print("normfactor of align prob for %d: %0.5f" % (k_f, np.sum(np.exp(np.array(align_f)))))
 
           self.alignProb.append(align)
         
@@ -348,133 +341,89 @@ class GMMWordDiscoverer:
         #pass
 
     # Run M-step: use the expected counts to re-estimate the parameters
-    def updateTranslationDensities(self, fixedVariance=0.002):
+    def updateTranslationDensities(self):
         # Implement this method
         n_sentence = min(len(self.tCorpus), len(self.fCorpus))
         self.transMeans = {}
-        if fixedVariance <= 0:
+        if self.fixedVariance <= 0:
           self.transVars = {}
         self.mixturePriors = {}
-
-        # Sum all the expected counts across sentence for pairs of translation
-        normFactorList = {}
+ 
+        obsCounts = {}
         #normFactor_ = {}
          
         for i, (tSen, fSen) in enumerate(zip(self.tCorpus, self.fCorpus)):
           for k_t, tw in enumerate(tSen):
             if tw not in self.transMeans.keys():
               self.transMeans[tw] = np.zeros((self.numMixtures[tw], self.featDim))
-              if fixedVariance <= 0:
+              if self.fixedVariance <= 0:
                 self.transVars[tw] = np.zeros((self.numMixtures[tw], self.featDim))
               self.mixturePriors[tw] = np.zeros((self.numMixtures[tw],)) 
-              normFactorList[tw] = [[] for _ in range(self.numMixtures[tw])]
+              obsCounts[tw] = [[] for _ in range(self.numMixtures[tw])]
               #normFactor_[tw] = np.zeros((self.numMixtures,))
-
             fLen = fSen.shape[0]
             
             tKey = str(k_t)+'_'+tw
             for m in range(self.numMixtures[tw]):
-              self.transMeans[tw][m] += np.dot(np.exp(self.alignProb[i][tKey][m]), fSen) 
-              
+              #self.transMeans[tw][m] += np.dot(np.exp(self.alignProb[i][tKey][m]), fSen) 
               #normFactor_[tw][m] += np.sum(np.exp(self.alignProb[i][tKey][m]))
-              normFactorList[tw][m].append(logsumexp(self.alignProb[i][tKey][m]))
-
-        normFactor = {tw: np.zeros((self.numMixtures[tw],)) for tw in normFactorList}
+              obsCounts[tw][m].append(logsumexp(np.asarray(self.alignProb[i][tKey][m]))) 
         
-        for tw in normFactorList:
-          for m in range(self.numMixtures[tw]):
-            normFactor[tw][m] = logsumexp(np.asarray(normFactorList[tw][m]))
-        
-        # Normalize the estimated means over all audio frames
-        for tw in self.transMeans.keys():
-          m = 0
-          while m <= self.numMixtures[tw] - 1:
-            if np.exp(normFactor[tw][m]) <= 0.:
-              print("Remove the empty cluster: ", tw, m)
-              self.removeCluster(tw, m)
-            else:
-              self.transMeans[tw][m] /= np.exp(normFactor[tw][m])  
-              m += 1
-
-        if fixedVariance <= 0.:
-          # Update translation variance
+        # Estimated means over all audio frames 
+        for i, (tSen, fSen) in enumerate(zip(self.tCorpus, self.fCorpus)):
+          for k_t, tw in enumerate(tSen):
+            tKey = str(k_t) + '_' + tw
+            for m in range(self.numMixtures[tw]):
+              alignCount = self.alignProb[i][tKey][m] 
+              normFactor = logsumexp(np.asarray(obsCounts[tw][m]))
+              self.transMeans[tw][m] += np.dot(np.exp(alignCount - normFactor), fSen) 
+ 
+        if self.fixedVariance <= 0.:
           for i, (tSen, fSen) in enumerate(zip(self.tCorpus, self.fCorpus)):
             for k_t, tw in enumerate(tSen):
-              tKey = str(k_t)+'_'+tw
+              tKey = str(k_t) + '_' + tw
               for m in range(self.numMixtures[tw]):
-                self.transVars[tw][m] += np.dot(np.exp(self.alignProb[i][tKey][m]), ((fSen - self.transMeans[tw][m]) ** 2))
-        
-          # Normalization over all the possible translation of the target word
-          for tw in self.transMeans.keys():
-            m = 0
-            while m <= self.numMixtures[tw] - 1:
-              self.transVars[tw][m] /= np.exp(normFactor[tw][m])  
-                
-              if np.min(self.transVars[tw][m]) <= 0:
-                print('bad variance, remove the cluster: ', tw, m, np.min(self.transVars[tw][m]))
-                self.removeCluster(tw, m)
-              else:
-                self.mixturePriors[tw][m] = normFactor[tw][m] - logsumexp(normFactor[tw]) 
-                m += 1
-
-            #if np.min(self.transVars[tw][m]) <= 0:
-            #  self.transVars[tw][m] = EPS
-
-
-    def removeCluster(self, tw, m):
-      transMeans = np.zeros((self.numMixtures[tw] - 1, self.featDim))
-      transVars = np.zeros((self.numMixtures[tw] - 1, self.featDim))
-      mixturePriors = np.zeros((self.numMixtures[tw] - 1,))
-
-      new_m_id = 0
-      for m_id in range(self.numMixtures[tw]):
-        if m_id == m:
-          continue
-        else:
-          transMeans[new_m_id] = self.transMeans[tw][m_id]
-          transVars[new_m_id] = self.transVars[tw][m_id]
-          mixturePriors[new_m_id] = self.mixturePriors[tw][m_id]
-          new_m_id += 1
-
-      self.mixturePriors[tw] = mixturePriors.copy()
-      self.transMeans[tw] = transMeans.copy()
-      self.transVars[tw] = transVars.copy()
+                alignCount = self.alignProb[i][tKey][m] 
+                # Update translation variance
+                self.transVars[tw][m] += np.dot(np.exp(alignCount - normFactor), ((fSen - self.transMeans[tw][m]) ** 2))
+                      
+    def removeCluster(self, tw, m): 
+      self.mixturePriors[tw][m] = self.mixturePriors[tw][self.numMixtures[tw]-1] 
+      self.transMeans[tw][m] = self.transMeans[tw][self.numMixtures[tw]-1]
+      self.transVars[tw][m] = self.transVars[tw][self.numMixtures[tw]-1]
+      self.mixturePriors[tw][self.numMixtures[tw]-1] = -np.inf
+      self.transMeans[tw][self.numMixtures[tw]-1].fill(0.)
+      self.transVars[tw][self.numMixtures[tw]-1].fill(0.)
 
       self.numMixtures[tw] -= 1
 
+    def logTransProb(self, fSen, tw):
+      if self.numMixtures[tw] < 1:
+        return -np.inf
+      return gmmProb(fSen, 
+                    self.mixturePriors[tw][:self.numMixtures[tw]], 
+                    self.transMeans[tw][:self.numMixtures[tw]], 
+                    self.transVars[tw][:self.numMixtures[tw]], log_prob=True)
 
-    # Compute baum anxiliary function
-    def avgLogLikelihood(self, lower_bound=False):
-      avgTransProb = 0.  
-      avgTransProb_ = 0. 
+    def avgLogTransProb(self):
+      logProb = 0.    
       for i, (fs, ts) in enumerate(zip(self.fCorpus, self.tCorpus)):
         if DEBUG:
           print(ts, fs.shape)
         
         fLen = fs.shape[0]
-        avgTransProb += 1. / len(self.fCorpus) * math.log(self.lenProb[len(ts)-1][fLen]) - fLen * math.log(len(ts))
-        avgTransProb_ += 1. / len(self.fCorpus) * math.log(self.lenProb[len(ts)-1][fLen]) - fLen * math.log(len(ts))
+        logProb += 1. / len(self.fCorpus) * math.log(self.lenProb[len(ts)-1][fLen]) - fLen * math.log(len(ts))
         
+        log_prob_tws = []
         for k_t, tw in enumerate(ts):
-          #if lower_bound:
-          for m in range(self.numMixtures[tw]):
-            if np.amin(self.transVars[tw][m]) <= 0:
-              print("tw, mixture %d has zero variance: " % (tw, m))
-          
-            tKey = str(k_t)+'_'+tw
-            avgTransProb_ += 1. / len(self.fCorpus) * np.dot(np.exp(self.alignProb[i][tKey][m]), -math.log(len(ts)) + self.mixturePriors[tw][m] + gaussian(fs, self.transMeans[tw][m], np.diag(self.transVars[tw][m]), log_prob=True))
-          #else:
           if DEBUG:
-            print(self.transMeans[tw].shape)
-
-        for k_f in range(fLen):
-          avgTransProb += 1. / len(self.fCorpus) * gmmProb(fs[k_f], self.mixturePriors[tw], self.transMeans[tw], self.transVars[tw], log_prob=True)            
-
-      print("avgTransProb lower bound: ", avgTransProb_)
-      print("avgTransProb: ", avgTransProb)
-      
-      return avgTransProb
-      
+            print(self.mixturePriors[tw][:self.numMixtures[tw]].shape, self.transMeans[tw][:self.numMixtures[tw]].shape, self.transVars[tw][:self.numMixtures[tw]].shape)
+          log_prob_tws.append(self.logTransProb(fs, tw))
+        
+        logProb += 1. / len(self.fCorpus) * np.sum(logsumexp(np.array(log_prob_tws), axis=0)) 
+      return logProb
+              
+    '''
     def checkConvergence(self, eps=1e-5):
       if len(self.alignProb) == 0:
         return 0
@@ -488,7 +437,8 @@ class GMMWordDiscoverer:
       
       self.avgLogTransProb = avgLogTransProb  
       return 0
-    
+    '''
+
     # Returns the best alignment between fSen and tSen using Viterbi algorithm
     def align(self, fSen, tSen):
         fLen = fSen.shape[0]
@@ -501,7 +451,7 @@ class GMMWordDiscoverer:
             if tw not in self.mixturePriors:
               score = np.log(PMIN)
             else:
-              score = gmmProb(fSen[k_f], self.mixturePriors[tw], self.transMeans[tw], self.transVars[tw], log_prob=True)
+              score = self.logTransProb(fSen[k_f], tw) 
             alignProb.append(score)
 
             if score > bestScore:
@@ -606,6 +556,7 @@ def prettyAlignment(fSen, tSen, alignment):
     return pretty
 
 if __name__ == "__main__":
+    '''
     # TEST 1: Compare with scikit-learn
     #datapath = '/home/lwang114/data/flickr/flickr_40k_speech_mbn/'
     #featfile = 'flickr_40k_speech_train.npz'
@@ -647,19 +598,19 @@ if __name__ == "__main__":
     labels = model2.fit_predict(X)
     print("alignment by sklearn model: ", labels)
     #print("means for sklearn model: ", model2.means_)
-
     '''
     # TEST 2: Random examples
     datapath = '../data/flickr30k/audio_level/'
     src_file = 'flickr_bnf_all_src.npz'
     trg_file = 'flickr_bnf_all_trg.txt'
     
-    datapath = "../data/random/"
-    src_file = "random.npz"
-    trg_file = "random.txt" 
-    model = GMMWordDiscoverer(datapath+src_file, datapath+trg_file, 1)
+    #datapath = "../data/random/"
+    #src_file = "random.npz"
+    #trg_file = "random.txt" 
+    model = GMMWordDiscoverer(3, datapath+src_file, datapath+trg_file)
     model.trainUsingEM(writeModel=True)
-        
+    
+    '''
     # TEST 3: log probabilities  
     print(np.exp(logSum([math.log(3), math.log(2)])))
     print(np.exp(logDot(np.array([math.log(3)]), np.array([math.log(2)]))))

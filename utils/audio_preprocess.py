@@ -281,6 +281,33 @@ class FlickrAudioPreprocessor:
         print("landmark: ", landmark)
 
     np.savez(out_file, **landmarks)
+  
+  def create_segment_level_gold_alignment(self, alignment_file, segmentation_file, concept_only=True, file_prefix='flickr30k_segment_level_alignment'):
+    segment_npz = np.load(segmentation_file)
+    segmentations = segment_npz
+    segment_ids = [k for k in sorted(segment_npz, key=lambda x:int(x.split('_')[-1]))]
+    # XXX
+    with open(alignment_file, 'r') as f:
+      align_info = json.load(f)
+    align_info = align_info
+    
+    segment_alignments = {}  
+    for i, seg_id in enumerate(segment_ids):
+      print(seg_id)
+      segs = segmentations[seg_id] 
+      aligns = align_info[i]['alignment']
+      
+      seg_aligns = []
+      for start, end in zip(segs[:-1], segs[1:]):
+        if len(set(aligns[start:end])) > 1:
+          print('non-uniform alignment within segment: ', start, end, aligns[start:end])
+        
+        if concept_only and np.sum(np.asarray(aligns[start:end]) > 0) > 1./2 * (end - start):
+          seg_aligns.append(max(aligns[start:end])) 
+      segment_alignments[seg_id] = seg_aligns
+
+    with open(file_prefix+'.json', 'w') as f:
+      json.dump(segment_alignments, f) 
 
   # TODO: Multiple captions for one image (so do not need to use the gold alignment file)
   def json_to_xnmt_format(self, bnf_data_info_file, gold_align_file, out_prefix='flickr_bnf', train_test_split=False):
@@ -553,7 +580,10 @@ if __name__ == '__main__':
   word_concept_align_file = '../data/flickr30k/word_level/flickr30k_gold_alignment.json'
   
   gold_align_file = datapath + "flickr30k_gold_alignment.json" #"flickr30k_gold_alignment.json" #
-  gold_lm_file = "flickr30k_gold_landmarks_mbn"
+  gold_lm_file = "flickr30k_gold_landmarks_mfcc.npz"
+  align_file = '../data/flickr30k/audio_level/flickr30k_gold_alignment.json'
+  segment_file = '../data/flickr30k/audio_level/flickr30k_gold_landmarks_mfcc.npz'  
+
   feat_to_wav_file = datapath + "flickr30k_gold_alignment.json_feat2wav.json" #"flickr30k_gold_alignment.json_feat2wav.json" #"flickr_mfcc_cmvn_htk_feat2wav.json" 
   
   audio_dir = '/home/lwang114/data/flickr_audio/wavs/'
@@ -563,6 +593,8 @@ if __name__ == '__main__':
   #bn_preproc.create_gold_alignment(audio_dir, out_file, word_concept_align_file, out_file=gold_align_file)
   #bn_preproc.json_to_xnmt_format(out_file, gold_align_file)
   #bn_preproc.create_feat_to_wav_maps(audio_dir, gold_align_file)
-  bn_preproc.create_gold_word_landmarks(out_file, gold_align_file, feat_to_wav_file, out_file=gold_lm_file)
+  #bn_preproc.create_gold_word_landmarks(out_file, gold_align_file, feat_to_wav_file, out_file=gold_lm_file)
   #wrd_segment_loader = WordSegmentationLoader(word_align_dir)
   #wrd_segment_loader.extract_info()  wrd_segment_loader.generate_gold_audio_concept_alignment(word_concept_align_file, bn_info_file, word_align_dir)
+  bn_preproc.create_segment_level_gold_alignment(align_file, segment_file, concept_only=True, file_prefix='flickr30k_segment_level_alignment')
+   
