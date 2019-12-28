@@ -1,0 +1,59 @@
+[
+    {
+        "align_probs": [
+            [
+                0.5005646890678894,
+                0.4994353109321104
+            ]
+        ],
+        "alignment": [
+            1,
+            0
+        ],
+        "image_concepts": [
+            "NULL",
+            "0",
+            "0"
+        ],
+        "index": 0,
+        "is_phoneme": true
+    },
+    {
+        "align_probs": [
+            [
+                0.5995668229307252,
+                0.4004331770692749
+            ]
+        ],
+        "alignment": [
+            0,
+            0
+        ],
+        "image_concepts": [
+            "NULL",
+            "0",
+            "0"
+        ],
+        "index": 1,
+        "is_phoneme": true
+    },
+    {
+        "align_probs": [
+            [
+                0.5751819357018424,
+                0.42481806429815755
+            ]
+        ],
+        "alignment": [
+            0,
+            0
+        ],
+        "image_concepts": [
+            "NULL",
+            "0",
+            "0"
+        ],
+        "index": 2,
+        "is_phoneme": true
+    }
+]
