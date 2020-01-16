@@ -12,6 +12,7 @@ EPS = 1e-50
 
 # A word discovery model using image regions and phones
 # * The transition matrix is assumed to be Toeplitz 
+# TODO
 class ImagePhoneHMMDNNWordDiscoverer:
   def __init__(self, speechFeatureFile, imageFeatureFile, modelConfigs, initProbFile=None, transProbFile=None, obsProbFile=None, modelName='image_phone_hmm_word_discoverer'):
     self.modelName = modelName 
@@ -131,9 +132,9 @@ class ImagePhoneHMMDNNWordDiscoverer:
       self.obs = 1. / self.audioFeatDim * np.ones((self.nWords, self.audioFeatDim))
     
     # XXX
-    #self.W = 10.*np.eye(self.nWords)
-    self.V = 0.1 * np.random.normal(size=(self.hiddenDim, self.imageFeatDim)) 
-    self.W = 0.1 * np.random.normal(size=(self.nWords, self.hiddenDim))  
+    #self.W = 10.*np.eye(self.hiddenDim)[:self.nWords]
+    self.V = 1. * np.random.normal(size=(self.hiddenDim, self.imageFeatDim)) 
+    self.W = 10. * np.random.normal(size=(self.nWords, self.hiddenDim))  
     print("Finish initialization after %0.3f s" % (time.time() - begin_time))
   
   # TODO
@@ -161,10 +162,10 @@ class ImagePhoneHMMDNNWordDiscoverer:
       obs_prev = deepcopy(self.obs) 
       W_prev = deepcopy(self.W)
       V_prev = deepcopy(self.V)
-      # Gradually reduce the step size to avoid repeatedly hitting similar bad initialization 
+      # XXX Gradually reduce the step size to avoid repeatedly hitting similar bad initialization 
       self.W += stepScale * Tk * np.random.normal(size=(self.nWords, self.hiddenDim))
       self.V += 0.1 * Tk * stepScale * np.random.normal(size=(self.hiddenDim, self.imageFeatDim))
-      self.trainUsingEM(numIterations=10, warmStart=True, printStatus=False)
+      self.trainUsingEM(numIterations=20, warmStart=True, printStatus=False)
       E1 = -self.computeAvgLogLikelihood() 
       print('Current and previous energy level: ', E1, E0)
       # Cooling scheme
@@ -248,7 +249,7 @@ class ImagePhoneHMMDNNWordDiscoverer:
       # XXX
       self.updateNeuralNetWeights(conceptCounts, debug=False) 
 
-      if epoch % 10 == 0:
+      if (epoch + 1) % 10 == 0:
         self.lr /= 10
         if writeModel:
           self.printModel(self.modelName + '_iter='+str(epoch)+'.txt')
@@ -437,16 +438,16 @@ class ImagePhoneHMMDNNWordDiscoverer:
     for vSen, conceptCount in zip(self.vCorpus, conceptCounts):
       vHidden = self.hiddenLayer(vSen, debug=debug) 
       vProb = self.softmaxLayer(vHidden, debug=debug) 
-      Delta = conceptCount * (1. - vProb)
+      Delta = conceptCount - vProb
       Epsilon = Delta @ self.W
+      
       if debug:
         print('Epsilon.shape: ', Epsilon.shape) 
-      dWs = self.lr * np.tile(Delta[:, :, np.newaxis], (1, 1, self.hiddenDim)) * vHidden[:, np.newaxis, :]
-      dW += np.sum(dWs, axis=0)
-      #dV += self.lr * (Epsilon * (vHidden > 0)).T @ vSen  
-      dV += self.lr * (Epsilon * vHidden * (1 - vHidden)).T @ vSen 
-    self.W = (1. - self.momentum) * self.W + dW
-    self.V = (1. - self.momentum) * self.V + dV  
+      dW += Delta.T @ vHidden 
+      dV += (Epsilon * vHidden * (1 - vHidden)).T @ vSen
+      # Gradient for ReLU: dV += self.lr * (Epsilon * (vHidden > 0)).T @ vSen   
+    self.W = (1. - self.momentum) * self.W + self.lr * dW
+    self.V = (1. - self.momentum) * self.V + self.lr * dV  
 
   # Compute translation length probabilities q(m|n)
   def computeTranslationLengthProbabilities(self, smoothing=None):
@@ -629,23 +630,25 @@ if __name__ == '__main__':
     with open('tiny.txt', 'w') as f:
       f.write(audio_feats)
     np.savez('tiny.npz', **image_feats)
-    modelConfigs = {'has_null': False, 'n_words': 3, 'learning_rate': 10., 'hidden_dim': 4, 'step_scale': 1.}
-    model = ImagePhoneHMMDNNWordDiscoverer(speechFeatureFile, imageFeatureFile, modelConfigs, modelName='exp/jan_3_tiny_twolayer/tiny')
-    #model.trainUsingEM(100, writeModel=True, debug=False)
-    model.simulatedAnnealing(numIterations=200, T0=1., debug=False) 
+    modelConfigs = {'has_null': False, 'n_words': 3, 'learning_rate': 0.1, 'hidden_dim': 4, 'step_scale': 1.}
+    model = ImagePhoneHMMDNNWordDiscoverer(speechFeatureFile, imageFeatureFile, modelConfigs, modelName='exp/jan_15_tiny_twolayer/tiny')
+    model.trainUsingEM(100, writeModel=True, debug=False)
+    #model.simulatedAnnealing(numIterations=200, T0=1., debug=False) 
     model.printAlignment('exp/jan_3_tiny_twolayer/tiny', debug=False)
-  #-------------------------------#
-  # Feature extraction for MSCOCO #
-  #-------------------------------#
+  #-------------------------------------#
+  # Image feature extraction for MSCOCO #
+  #-------------------------------------#
   if 1 in tasks:
     featType = 'gaussian'    
     speechFeatureFile = '../data/mscoco/src_mscoco_subset_subword_level_power_law.txt'
     imageConceptFile = '../data/mscoco/trg_mscoco_subset_subword_level_power_law.txt'
-    imageFeatureFile = '../data/mscoco/mscoco_subset_subword_level_concept_gaussian_vectors.npz'
+    imageFeatureFile = '../data/mscoco/mscoco_subset_subword_level_concept_gaussian_vectors_permute.npz'
     conceptIdxFile = 'exp/dec_30_mscoco/concept2idx.json'
+    goldAlignmentFile = '../data/mscoco/mscoco_subset_synthetic_feature_vector_alignment.json'
 
     vCorpus = {}
     concept2idx = {}
+    goldAlignments = {}
     nTypes = 0
     with open(imageConceptFile, 'r') as f:
       vCorpusStr = []
@@ -659,38 +662,51 @@ if __name__ == '__main__':
     
     # Generate nTypes different clusters
     imgFeatDim = 2
+    permute = True
     centroids = 10 * np.random.normal(size=(nTypes, imgFeatDim)) 
      
     for ex, vSenStr in enumerate(vCorpusStr):
       N = len(vSenStr)
+      if permute:
+        alignment = np.random.permutation(np.arange(N))
+      else:
+        alignment = np.arange(N)
+
       if featType == 'one-hot':
         vSen = np.zeros((N, nTypes))
-        for i, vWord in enumerate(vSenStr):
-          vSen[i, concept2idx[vWord]] = 1.
+        for pos, i_a in enumerate(alignment.tolist()):
+          vWord = vSenStr[i_a]
+          vSen[pos, concept2idx[vWord]] = 1.
       elif featType == 'gaussian':
         vSen = np.zeros((N, imgFeatDim))
-        for i, vWord in enumerate(vSenStr):
-          vSen[i] = centroids[concept2idx[vWord]] + 0.1 * np.random.normal(size=(imgFeatDim,))
+        for pos, i_a in enumerate(alignment.tolist()):
+          vWord = vSenStr[i_a]
+          vSen[pos] = centroids[concept2idx[vWord]] + 0.1 * np.random.normal(size=(imgFeatDim,))
+        
       vCorpus['arr_'+str(ex)] = vSen
+      goldAlignments['arr_'+str(ex)] = {'alignment': alignment.tolist()}
 
     np.savez(imageFeatureFile, **vCorpus)
     with open(conceptIdxFile, 'w') as f:
       json.dump(concept2idx, f, indent=4, sort_keys=True)
+    with open(goldAlignmentFile, 'w') as f:
+      json.dump(goldAlignments, f, indent=4, sort_keys=True)
   #--------------------------#
   # Word discovery on MSCOCO #
   #--------------------------#
   if 2 in tasks:      
     speechFeatureFile = '../data/mscoco/src_mscoco_subset_subword_level_power_law.txt'
     #speechFeatureFile = '../data/mscoco/trg_mscoco_subset_subword_level_power_law.txt'
-    #imageFeatureFile = '../data/mscoco/mscoco_subset_subword_level_concept_gaussian_vectors.npz'
+    imageFeatureFile = '../data/mscoco/mscoco_subset_subword_level_concept_gaussian_vectors.npz'
     #imageFeatureFile = 'mscoco_subset_subword_level_concept_vectors.npz'
-    imageFeatureFile = '../data/mscoco/mscoco_vgg_penult.npz'
-    modelConfigs = {'has_null': False, 'n_words': 65, 'momentum': 0.3, 'learning_rate': 0.1, 'normalize_vfeat': False, 'step_scale': 1., 'hidden_dim':512}
-    modelName = 'exp/jan_4_mscoco_momentum%.1f_lr%.2f_stepscale%d_twolayer/image_phone' % (modelConfigs['momentum'], modelConfigs['learning_rate'], modelConfigs['step_scale']) 
+    #imageFeatureFile = '../data/mscoco/mscoco_vgg_penult.npz'
+    
+    modelConfigs = {'has_null': False, 'n_words': 65, 'momentum': 0., 'learning_rate': 0.001, 'normalize_vfeat': False, 'step_scale': 1., 'hidden_dim':7}
+    modelName = 'exp/jan_15_mscoco_gaussian_momentum%.1f_lr%.2f_stepscale%d_twolayer/image_phone' % (modelConfigs['momentum'], modelConfigs['learning_rate'], modelConfigs['step_scale']) 
     print(modelName)
     #model = ImagePhoneHMMWordDiscoverer(speechFeatureFile, imageFeatureFile, modelConfigs, modelName='exp/dec_30_mscoco/image_phone') 
     model = ImagePhoneHMMDNNWordDiscoverer(speechFeatureFile, imageFeatureFile, modelConfigs, modelName=modelName)
-    #model.trainUsingEM(30, writeModel=True, debug=False)
-    model.simulatedAnnealing(numIterations=1000, T0=1., debug=True)
+    #model.trainUsingEM(200, writeModel=True, debug=False)
+    model.simulatedAnnealing(numIterations=400, T0=50., debug=True)
     #model.printAlignment('exp/dec_30_mscoco/image_phone_alignment', debug=False) 
     model.printAlignment(modelName+'_alignment', debug=False) 

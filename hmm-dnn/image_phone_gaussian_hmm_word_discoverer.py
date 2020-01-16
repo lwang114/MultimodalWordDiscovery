@@ -5,6 +5,7 @@ import time
 from scipy.special import logsumexp
 import random
 from copy import deepcopy
+from sklearn.cluster import KMeans
 
 NULL = "NULL"
 DEBUG = False
@@ -22,7 +23,8 @@ class ImagePhoneHMMWordDiscoverer:
 
     self.vCorpus = []                   # vCorpus is a list of image posterior features (e.g. VGG softmax)
     self.hasNull = modelConfigs.get('has_null', False)
-    self.nWords = modelConfigs.get('n_words', 66) 
+    self.nWords = modelConfigs.get('n_words', 66)
+    self.width = modelConfigs.get('width', 1.) 
     self.momentum = modelConfigs.get('momentum', 0.)
     self.lr = modelConfigs.get('learning_rate', 10.)
     self.normalize_vfeat = modelConfigs.get('normalize_vfeat', False) 
@@ -131,11 +133,11 @@ class ImagePhoneHMMWordDiscoverer:
       self.obs = np.load(self.obsProbFile)
     else:
       self.obs = 1. / self.audioFeatDim * np.ones((self.nWords, self.audioFeatDim))
-    
+
     # XXX
-    #self.W = 10.*np.eye(self.nWords) 
-    self.W = 1. * np.random.normal(size=(self.nWords, self.imageFeatDim + 1))
-    self.W[:, -1] = 0.  
+    #self.mus = 10. * np.eye(self.nWords)
+    self.mus = KMeans(n_clusters=self.nWords).fit(np.concatenate(self.vCorpus, axis=0)).cluster_centers_
+    #self.mus = 1. * np.random.normal(size=(self.nWords, self.imageFeatDim))
     print("Finish initialization after %0.3f s" % (time.time() - begin_time))
   
   # TODO
@@ -160,9 +162,9 @@ class ImagePhoneHMMWordDiscoverer:
       init_prev = deepcopy(self.init)
       trans_prev = deepcopy(self.trans)
       obs_prev = deepcopy(self.obs) 
-      W_prev = deepcopy(self.W)
-      self.W += stepScale * np.random.normal(size=(self.nWords, self.imageFeatDim))
-      self.trainUsingEM(numIterations=20, warmStart=True, printStatus=False)
+      mus_prev = deepcopy(self.mus)
+      self.mus += stepScale * np.random.normal(size=(self.nWords, self.imageFeatDim))
+      self.trainUsingEM(numIterations=5, warmStart=True, printStatus=False)
       E1 = -self.computeAvgLogLikelihood() 
       print('Current and previous energy level: ', E1, E0)
       # Cooling scheme
@@ -170,7 +172,7 @@ class ImagePhoneHMMWordDiscoverer:
       # Random jump according to the Boltzman distribution with dE = E1 - E0
       # 1) Continue jumping if not finding a good local minimum and choosing not to stay at the bad local optimum 
       if E1 > E0 and random.random() > np.exp(-(E1 - E0) / Tk): 
-        self.W = W_prev
+        self.mus = mus_prev
         self.init = init_prev
         self.trans = trans_prev
         self.obs = obs_prev
@@ -244,7 +246,7 @@ class ImagePhoneHMMWordDiscoverer:
       self.updateSoftmaxWeight(conceptCounts, debug=False) 
 
       if (epoch + 1) % 10 == 0:
-        #self.lr = 10
+        self.lr /= 10
         if writeModel:
           self.printModel(self.modelName + '_iter='+str(epoch)+'.txt')
 
@@ -427,19 +429,35 @@ class ImagePhoneHMMWordDiscoverer:
   # -------
   #   None
   def updateSoftmaxWeight(self, conceptCounts, debug=False):
-    dW = np.zeros((self.nWords, self.imageFeatDim + 1))
-    
+    dmus = np.zeros((self.nWords, self.imageFeatDim))
+    #musNext = np.zeros((self.nWords, self.imageFeatDim))
+    normFactor = np.zeros((self.nWords,))
     for vSen, conceptCount in zip(self.vCorpus, conceptCounts):
-      N = vSen.shape[0]
-      # XXX
-      vConcat = np.concatenate([vSen, np.ones((N, 1))], axis=1)
-      zProb = self.softmaxLayer(vSen, debug=debug) 
-      dW += (conceptCount - zProb).T @ vConcat 
-      if debug:
-        print('dW: ', dW)
-      
-    self.W[:, :-1] = (1. - self.momentum) * self.W[:, :-1] + self.lr * dW[:, :-1]
-    self.W[:, -1] =  (1. - self.momentum) * self.W[:, -1] + self.lr / 10 * dW[:, -1]
+      zProb = self.softmaxLayer(vSen, debug=debug)
+      Delta = conceptCount - zProb 
+      #musNext += Delta.T @ vSen
+      #normFactor += np.sum(Delta, axis=0)
+      dmus += 1. / self.width * (Delta.T @ vSen - (np.sum(Delta, axis=0) * self.mus.T).T) 
+    # XXX
+    #normFactor = np.sign(normFactor) * np.maximum(np.abs(normFactor), EPS)  
+    #self.mus = (musNext.T / normFactor).T
+    if debug:
+      print('conceptCount: ', conceptCount)
+      print('zProb: ', zProb)
+      print('dmus: ', dmus)
+    self.mus = (1. - self.momentum) * self.mus + self.lr * dmus
+
+  def softmaxLayer(self, vSen, debug=False):
+    N = vSen.shape[0]
+    prob = np.zeros((N, self.nWords))
+    for i in range(N):
+      prob[i] = -np.sum((vSen[i] - self.mus) ** 2, axis=1) / self.width
+    if debug:
+      print('self.mus: ', self.mus)
+      print('prob: ', prob)
+    prob = np.exp(prob.T - logsumexp(prob, axis=1)).T
+    return prob
+
 
   # Compute translation length probabilities q(m|n)
   def computeTranslationLengthProbabilities(self, smoothing=None):
@@ -483,17 +501,6 @@ class ImagePhoneHMMWordDiscoverer:
       likelihood = np.maximum(np.sum(forwardProb[-1]), EPS)
       ll += math.log(likelihood)
     return ll / len(self.vCorpus)
-  
-  def softmaxLayer(self, vSen, debug=False):
-    N = vSen.shape[0]
-    # XXX
-    vConcat = np.concatenate([vSen, np.ones((N, 1))], axis=1)
-    prob = vConcat @ self.W.T
-    #prob = vSen @ self.W.T 
-    if debug:
-      print('prob: ', prob)
-    prob = np.exp(prob.T - logsumexp(prob, axis=1)).T
-    return prob
 
   def align(self, aSen, vSen, unkProb=10e-12, debug=False):
     nState = len(vSen)
@@ -569,7 +576,8 @@ class ImagePhoneHMMWordDiscoverer:
    
     with open(fileName+'_phone2idx.json', 'w') as f:
       json.dump(self.phone2idx, f)
-    
+   
+    np.save(fileName+'_visualanchors.npy', self.mus) 
 
   # Write the predicted alignment to file
   def printAlignment(self, filePrefix, isPhoneme=True, debug=False):
@@ -616,7 +624,7 @@ if __name__ == '__main__':
     modelConfigs = {'has_null': False, 'n_words': 3, 'momentum': 0., 'learning_rate': 10.}
     model = ImagePhoneHMMWordDiscoverer(speechFeatureFile, imageFeatureFile, modelConfigs, modelName='exp/jan_14_tiny/tiny')
     model.trainUsingEM(30, writeModel=True, debug=False)
-    #model.simulatedAnnealing(numIterations=100, T0=1., debug=False) 
+    #model.simulatedAnnealing(numIterations=100, T0=50., debug=False) 
     model.printAlignment('exp/jan_14_tiny/tiny', debug=False)
   #-------------------------------#
   # Feature extraction for MSCOCO #
@@ -665,15 +673,15 @@ if __name__ == '__main__':
   #--------------------------#
   if 2 in tasks:      
     speechFeatureFile = '../data/mscoco/src_mscoco_subset_subword_level_power_law.txt'
-    #imageFeatureFile = '../data/mscoco/mscoco_subset_subword_level_concept_gaussian_vectors.npz'
-    imageFeatureFile = '../data/mscoco/mscoco_subset_subword_level_concept_vectors.npz'
+    imageFeatureFile = '../data/mscoco/mscoco_subset_subword_level_concept_gaussian_vectors.npz'
+    #imageFeatureFile = '../data/mscoco/mscoco_subset_subword_level_concept_vectors.npz'
     #imageFeatureFile = '../data/mscoco/mscoco_vgg_penult.npz'
-    modelConfigs = {'has_null': False, 'n_words': 65, 'momentum': 0.0, 'learning_rate': 10., 'normalize_vfeat': False, 'step_scale': 5}
-    modelName = 'exp/jan_15_mscoco_onehot_momentum%.1f_lr%.1f_stepscale%d_larger_var/image_phone' % (modelConfigs['momentum'], modelConfigs['learning_rate'], modelConfigs['step_scale']) 
+    modelConfigs = {'has_null': False, 'n_words': 65, 'momentum': 0.0, 'learning_rate': 0.1, 'normalize_vfeat': False, 'step_scale': 5}
+    modelName = 'exp/jan_15_mscoco_gaussian_momentum%.2f_lr%.5f_stepscale%d_gaussiansoftmax/image_phone' % (modelConfigs['momentum'], modelConfigs['learning_rate'], modelConfigs['step_scale']) 
     print(modelName)
     #model = ImagePhoneHMMWordDiscoverer(speechFeatureFile, imageFeatureFile, modelConfigs, modelName='exp/dec_30_mscoco/image_phone') 
     model = ImagePhoneHMMWordDiscoverer(speechFeatureFile, imageFeatureFile, modelConfigs, modelName=modelName)
-    #model.trainUsingEM(30, writeModel=True, debug=False)
-    model.simulatedAnnealing(numIterations=300, T0=50., debug=False)
+    model.trainUsingEM(30, writeModel=True, debug=False)
+    #model.simulatedAnnealing(numIterations=30, T0=50., debug=False)
     #model.printAlignment('exp/dec_30_mscoco/image_phone_alignment', debug=False) 
     model.printAlignment(modelName+'_alignment', debug=False) 
