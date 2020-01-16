@@ -57,27 +57,30 @@ class ImagePhoneWordDiscoverer:
     self.phone2idx = {}
     n_types = 0
     n_phones = 0
-    with open(speech_feat_file) as f:
-      a_corpus_dict = json.load(f)
-    for k in sorted(a_corpus_dict, key=lambda x:int(x.split('_')[-1])):
-      a_sent = a_corpus_dict[k]
+    
+    f = open(speech_feat_file, 'r')
+    a_corpus_str = []
+    for line in f:
+      a_sent = line.strip().split()
+      a_corpus_str.append(a_sent)
       for phn in a_sent:
         if phn not in self.phone2idx:
           self.phone2idx[phn] = n_types
           n_types += 1
         n_phones += 1
-      a_corpus_str.append(a_sent)
     f.close()
-
     self.audio_feat_dim = n_types
-    self.a_corpus = []
+
+    # XXX
     for a_sent_str in a_corpus_str:
-      a_sent = np.zeros((len(a_sent_str), n_types))
+      T = len(a_sent_str)
+      a_sent = np.zeros((T, self.audio_feat_dim))
       for t, phn in enumerate(a_sent_str):
         a_sent[t, self.phone2idx[phn]] = 1.
       self.a_corpus.append(a_sent)
 
     v_npz = np.load(image_feat_file)
+    # XXX
     self.v_corpus = [np.array(v_npz[k]) for k in sorted(v_npz, key=lambda x:int(x.split('_')[-1]))] 
     self.image_feat_dim = self.v_corpus[0].shape[-1]
     n_images = 0
@@ -91,17 +94,14 @@ class ImagePhoneWordDiscoverer:
     if self.has_null:
       self.v_corpus = [np.concatenate((np.zeros((1, self.image_feat_dim)), vfeat), axis=0) for vfeat in self.v_corpus]  
     
-    # XXX
-    #self.a_corpus = self.a_corpus[:10]
-    #self.v_corpus = self.v_corpus[:10]
-    assert len(self.v_corpus) == len(self.a_corpus)
-
+    assert len(self.v_corpus) == len(self.a_corpus)       
     print('----- Corpus Summary -----')
     print('Number of examples: ', len(self.a_corpus))
     print('Number of phonetic categories: ', n_types)
     print('Number of phones: ', n_phones)
     print('Number of objects: ', n_images)
-
+    print("Number of word clusters: ", self.Kmax)
+    
   def initialize_model(self, alignments=None):
     begin_time = time.time()
     self.compute_translation_length_probabilities()
@@ -125,33 +125,36 @@ class ImagePhoneWordDiscoverer:
     self.mu_v0 /= n_frames_v
     
     c = 3.    
-    cluster_centers_v = -np.inf * np.ones((self.Kmax, self.Mmax, self.image_feat_dim))
     self.fixed_variance_v = 0. # XXX: Assume fixed variances  
     n_corpus = len(self.v_corpus)
-
-    for k in range(self.Kmax):
-      for m in range(self.Mmax):
-        #i_a = np.random.randint(0, n_frames_a-1)
-        #i_v = np.random.randint(0, n_frames_v-1)
-        #cluster_centers_a[k, m] = a_corpus_concat[i_a]
-        #cluster_centers_v[k, m] = v_corpus_concat[i_v] 
-        i_ex = np.random.randint(0, n_corpus-1)
-        if len(self.v_corpus[i_ex]) <= 1:
-          i_v = 0
-        else:
-          i_v = np.random.randint(0, len(self.v_corpus[i_ex])-1)
-        cluster_centers_v[k, m] = self.v_corpus[i_ex][i_v]
-
+    if self.Mmax == 1:
+      cluster_centers_v = KMeans(n_clusters=self.Kmax).fit(np.concatenate(self.v_corpus, axis=0)).cluster_centers_
+    else:
+      cluster_centers_v = -np.inf * np.ones((self.Kmax, self.Mmax, self.image_feat_dim))
+      for k in range(self.Kmax):
+        for m in range(self.Mmax):
+          #i_a = np.random.randint(0, n_frames_a-1)
+          #i_v = np.random.randint(0, n_frames_v-1)
+          #cluster_centers_a[k, m] = a_corpus_concat[i_a]
+          #cluster_centers_v[k, m] = v_corpus_concat[i_v] 
+          i_ex = np.random.randint(0, n_corpus-1)
+          if len(self.v_corpus[i_ex]) <= 1:
+            i_v = 0
+          else:
+            i_v = np.random.randint(0, len(self.v_corpus[i_ex])-1)
+          cluster_centers_v[k, m] = self.v_corpus[i_ex][i_v]
+      
     for vfeat in self.v_corpus: 
       self.fixed_variance_v += np.sum((vfeat - self.mu_v0)**2) / (c * n_frames_v * self.image_feat_dim)
     
-    self.image_obs_model['means'] = cluster_centers_v
+    self.image_obs_model['means'] = cluster_centers_v[:, np.newaxis, :]
     self.image_obs_model['weights'] = np.log(1./self.Mmax) * np.ones((self.Kmax, self.Mmax))
     self.image_obs_model['n_mixtures'] = self.Mmax * np.ones((self.Kmax,)) 
     self.image_obs_model['variances'] = self.fixed_variance_v * np.ones((self.Kmax, self.Mmax, self.image_feat_dim))       
       
     # Initialize hyperparameters for the approximate parameter posteriors
     self.g_aN = {l: (self.g_a0 - np.log(l)) * np.ones((l,)) for l in self.len_probs}  # size-L dict of Nv-d array
+    self.g_atN = {l: (self.g_at0 - np.log(l)) * np.ones((l, l)) for l in self.len_probs}
     self.g_sbN = deepcopy(self.g_sb0) # K x 2 matrix
     self.g_tN = self.g_t0 * np.ones((self.Kmax,)) # K-d array
     self.g_mvN = self.g_mv0 * np.ones((self.Kmax, self.Mmax)) # Mv-d array 
@@ -161,8 +164,9 @@ class ImagePhoneWordDiscoverer:
     # Initialize the approximate posteriors
     self.counts_concept = None #[np.array([deepcopy(self.concept_prior) for _ in range(vfeat.shape[0])]) for vfeat in self.v_corpus] 
     self.counts_image_mixture = None 
-    self.counts_align = [np.log(1./len(vfeat)) * np.ones((len(afeat), len(vfeat))) for afeat, vfeat in zip(self.a_corpus, self.v_corpus)] 
-         
+    self.counts_align_init = [np.log(1./len(vfeat)) * np.ones((len(afeat), len(vfeat))) for afeat, vfeat in zip(self.a_corpus, self.v_corpus)] 
+    self.counts_align_trans = [np.log(1./len(vfeat)) * np.ones((len(afeat), len(vfeat), len(vfeat))) for afeat, vfeat in zip(self.a_corpus, self.v_corpus)]
+
   def train_using_EM(self, num_iterations=10, write_model=True):
     self.initialize_model()
     #print('initial audio_obs_means: ', self.audio_obs_model['means'])
@@ -177,7 +181,8 @@ class ImagePhoneWordDiscoverer:
     for n in range(num_iterations):
       begin_time = time.time()
       new_counts_concept = [] # length-Nd list of Nv x K x Ma x Mv array
-      new_counts_align = [] 
+      new_counts_align_init = [] 
+      new_counts_align_trans = []
       new_counts_image_mixture = []
       
       for ex, (afeats, vfeats) in enumerate(zip(self.a_corpus, self.v_corpus)):
@@ -185,7 +190,7 @@ class ImagePhoneWordDiscoverer:
         log_probs_v_given_zm = self.log_probs_vfeat_given_z_m(vfeats)
 
         # Estimate counts
-        counts_concept = self.update_concept_counts(self.counts_align[ex], log_probs_a_given_z, log_probs_v_given_zm)
+        counts_concept = self.update_concept_counts(self.counts_align_init[ex], log_probs_a_given_z, log_probs_v_given_zm)
         new_counts_concept.append(counts_concept)
        
         counts_image_mixture = self.update_image_mixture_counts(log_probs_v_given_zm) 
@@ -194,15 +199,15 @@ class ImagePhoneWordDiscoverer:
         forward_probs = self.forward(log_probs_a_given_i)
         backward_probs = self.backward(log_probs_a_given_i)
         
-        counts_align = self.update_alignment_counts(forward_probs, backward_probs)
+        counts_align_init = self.update_alignment_counts(forward_probs, backward_probs)
         counts_align_trans = self.update_alignment_transition_counts(forward_probs, backward_probs, log_probs_a_given_i)
-        new_counts_align.append(counts_align)
+        new_counts_align_init.append(counts_align_init)
         new_counts_align_trans.append(counts_align_trans)     
       print('Take %.5f s for E step' % (time.time() - begin_time)) 
       begin_time = time.time()
       self.counts_concept = deepcopy(new_counts_concept)
       self.counts_image_mixture = deepcopy(new_counts_image_mixture)
-      self.counts_align = deepcopy(new_counts_align)
+      self.counts_align_init = deepcopy(new_counts_align_init)
       self.counts_align_trans = deepcopy(new_counts_align_trans)
       # Update posterior hyperparameters
       self.update_posterior_hyperparameters()
@@ -302,7 +307,7 @@ class ImagePhoneWordDiscoverer:
    
   def update_alignment_counts(self, forward_probs, backward_probs):
     T = forward_probs.shape[0]
-    n_states = forward_probs.shape[1]
+    n_state = forward_probs.shape[1]
     prob_i_given_obs = forward_probs + backward_probs
     counts_align = -np.inf * np.ones((T, n_state))
 
@@ -354,7 +359,7 @@ class ImagePhoneWordDiscoverer:
     new_g_mvN = logsumexp(np.array([new_g_mvN]+aggregated_counts), axis=0) 
   
     aggregated_counts_init = {n_states:[] for n_states in self.len_probs}
-    for counts_init in self.counts_align:
+    for counts_init in self.counts_align_init:
       n_states = counts_init.shape[1]
       aggregated_counts_init[n_states].append(logsumexp(counts_init, axis=0)) 
 
@@ -377,10 +382,14 @@ class ImagePhoneWordDiscoverer:
     self.g_sbN = new_g_sbN
 
   def update_digamma_functions(self):
-    self.digammas_align = {l:None for l in self.g_aN} 
+    self.digammas_init = {l:None for l in self.g_aN} 
+    self.digammas_trans = {l:None for l in self.g_atN} 
     
     for l in self.g_aN:
-      self.digammas_align[l] = digamma(np.exp(self.g_aN[l])) - digamma(np.exp(logsumexp(self.g_aN[l])))
+      self.digammas_init[l] = digamma(np.exp(self.g_aN[l])) - digamma(np.exp(logsumexp(self.g_aN[l])))
+    for l in self.g_atN:
+      self.digammas_trans[l] = (digamma(np.exp(self.g_atN[l])).T - digamma(np.exp(logsumexp(self.g_atN[l], axis=1)))).T 
+
     self.digammas_concept = np.zeros((self.Kmax,))
     self.digammas_mv = np.zeros((self.Kmax, self.Mmax))
     
@@ -391,7 +400,6 @@ class ImagePhoneWordDiscoverer:
       for m in range(self.Mmax):
         self.digammas_mv[k] = digamma(np.exp(self.g_mvN[k])) - digamma(np.exp(logsumexp(self.g_mvN[k])))
     
-  
   def update_concept_alignment_model(self, ):
     vs = np.exp(self.g_sbN[:, 0]) / (np.exp(self.g_sbN[:, 0]) + np.exp(self.g_sbN[:, 1]))
     
@@ -407,9 +415,9 @@ class ImagePhoneWordDiscoverer:
       T = len(afeat)
       counts_z_a = np.zeros((T, self.Kmax))
       for t in range(T):
-        counts_z_a[t] = logsumexp(self.counts_concept[ex].T + self.counts_align[ex][t], axis=-1)
+        counts_z_a[t] = logsumexp(self.counts_concept[ex].T + self.counts_align_init[ex][t], axis=-1)
         if np.isnan(counts_z_a[t]).any():
-          print('counts_z_a_t: ', self.counts_concept[ex].T + self.counts_align[ex][t])
+          print('counts_z_a_t: ', self.counts_concept[ex].T + self.counts_align_init[ex][t])
       self.audio_obs_model['trans_probs'] += np.exp(counts_z_a).T @ afeat
     self.audio_obs_model['trans_probs'] = (self.audio_obs_model['trans_probs'].T / np.sum(self.audio_obs_model['trans_probs'], axis=1)).T      
   
@@ -471,14 +479,13 @@ class ImagePhoneWordDiscoverer:
 
     return np.transpose(np.asarray(log_probs), (1, 2, 0))
 
-  # TODO: Use the right decoding
   # Align the i-th example in the training set
   def align_i(self, i, decode_method='viterbi'): 
     T = self.a_corpus[i].shape[0]
     n_states = self.v_corpus[i].shape[0]
      
     concept_scores = self.counts_concept[i]
-    align_init_scores = self.counts_align[i]
+    align_init_scores = self.counts_align_init[i]
     align_trans_scores = self.counts_align_trans[i]
     
     best_concepts = np.argmax(concept_scores, axis=1).tolist()
@@ -691,15 +698,15 @@ if __name__ == '__main__':
     #align_file = '../data/flickr30k/audio_level/flickr30k_gold_alignment.json'
     #segment_file = '../data/flickr30k/audio_level/flickr30k_gold_landmarks_mfcc.npz'
     #speech_feature_file = '../data/flickr30k/sensory_level/flickr_concept_kamper_embeddings.npz'
-    speech_feature_file = '../data/mscoco/mscoco_subset_phone_power_law.json'
+    #speech_feature_file = '../data/mscoco/mscoco_subset_phone_power_law.json'
+    speech_feature_file = '../data/mscoco/src_mscoco_subset_subword_level_power_law.txt'
     #image_feature_file = '../data/flickr30k/sensory_level/flickr30k_vgg_penult.npz'
-    image_feature_file = '../data/mscoco/mscoco_vgg_penult.npz'
-    exp_dir = 'exp/nov_18_mscoco_mfcc_concept=66_mixture=3/'
+    #image_feature_file = '../data/mscoco/mscoco_vgg_penult.npz'
+    image_feature_file = '../data/mscoco/mscoco_subset_subword_level_concept_gaussian_vectors.npz'
+    exp_dir = 'exp/jan_16_mscoco_synthetic_gaussian_concept=66_mixture=1/'
     # XXX
     #exp_dir = 'exp/nov_10_mscoco_mfcc/'
-
-    # TODO
     # XXX
-    model_configs = {'Kmax':66, 'Mmax':3, 'has_null':False}  
-    model = ImagePhoneMixtureWordDiscoverer(speech_feature_file, image_feature_file, model_configs=model_configs, model_name=exp_dir+'image_phone_mixture')
+    model_configs = {'Kmax':65, 'Mmax':1, 'has_null':False}   
+    model = ImagePhoneWordDiscoverer(speech_feature_file, image_feature_file, model_configs=model_configs, model_name=exp_dir+'image_phone_markov')
     model.train_using_EM(num_iterations=20)
