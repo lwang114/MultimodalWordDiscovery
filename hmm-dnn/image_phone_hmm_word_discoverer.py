@@ -161,7 +161,7 @@ class ImagePhoneHMMWordDiscoverer:
       trans_prev = deepcopy(self.trans)
       obs_prev = deepcopy(self.obs) 
       W_prev = deepcopy(self.W)
-      self.W += stepScale * np.random.normal(size=(self.nWords, self.imageFeatDim))
+      self.W += stepScale * np.random.normal(size=(self.nWords, self.imageFeatDim + 1))
       self.trainUsingEM(numIterations=20, warmStart=True, printStatus=False)
       E1 = -self.computeAvgLogLikelihood() 
       print('Current and previous energy level: ', E1, E0)
@@ -194,15 +194,21 @@ class ImagePhoneHMMWordDiscoverer:
     if writeModel:
       self.printModel('initial_model.txt')
     
+    maxLikelihood = -np.inf
     for epoch in range(numIterations): 
       begin_time = time.time()
       initCounts = {m: np.zeros((m,)) for m in self.lenProb}
       transCounts = {m: np.zeros((m, m)) for m in self.lenProb}
       phoneCounts = np.zeros((self.nWords, self.audioFeatDim))      
       conceptCounts = [np.zeros((vSen.shape[0], self.nWords)) for vSen in self.vCorpus]
-      AvgLogProb = self.computeAvgLogLikelihood()
+
       if printStatus:
-        print('Epoch', epoch, 'Average Log Likelihood:', self.computeAvgLogLikelihood())  
+        likelihood = self.computeAvgLogLikelihood()
+        print('Epoch', epoch, 'Average Log Likelihood:', likelihood)  
+        if writeModel and likelihood > maxLikelihood:
+          self.printModel(self.modelName + '_iter='+str(epoch)+'.txt')
+          model.printAlignment(self.modelName+'_iter='+str(epoch)+'_alignment', debug=False)          
+          maxLikelihood = likelihood
       
       for ex, (vSen, aSen) in enumerate(zip(self.vCorpus, self.aCorpus)):
         forwardProbs = self.forward(vSen, aSen, debug=False)
@@ -214,7 +220,7 @@ class ImagePhoneHMMWordDiscoverer:
         transCounts[len(vSen)] += self.updateTransitionCounts(forwardProbs, backwardProbs, vSen, aSen, debug=False)
         stateCounts = self.updateStateCounts(forwardProbs, backwardProbs)
         phoneCounts += np.sum(stateCounts, axis=1).T @ aSen
-        conceptCounts[ex] += np.sum(stateCounts, axis=0)
+        conceptCounts[ex] += np.mean(stateCounts, axis=0)
 
       # Normalize
       for m in self.lenProb:
@@ -234,7 +240,7 @@ class ImagePhoneHMMWordDiscoverer:
           print('self.trans: ', self.trans[m])
       
       # XXX 
-      normFactor = np.maximum(np.sum(phoneCounts, axis=-1), EPS) 
+      normFactor = np.sum(np.maximum(phoneCounts, EPS), axis=-1) 
       self.obs = (phoneCounts.T / normFactor).T
       
       if debug:
@@ -244,9 +250,7 @@ class ImagePhoneHMMWordDiscoverer:
       self.updateSoftmaxWeight(conceptCounts, debug=False) 
 
       if (epoch + 1) % 10 == 0:
-        #self.lr = 10
-        if writeModel:
-          self.printModel(self.modelName + '_iter='+str(epoch)+'.txt')
+        self.lr /= 10
 
       if printStatus:
         print('Epoch %d takes %.2f s to finish' % (epoch, time.time() - begin_time))
@@ -338,7 +342,7 @@ class ImagePhoneHMMWordDiscoverer:
     initExpCounts = np.zeros((nState,))  
     for t in range(T):
       # XXX
-      initExpCounts += np.sum(forwardProbs[t] * backwardProbs[t], axis=-1) / np.maximum(np.sum(forwardProbs[t] * backwardProbs[t]), EPS)
+      initExpCounts += np.sum(np.maximum(forwardProbs[t] * backwardProbs[t], EPS), axis=-1) / np.sum(np.maximum(forwardProbs[t] * backwardProbs[t], EPS))
       if debug:
         #print('forwardProbs, backwardProbs: ', forwardProbs[t], backwardProbs[t])    
         print('np.sum(forward*backward): ', np.sum(forwardProbs[t] * backwardProbs[t])) 
@@ -379,26 +383,26 @@ class ImagePhoneHMMWordDiscoverer:
         print('diag count: ', alpha * trans_off_diag * np.sum(prob_x_t_z_given_y * backwardProbs[t+1], axis=-1))
         print("transExpCount: ", transExpCount)
       # XXX
-      transExpCount /= np.maximum(np.sum(transExpCount), EPS)
+      transExpCount = np.maximum(transExpCount, EPS) / np.sum(np.maximum(transExpCount, EPS))
 
       # Maintain Toeplitz assumption
-      # XXX
-      '''
-      transJumpCount = {}
-      for s in range(nState):
-        for next_s in range(nState):
-          if next_s - s not in transJumpCount:
-            #if DEBUG:
-            #  print('new jump: ', next_s - s) 
-            transJumpCount[next_s - s] = transExpCount[s][next_s]
-          else:
-            transJumpCount[next_s - s] += transExpCount[s][next_s]
+      if len(self.lenProb) >= 6:
+        # XXX
+        transJumpCount = {}
+        for s in range(nState):
+          for next_s in range(nState):
+            if next_s - s not in transJumpCount:
+              #if DEBUG:
+              #  print('new jump: ', next_s - s) 
+              transJumpCount[next_s - s] = transExpCount[s][next_s]
+            else:
+              transJumpCount[next_s - s] += transExpCount[s][next_s]
 
-      for s in range(nState):
-        for next_s in range(nState):
-          transExpCounts[s][next_s] += transJumpCount[next_s - s]
-      '''
-      transExpCounts += transExpCount
+        for s in range(nState):
+          for next_s in range(nState):
+            transExpCounts[s][next_s] += transJumpCount[next_s - s]
+      else:
+        transExpCounts += transExpCount
     return transExpCounts
    
   # Inputs:
@@ -486,7 +490,6 @@ class ImagePhoneHMMWordDiscoverer:
   
   def softmaxLayer(self, vSen, debug=False):
     N = vSen.shape[0]
-    # XXX
     vConcat = np.concatenate([vSen, np.ones((N, 1))], axis=1)
     prob = vConcat @ self.W.T
     #prob = vSen @ self.W.T 
@@ -511,7 +514,7 @@ class ImagePhoneHMMWordDiscoverer:
     if debug:
       print('scores: ', scores)
 
-    alignProbs = [] 
+    alignProbs = [scores.tolist()] 
     for t in range(1, T):
       candidates = np.tile(scores, (nState, 1)).T * self.trans[nState] * probs_x_given_y[t]
       backPointers[t] = np.argmax(candidates, axis=0)
@@ -601,7 +604,7 @@ class ImagePhoneHMMWordDiscoverer:
       json.dump(aligns, f, indent=4, sort_keys=True)            
 
 if __name__ == '__main__':
-  tasks = [2]
+  tasks = [3]
   #----------------------------#
   # Word discovery on tiny.txt #
   #----------------------------#
@@ -613,7 +616,7 @@ if __name__ == '__main__':
     with open('tiny.txt', 'w') as f:
       f.write(audio_feats)
     np.savez('tiny.npz', **image_feats)
-    modelConfigs = {'has_null': False, 'n_words': 3, 'momentum': 0., 'learning_rate': 10.}
+    modelConfigs = {'has_null': False, 'n_words': 3, 'momentum': 0., 'learning_rate': 0.1}
     model = ImagePhoneHMMWordDiscoverer(speechFeatureFile, imageFeatureFile, modelConfigs, modelName='exp/jan_14_tiny/tiny')
     model.trainUsingEM(30, writeModel=True, debug=False)
     #model.simulatedAnnealing(numIterations=100, T0=1., debug=False) 
@@ -667,13 +670,30 @@ if __name__ == '__main__':
     speechFeatureFile = '../data/mscoco/src_mscoco_subset_subword_level_power_law.txt'
     #imageFeatureFile = '../data/mscoco/mscoco_subset_subword_level_concept_gaussian_vectors.npz'
     imageFeatureFile = '../data/mscoco/mscoco_subset_subword_level_concept_vectors.npz'
-    #imageFeatureFile = '../data/mscoco/mscoco_vgg_penult.npz'
-    modelConfigs = {'has_null': False, 'n_words': 65, 'momentum': 0.0, 'learning_rate': 10., 'normalize_vfeat': False, 'step_scale': 5}
-    modelName = 'exp/jan_15_mscoco_onehot_momentum%.1f_lr%.1f_stepscale%d_larger_var/image_phone' % (modelConfigs['momentum'], modelConfigs['learning_rate'], modelConfigs['step_scale']) 
+    imageFeatureFile = '../data/mscoco/mscoco_vgg_penult.npz'
+    modelConfigs = {'has_null': False, 'n_words': 65, 'momentum': 0.0, 'learning_rate': 0.01, 'normalize_vfeat': False, 'step_scale': 5}
+    modelName = 'exp/jan_18_mscoco_vgg16_momentum%.1f_lr%.1f_stepscale%d_linear/image_phone' % (modelConfigs['momentum'], modelConfigs['learning_rate'], modelConfigs['step_scale']) 
     print(modelName)
     #model = ImagePhoneHMMWordDiscoverer(speechFeatureFile, imageFeatureFile, modelConfigs, modelName='exp/dec_30_mscoco/image_phone') 
     model = ImagePhoneHMMWordDiscoverer(speechFeatureFile, imageFeatureFile, modelConfigs, modelName=modelName)
-    #model.trainUsingEM(30, writeModel=True, debug=False)
-    model.simulatedAnnealing(numIterations=300, T0=50., debug=False)
+    model.trainUsingEM(20, writeModel=True, debug=False)
+    #model.simulatedAnnealing(numIterations=300, T0=50., debug=False)
+    #model.printAlignment('exp/dec_30_mscoco/image_phone_alignment', debug=False) 
+    model.printAlignment(modelName+'_alignment', debug=False)
+  #-----------------------------#
+  # Word discovery on Flickr30k #
+  #-----------------------------#
+  if 3 in tasks:
+    speechFeatureFile = '../data/flickr30k/phoneme_level/flickr30k_no_NULL.txt'
+    #imageFeatureFile = '../data/mscoco/mscoco_subset_subword_level_concept_gaussian_vectors.npz'
+    #imageFeatureFile = '../data/mscoco/mscoco_subset_subword_level_concept_vectors.npz'
+    imageFeatureFile = '../data/flickr30k/phoneme_level/flickr30k_no_NULL_vgg_penult.npz'
+    modelConfigs = {'has_null': False, 'n_words': 1500, 'momentum': 0.0, 'learning_rate': 0.1, 'normalize_vfeat': False, 'step_scale': 1.}
+    modelName = 'exp/jan_19_flickr_vgg16_momentum%.2f_lr%.5f_stepscale%d_linear/image_phone' % (modelConfigs['momentum'], modelConfigs['learning_rate'], modelConfigs['step_scale']) 
+    print(modelName)
+    #model = ImagePhoneHMMWordDiscoverer(speechFeatureFile, imageFeatureFile, modelConfigs, modelName='exp/dec_30_mscoco/image_phone') 
+    model = ImagePhoneHMMWordDiscoverer(speechFeatureFile, imageFeatureFile, modelConfigs, modelName=modelName)
+    model.trainUsingEM(20, writeModel=True, debug=False)
+    #model.simulatedAnnealing(numIterations=30, T0=50., debug=False)
     #model.printAlignment('exp/dec_30_mscoco/image_phone_alignment', debug=False) 
     model.printAlignment(modelName+'_alignment', debug=False) 
