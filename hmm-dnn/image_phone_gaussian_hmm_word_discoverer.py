@@ -647,7 +647,7 @@ class ImagePhoneGaussianHMMWordDiscoverer:
       json.dump(aligns, f, indent=4, sort_keys=True)            
 
 if __name__ == '__main__':
-  tasks = [3]
+  tasks = [2]
   #----------------------------#
   # Word discovery on tiny.txt #
   #----------------------------#
