@@ -337,16 +337,15 @@ if __name__ == '__main__':
   # Clustering and Alignment Metrics #
   #----------------------------------#
   if 3 in tasks:
+    '''
     pred_alignment_files = [
-    '../hmm-dnn/exp/jan_18_mscoco_vgg16_momentum0.00_lr0.10000_stepscale5_gaussiansoftmax/image_phone_alignment.json', 
-    '../hmm-dnn/exp/jan_20_mscoco_gaussian_momentum0.0_lr0.01_stepscale0.001_twolayer/image_phone_iter=10_alignment.json',
-    '../hmm-dnn/exp/jan_18_mscoco_vgg16_momentum0.0_lr0.01_stepscale1_twolayer/image_phone_iter=1_alignment.json',
-    '../hmm-dnn/exp/jan_18_mscoco_gaussian_momentum0.0_lr0.1_stepscale5_linear/image_phone_alignment.json',
-    '../hmm-dnn/exp/jan_18_mscoco_vgg16_momentum0.0_lr0.0_stepscale5_linear/image_phone_iter=1_alignment.json'
+    '../hmm_dnn/exp/jan_18_mscoco_vgg16_momentum0.00_lr0.10000_stepscale5_gaussiansoftmax/image_phone_alignment.json', 
+    '../hmm_dnn/exp/jan_20_mscoco_gaussian_momentum0.0_lr0.01_stepscale0.001_twolayer/image_phone_iter=10_alignment.json',
+    '../hmm_dnn/exp/jan_18_mscoco_vgg16_momentum0.0_lr0.01_stepscale1_twolayer/image_phone_iter=1_alignment.json',
+    '../hmm_dnn/exp/jan_18_mscoco_gaussian_momentum0.0_lr0.1_stepscale5_linear/image_phone_alignment.json',
+    '../hmm_dnn/exp/jan_18_mscoco_vgg16_momentum0.0_lr0.0_stepscale5_linear/image_phone_iter=1_alignment.json'
     ]
-    '''
-    '../hmm/exp/nov_10_mscoco_mfcc/image_audio.json'
-    '''
+    
     data_dir = '../data/mscoco/'
     data_info_file = data_dir + 'mscoco_subset_concept_info_power_law.json'
     concept_info_file = data_dir + 'mscoco_subset_concept_counts_power_law.json'
@@ -369,4 +368,34 @@ if __name__ == '__main__':
       cluster_confusion_matrix(gold, pred, file_prefix='image_confusion_matrix')
       cluster_confusion_matrix(gold, pred, alignment=gold_info, file_prefix='audio_confusion_matrix')
 
-      boundary_retrieval_metrics(pred_info, gold_info, debug=False)  
+      boundary_retrieval_metrics(pred_info, gold_info, debug=False)
+    '''     
+    # TODO
+    pred_alignment_files = [
+    '../hmm_dnn/exp/jan_20_flickr_vgg16_top100_momentum0.00_lr0.10000_stepscale1_gaussiansoftmax/image_phone_alignment.json',
+    '../hmm_dnn/exp/jan_21_flickr_vgg16_top100_momentum0.00_lr0.01000_stepscale1_linear/image_phone_alignment.json',
+    '../hmm_dnn/exp/jan_21_flickr_vgg16_top100_momentum0.00_lr0.01000_stepscale1_two_layers/image_phone_alignment.json' 
+    ]
+    data_dir = '../data/flickr30k/phoneme_level/'    
+    gold_alignment_file = '../data/flickr30k/phoneme_level/flickr30k_no_NULL_top_100_gold_alignment.json'
+    concept2idx_file = '../data/flickr30k/concept2idx.json' 
+
+    for i, pred_alignment_file in enumerate(pred_alignment_files):
+      print(pred_alignment_file)
+      with open(pred_alignment_file, 'r') as f:
+        pred_info = json.load(f)
+        
+      with open(gold_alignment_file, 'r') as f:
+        gold_info = json.load(f)
+
+      with open(concept2idx_file, 'r') as f:
+        concept2idx = json.load(f)
+       
+      pred, gold = [], []
+      for p, g in zip(pred_info, gold_info):
+        pred.append(p['image_concepts'])
+        gold.append([concept2idx[c] for c in g['image_concepts']])
+ 
+      cluster_confusion_matrix(gold, pred, file_prefix='image_confusion_matrix')
+      cluster_confusion_matrix(gold, pred, alignment=gold_info, file_prefix='audio_confusion_matrix')
+      boundary_retrieval_metrics(pred_info, gold_info, debug=False)

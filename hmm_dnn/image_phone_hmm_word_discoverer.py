@@ -33,7 +33,7 @@ class ImagePhoneHMMWordDiscoverer:
     self.avgLogTransProb = float('-inf')
      
     # Read the corpus
-    self.readCorpus(speechFeatureFile, imageFeatureFile, debug=True);
+    self.readCorpus(speechFeatureFile, imageFeatureFile, debug=False);
     self.initProbFile = initProbFile
     self.transProbFile = transProbFile
     self.obsProbFile = obsProbFile
@@ -207,7 +207,7 @@ class ImagePhoneHMMWordDiscoverer:
         print('Epoch', epoch, 'Average Log Likelihood:', likelihood)  
         if writeModel and likelihood > maxLikelihood:
           self.printModel(self.modelName + '_iter='+str(epoch)+'.txt')
-          model.printAlignment(self.modelName+'_iter='+str(epoch)+'_alignment', debug=False)          
+          self.printAlignment(self.modelName+'_iter='+str(epoch)+'_alignment', debug=False)          
           maxLikelihood = likelihood
       
       for ex, (vSen, aSen) in enumerate(zip(self.vCorpus, self.aCorpus)):
@@ -604,7 +604,7 @@ class ImagePhoneHMMWordDiscoverer:
       json.dump(aligns, f, indent=4, sort_keys=True)            
 
 if __name__ == '__main__':
-  tasks = [2]
+  tasks = [3]
   #----------------------------#
   # Word discovery on tiny.txt #
   #----------------------------#
@@ -684,12 +684,12 @@ if __name__ == '__main__':
   # Word discovery on Flickr30k #
   #-----------------------------#
   if 3 in tasks:
-    speechFeatureFile = '../data/flickr30k/phoneme_level/flickr30k_no_NULL.txt'
+    speechFeatureFile = '../data/flickr30k/phoneme_level/flickr30k_no_NULL_top_100.txt'
     #imageFeatureFile = '../data/mscoco/mscoco_subset_subword_level_concept_gaussian_vectors.npz'
     #imageFeatureFile = '../data/mscoco/mscoco_subset_subword_level_concept_vectors.npz'
-    imageFeatureFile = '../data/flickr30k/phoneme_level/flickr30k_no_NULL_vgg_penult.npz'
-    modelConfigs = {'has_null': False, 'n_words': 1500, 'momentum': 0.0, 'learning_rate': 0.1, 'normalize_vfeat': False, 'step_scale': 1.}
-    modelName = 'exp/jan_19_flickr_vgg16_momentum%.2f_lr%.5f_stepscale%d_linear/image_phone' % (modelConfigs['momentum'], modelConfigs['learning_rate'], modelConfigs['step_scale']) 
+    imageFeatureFile = '../data/flickr30k/phoneme_level/flickr30k_no_NULL_top_100_vgg_penult.npz'
+    modelConfigs = {'has_null': False, 'n_words': 100, 'momentum': 0.0, 'learning_rate': 0.01, 'normalize_vfeat': False, 'step_scale': 1.}
+    modelName = 'exp/jan_21_flickr_vgg16_top100_momentum%.2f_lr%.5f_stepscale%d_linear/image_phone' % (modelConfigs['momentum'], modelConfigs['learning_rate'], modelConfigs['step_scale']) 
     print(modelName)
     #model = ImagePhoneHMMWordDiscoverer(speechFeatureFile, imageFeatureFile, modelConfigs, modelName='exp/dec_30_mscoco/image_phone') 
     model = ImagePhoneHMMWordDiscoverer(speechFeatureFile, imageFeatureFile, modelConfigs, modelName=modelName)

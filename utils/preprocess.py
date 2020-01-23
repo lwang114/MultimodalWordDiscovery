@@ -339,6 +339,181 @@ class Flickr_Preprocessor(object):
 
     src_fp.close()
     trg_fp.close()
+ 
+  def to_dpseg_text(self, phone_corpus_file, gold_align_file, out_file_prefix='flickr_deseg'):
+    with open(gold_align_file, 'r') as f:
+      gold_aligns = json.load(f)
+    f = open(phone_corpus_file, 'r')
+    a_corpus = []
+    for line in f:
+      a_corpus.append(line.strip().split())
+    f.close()
+    
+    a_corpus_segmented = []
+    for i_ex, (a_sent, align_info) in enumerate(zip(a_corpus, gold_aligns)):
+      alignment = align_info['alignment']
+      cur_idx = alignment[0]
+      a_sent_segmented = ''
+      for phn, align_idx in zip(a_sent, alignment):
+        if align_idx != cur_idx:
+          a_sent_segmented += ' ' + phn
+          cur_idx = align_idx
+        else:
+          a_sent_segmented += phn
+      a_corpus_segmented.append(a_sent_segmented)
+    
+    with open(out_file_prefix+'.txt', 'w') as f:
+      f.write('\n'.join(a_corpus_segmented)) 
+   
+  def remove_nulls(self, phone_corpus_file, image_feat_file, gold_align_file, out_file_prefix='flickr30k_no_NULL', debug=False):
+    with open(gold_align_file, 'r') as f:
+      gold_aligns = json.load(f)
+    f = open(phone_corpus_file, 'r')
+    a_corpus = []
+    for line in f:
+      a_corpus.append(line.strip().split())
+    f.close()
+    
+    v_npz = np.load(image_feat_file)
+    v_corpus = [v_npz[k] for k in sorted(v_npz.keys(), key=lambda x:int(x.split('_')[-1]))]
+
+    assert len(a_corpus) == len(gold_aligns)
+    a_corpus_without_null = []
+    v_corpus_without_null = {}
+    gold_aligns_without_null = []
+    for i, (a_sent, v_sent, align_info) in enumerate(zip(a_corpus, v_corpus, gold_aligns)):
+      #print('index: ', i)
+      a_sent_without_null = []
+      new_alignment = []
+      alignment = align_info['alignment']
+      if debug:
+        if len(a_sent) != len(alignment):
+          print(len(a_sent), len(alignment))
+      
+      #assert len(a_sent) == len(alignment)
+      if len(align_info['image_concepts']) == 1:
+        print(align_info['image_concepts'])
+        print(v_sent.shape)
+        print('Empty pair: ', i)
+        continue
+      
+      for phn, align_idx in zip(a_sent, alignment):
+        if align_idx == 0:
+          continue
+        else:
+          a_sent_without_null.append(phn)
+          new_alignment.append(align_idx - 1)
+      gold_aligns_without_null.append(
+          {
+            'index': i,
+            'alignment': new_alignment,
+            'image_concepts': align_info['image_concepts'][1:]
+            }
+          )
+      a_corpus_without_null.append(' '.join(a_sent_without_null))
+      v_corpus_without_null['arr_'+str(i)] = v_sent
+
+    with open(out_file_prefix+'.txt', 'w') as f:
+      f.write('\n'.join(a_corpus_without_null))
+
+    with open(out_file_prefix+'_gold_alignment.json', 'w') as f:
+      json.dump(gold_aligns_without_null, f, indent=4, sort_keys=True)
+    
+    np.savez(out_file_prefix+'_vgg_penult.npz', **v_corpus_without_null)
+
+  def extract_top_k_concepts(self, phone_corpus_file, image_feat_file, gold_align_file, out_file_prefix='flickr30k_no_NULL', topk=100, debug=False):
+    with open(gold_align_file, 'r') as f:
+      gold_aligns = json.load(f)
+    
+    counts = {}
+    for align_info in gold_aligns:
+      concepts = align_info['image_concepts']
+      for c in concepts:
+        if c == NULL:
+          continue
+        if c not in counts:
+          counts[c] = 0
+        else:
+          counts[c] += 1
+
+    topk_concepts = sorted(counts, key = lambda x: counts[x], reverse=True)[:topk]
+    n_ex = 0
+    for c in topk_concepts:
+      n_ex += counts[c]
+    print('Total number of Top %d image concept instances: %d' % (topk, n_ex))
+
+    with open(out_file_prefix+'_topk_concepts.txt', 'w') as f:
+      f.write('\n'.join(topk_concepts))
+
+    f = open(phone_corpus_file, 'r')
+    a_corpus = []
+    for line in f: 
+      a_corpus.append(line.strip().split())
+    f.close()
+    
+    v_npz = np.load(image_feat_file)
+    v_corpus = [v_npz[k] for k in sorted(v_npz.keys(), key=lambda x:int(x.split('_')[-1]))]
+
+    assert len(a_corpus) == len(gold_aligns)
+    a_corpus_topk = []
+    v_corpus_topk = {}
+    gold_aligns_topk = []
+    for i, (a_sent, v_sent, align_info) in enumerate(zip(a_corpus, v_corpus, gold_aligns)):
+      #print('index: ', i)
+      alignment = align_info['alignment']
+      image_concepts = align_info['image_concepts']
+      if debug:
+        if len(a_sent) != len(alignment):
+          print(len(a_sent), len(alignment))
+      
+      #assert len(a_sent) == len(alignment)
+      if len(align_info['image_concepts']) == 1:
+        print(image_concepts)
+        print(v_sent.shape)
+        print('Empty pair: ', i)
+        continue
+      
+      n_c = 0
+      a_sent_topk = []
+      v_sent_topk = []
+      new_image_concepts = []
+      new_alignment = []
+      for phn, align_idx in zip(a_sent, alignment):
+        if align_idx == 0 or image_concepts[align_idx] not in topk_concepts:
+          continue
+        else:
+          a_sent_topk.append(phn)
+          c = image_concepts[align_idx]
+          if c not in new_image_concepts:
+            v_sent_topk.append(v_sent[align_idx-1])
+            new_image_concepts.append(c)
+            new_alignment.append(len(new_image_concepts)-1)
+          else:
+            for i_c, c1 in enumerate(new_image_concepts):
+              if c == c1:   
+                break
+            new_alignment.append(i_c)       
+
+      if len(new_image_concepts) == 0:
+        continue
+      else:
+        gold_aligns_topk.append(
+          {
+            'index': i,
+            'alignment': new_alignment,
+            'image_concepts': new_image_concepts
+            }
+          )
+      a_corpus_topk.append(' '.join(a_sent_topk))
+      v_corpus_topk['arr_'+str(i)] = np.asarray(v_sent_topk)
+
+    with open(out_file_prefix+'.txt', 'w') as f:
+      f.write('\n'.join(a_corpus_topk))
+
+    with open(out_file_prefix+'_gold_alignment.json', 'w') as f:
+      json.dump(gold_aligns_topk, f, indent=4, sort_keys=True)
+    
+    np.savez(out_file_prefix+'_vgg_penult.npz', **v_corpus_topk)
 
   # Does not allow repeated concept for now
   def create_gold_alignment(self, data_file, out_file='gold_align.json', is_phoneme=True):
@@ -512,7 +687,7 @@ class Flickr_Preprocessor(object):
         aligns.append([align, int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3])])
     
     return aligns
-  
+   
   # XXX
   '''
   # Get the category of a bounding box using VGG16 classifier 
@@ -575,6 +750,7 @@ class Flickr_Preprocessor(object):
     return concept.split('.')[0]
     
 if __name__ == '__main__':
+  tasks = [8]
   '''instance_file = 'annotations/instances_val2014.json'
   caption_file = 'annotations/captions_val2014.json'
   json_file = 'val_mscoco_info_text_image.json'
@@ -590,28 +766,49 @@ if __name__ == '__main__':
   json_file = datapath+'flickr30k/phoneme_level/flickr30k_info_phoneme_concept.json' 
   category_file = 'vgg16_model/imagenet_class_index.json'
   preproc = Flickr_Preprocessor(instance_file, alignment_file, caption_file, category_file=category_file, image_path='../../data/flickr30k/flickr30k-images/')
-  #preproc.train_test_split(datapath+'flickr30k/phoneme_level/flickr30k.txt', 100)
-  #preproc.json_to_text_gclda(json_file, text_file_prefix='../data/flickr30k/phoneme_level/gclda')
-  # XXX
-  preproc.json_to_text_gclda(json_file, text_file_prefix='../data/flickr30k/phoneme_level/gclda_subset')
 
-  '''
-  preproc.train_test_split_from_file(datapath+'flickr30k/phoneme_level/flickr30k_info_phoneme_concept.json', test_file_list='/Users/liming/research/data/flickr/flickr8k_test.txt')
-  
-  preproc.extract_info(json_file)
-  preproc.json_to_text(json_file, 'flickr30k.txt')
-  preproc.json_to_xnmt_text(json_file, 'flickr30k.txt')
-  
-  preproc.create_gold_alignment(json_file, 'flickr30k_gold_alignment.json')
-  preproc.create_gold_alignment(json_file, 'flickr30k_alignment.ref')
-  preproc.word_to_phoneme(json_file, 'flickr30k_info_phoneme_concept.json')
-  preproc.json_to_text(datapath + 'flickr30k/phoneme_level/flickr30k_info_phoneme_concept.json', 'flickr30k.txt')
-  preproc.json_to_xnmt_text('flickr30k_info_phoneme_concept.json', 'flickr30k.txt')
-  preproc.create_gold_alignment(datapath + 'flickr30k/phoneme_level/flickr30k_info_phoneme_concept.json', datapath + 'flickr30k/phoneme_level/flickr30k_gold_alignment.json') 
-  preproc.create_gold_alignment(datapath + 'flickr30k/word_level/flickr30k_info_text_concept.json', datapath + 'flickr30k/word_level/flickr30k_gold_alignment.json')
-  preproc.alignment_to_clusters(datapath + 'flickr30k/word_level/flickr30k_gold_alignment.json', datapath + 'flickr30k/word_level/flickr30k_gold_clusters.json')
-  preproc.alignment_to_clusters(datapath + 'flickr30k/phoneme_level/flickr30k_gold_alignment.json', datapath + 'data/flickr30k/phoneme_level/flickr30k_gold_clusters.json')
+  if 0 in tasks:
+    preproc.extract_info(json_file)  
+  if 1 in tasks:
+    preproc.train_test_split(datapath+'flickr30k/phoneme_level/flickr30k.txt', 100)
+    #preproc.train_test_split_from_file(datapath+'flickr30k/phoneme_level/flickr30k_info_phoneme_concept.json', test_file_list='/Users/liming/research/data/flickr/flickr8k_test.txt')
+  if 2 in tasks:
+    #preproc.json_to_text_gclda(json_file, text_file_prefix='../data/flickr30k/phoneme_level/gclda')
+    # XXX
+    preproc.json_to_text_gclda(json_file, text_file_prefix='../data/flickr30k/phoneme_level/gclda_subset')
+    preproc.json_to_text(json_file, 'flickr30k.txt')
+    preproc.json_to_xnmt_text(json_file, 'flickr30k.txt')
+    preproc.json_to_text(datapath + 'flickr30k/phoneme_level/flickr30k_info_phoneme_concept.json', 'flickr30k.txt')
+    preproc.json_to_xnmt_text('flickr30k_info_phoneme_concept.json', 'flickr30k.txt')
+    preproc.to_xnmt_text(datapath + 'flickr30k/phoneme_level/flickr30k.train', 'flickr30k.train', database_start_index=0)
+    preproc.to_xnmt_text(datapath + 'flickr30k/phoneme_level/flickr30k.test', 'flickr30k.test', database_start_index=6998)
+  if 3 in tasks:
+    preproc.create_gold_alignment(json_file, 'flickr30k_gold_alignment.json')
+    preproc.create_gold_alignment(json_file, 'flickr30k_alignment.ref')
+    preproc.create_gold_alignment(datapath + 'flickr30k/phoneme_level/flickr30k_info_phoneme_concept.json', datapath + 'flickr30k/phoneme_level/flickr30k_gold_alignment.json')
+    preproc.create_gold_alignment(datapath + 'flickr30k/word_level/flickr30k_info_text_concept.json', datapath + 'flickr30k/word_level/flickr30k_gold_alignment.json')
+  if 4 in tasks: 
+    preproc.word_to_phoneme(json_file, 'flickr30k_info_phoneme_concept.json')
+  if 5 in tasks:
+    preproc.alignment_to_clusters(datapath + 'flickr30k/word_level/flickr30k_gold_alignment.json', datapath + 'flickr30k/word_level/flickr30k_gold_clusters.json')
+    preproc.alignment_to_clusters(datapath + 'flickr30k/phoneme_level/flickr30k_gold_alignment.json', datapath + 'data/flickr30k/phoneme_level/flickr30k_gold_clusters.json')
   preproc.alignment_to_clusters('../smt/exp/ibm1_phoneme_level_clustering/flickr30k_pred_alignment.json', '../smt/exp/ibm1_phoneme_level_clustering/flickr30k_pred_clusters.json')
-  
-  preproc.to_xnmt_text(datapath + 'flickr30k/phoneme_level/flickr30k.train', 'flickr30k.train', database_start_index=0)
-  preproc.to_xnmt_text(datapath + 'flickr30k/phoneme_level/flickr30k.test', 'flickr30k.test', database_start_index=6998)''' 
+  if 6 in tasks:
+    speech_feat_file = '../data/flickr30k/sensory_level/flickr30k_vgg_penult_captions.txt'
+    image_feat_file = '../data/flickr30k/sensory_level/flickr30k_vgg_penult_7996imgs.npz'
+    gold_align_file = '../data/flickr30k/phoneme_level/flickr30k_gold_alignment.json'
+    out_file_prefix = '../data/flickr30k/phoneme_level/flickr30k_no_NULL'
+    preproc.remove_nulls(speech_feat_file, image_feat_file, gold_align_file, out_file_prefix, debug=True)
+  if 7 in tasks:
+    k = 100
+    speech_feat_file = '../data/flickr30k/sensory_level/flickr30k_vgg_penult_captions.txt'
+    image_feat_file = '../data/flickr30k/sensory_level/flickr30k_vgg_penult_7996imgs.npz'
+    gold_align_file = '../data/flickr30k/phoneme_level/flickr30k_gold_alignment.json'
+    out_file_prefix = '../data/flickr30k/phoneme_level/flickr30k_no_NULL_top_%d' % k 
+    preproc.extract_top_k_concepts(speech_feat_file, image_feat_file, gold_align_file, out_file_prefix, topk=k, debug=True)
+  if 8 in tasks:
+    data_dir = '../data/flickr30k/phoneme_level/' #'../data/mscoco/'
+    speech_feat_file = data_dir + 'flickr30k.txt' #data_dir + 'src_mscoco_subset_subword_level_power_law.txt'
+    gold_alignment_file = data_dir + 'flickr30k_gold_alignment.json' #'mscoco_gold_alignment_power_law.json'
+    out_file_prefix = data_dir + 'flickr30k_segmented' 
+    preproc.to_dpseg_text(speech_feat_file, gold_alignment_file, out_file_prefix)
