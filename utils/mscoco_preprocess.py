@@ -246,7 +246,7 @@ class MSCOCO_Preprocessor():
     #np.savez(file_prefix+'_audio.npz', **audio_dict)
     np.savez(file_prefix+'_image.npz', **image_dict)
 
-  def extract_image_audio_subset_power_law(self, file_prefix='mscoco_subset', power_law_factor=1., subset_size=8000, n_concepts_per_example=5): 
+  def extract_image_audio_subset_power_law(self, file_prefix='mscoco_subset', power_law_factor=1., subset_size=30000, n_concepts_per_example=5): 
     with open(file_prefix+'_concept2id.json', 'r') as f: 
       concept2ids = json.load(f)
     with open(file_prefix+'_concept_counts.json', 'r') as f: 
@@ -343,6 +343,35 @@ class MSCOCO_Preprocessor():
       pairs = ['\n'.join([concepts, phns]) for concepts, phns in zip(concepts_all, phone_sents)]
       f.write('\n\n'.join(pairs))   
 
+  def create_gold_alignment(self, data_file, concept2idx_file, out_file='gold_align.json', is_phoneme=True):
+    with open(data_file, 'r') as f:
+      data_info = json.load(f)
+      
+    align_info = []
+    for i, k in enumerate(sorted(data_info, key=lambda x:int(x.split('_')[-1]))):
+      datum_info = data_info[k]
+      print('Sentence index: ', i)
+      concept_names = datum_info['concepts']
+      sent_info = datum_info['data_ids']      
+      concepts, sent, alignment = [], [], []
+      for i_c, (c, c_info) in enumerate(zip(concept_names, sent_info)):
+        for phone_info in c_info[2]:
+          if phone_info[0] != '#':
+            sent.append(phone_info[0])
+            alignment.append(i_c) 
+        concepts.append(concept2idx[c])
+      align_info.append(
+        { 'index': i,
+          'alignment': alignment,
+          'caption': sent,
+          'image_concepts': concepts,
+          'image_concept_names': concept_names
+          }
+        )
+
+    with open(out_file, 'w') as f:
+      json.dump(align_info, f, indent=4, sort_keys=True)
+
 def random_draw(p):
   x = random.random()
   n_c = len(p)
@@ -362,15 +391,31 @@ def compute_stick_break_prior(vs):
   return prior
 
 if __name__ == '__main__':
-  instance_file = 'annotations/instances_val2014.json'
-  caption_file = 'annotations/captions_val2014.json'
-  json_file = 'val_mscoco_info_text_image.json'
-  image_base_path = '/home/lwang114/data/mscoco/val2014/' 
-  preproc = MSCOCO_Preprocessor(instance_file, caption_file)
-  #preproc.extract_info(json_file)
-  #preproc.extract_image_audio_subset(json_file, image_base_path=image_base_path)
-  #preproc.extract_image_audio_subset_power_law()
-  json_file = '../data/mscoco/mscoco_subset_phone_power_law_info.json'
-  preproc.extract_phone_info(json_file, 'mscoco_subset_subword_level_power_law')
+  tasks = [0]
+  if 0 in tasks:
+    instance_file = 'annotations/instances_val2014.json'
+    caption_file = 'annotations/captions_val2014.json'
+    json_file = 'val_mscoco_info_text_image.json'
+    image_base_path = '/home/lwang114/data/mscoco/val2014/' 
+    max_num_per_class = 2000 
+    file_prefix = 'mscoco_subset_%dk' % ((max_num_per_class) * 65 % 1000) 
+    subset_size = int(max_num_per_class * 65 / 5)
+    preproc = MSCOCO_Preprocessor(instance_file, caption_file)
+    preproc.extract_info(json_file)
+    preproc.extract_image_audio_subset(json_file, image_base_path=image_base_path, max_num_per_class=max_num_per_class, file_prefix=file_prefix)
+    #preproc.extract_image_audio_subset_power_law(subset_size=subset_size)
+  if 1 in tasks:
+    json_file = '../data/mscoco/mscoco_subset_phone_power_law_info.json'
+    preproc.extract_phone_info(json_file, 'mscoco_subset_subword_level_power_law')
+  if 2 in tasks:
+    data_info_file = '../data/mscoco/mscoco_subset_phone_power_law_info.json'
+    concept_info_file = '../data/mscoco/mscoco_subset_concept_counts_power_law.json'
+    concept2idx_file = '../data/mscoco/concept2idx.json'
+    with open(concept_info_file, 'r') as f:
+      concept_counts = json.load(f)
+      concept_names = sorted(concept_counts)
+      concept2idx = {c: i for i, c in enumerate(concept_names)}
+    with open(concept2idx_file, 'w') as f:
+      json.dump(concept2idx, f, indent=4, sort_keys=True)
 
-
+    preproc.create_gold_alignment(data_info_file, concept2idx_file, out_file='../data/mscoco/mscoco_gold_alignment_power_law.json')
