@@ -585,7 +585,7 @@ if __name__ == '__main__':
   if 0 in tasks:
     max_num_per_class = 2000 
     subset_size = int(max_num_per_class * 65 / 5)
-    file_prefix = 'mscoco_subset_%dk' % ((max_num_per_class * 65) % 1000) 
+    file_prefix = 'mscoco_subset_%dk' % (int((max_num_per_class * 65) / 1000)) 
 
     #preproc.extract_info(json_file)
     #preproc.extract_image_audio_subset(json_file, image_base_path=image_base_path)
@@ -593,11 +593,15 @@ if __name__ == '__main__':
     #preproc.extract_image_audio_curriculum_power_law()
     #preproc.extract_image_audio_phone_level_subset('../data/mscoco/mscoco_subset_concept_info_syllabus_0.json', out_file_prefix='mscoco_subset_phone_syllabus_0')
     #preproc.extract_image_audio_phone_level_subset('../data/mscoco/mscoco_subset_concept_info_syllabus_1.json', out_file_prefix='mscoco_subset_phone_syllabus_1') 
-    preproc.extract_image_audio_subset(json_file, image_base_path=image_base_path, max_num_per_class=max_num_per_class, file_prefix=file_prefix)
-    preproc.extract_image_audio_phone_level_subset('../data/mscoco/mscoco_subset_concept_info_power_law.json', out_file_prefix='mscoco_subset_phone_power_law', subset_size=subset_size)
+    #preproc.extract_image_audio_subset(json_file, image_base_path=image_base_path, max_num_per_class=max_num_per_class, file_prefix=file_prefix)
+    preproc.extract_image_audio_subset_power_law(file_prefix=file_prefix, subset_size=subset_size)
+    preproc.extract_image_audio_phone_level_subset('../data/mscoco/%s_concept_info_power_law.json' % file_prefix, out_file_prefix='%s_phone_power_law' % file_prefix)
   if 1 in tasks:
-    json_file = '../data/mscoco/mscoco_subset_phone_power_law_info.json'
-    preproc.extract_phone_info(json_file, 'mscoco_subset_subword_level_power_law')
+    max_num_per_class = 2000 
+    subset_size = int(max_num_per_class * 65 / 5)
+    file_prefix = 'mscoco_subset_%dk' % (int((max_num_per_class * 65) / 1000)) 
+    json_file = '../data/mscoco/%s_phone_power_law_info.json' % file_prefix
+    preproc.extract_phone_info(json_file, '%s_subword_level_power_law' % file_prefix)
   if 2 in tasks:
     data_info_file = '../data/mscoco/mscoco_subset_phone_power_law_info.json'
     concept_info_file = '../data/mscoco/mscoco_subset_concept_counts_power_law.json'
