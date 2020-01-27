@@ -71,7 +71,7 @@ class Resnet50(imagemodels.ResNet):
 
 # TODO
 class VGG16(nn.Module):
-    def __init__(self, n_class=10, pretrained=False):
+    def __init__(self, n_class=10, pretrained=False, freeze_weights=True):
         super(VGG16, self).__init__()
         '''
         seed_model = imagemodels.__dict__['vgg16'](pretrained=pretrained).features
@@ -82,8 +82,16 @@ class VGG16(nn.Module):
         self.image_model = seed_model
         '''
         self.features = imagemodels.__dict__['vgg16'](pretrained=pretrained).features
+        for child in self.features.children():
+          for p in child.parameters():
+            p.requires_grad = False
+
         classifier = imagemodels.__dict__['vgg16'](pretrained=pretrained).classifier
         classifier = nn.Sequential(*list(classifier.children())[:-2])
+        for child in classifier.children():
+          for p in child.parameters():
+            p.requires_grad = False
+
         penult_layer_index = len(list(classifier.children()))
         #self.avgpool = nn.AdaptiveAvgPool2d((7, 7))
         classifier.add_module(str(penult_layer_index), nn.Linear(4096, 512))

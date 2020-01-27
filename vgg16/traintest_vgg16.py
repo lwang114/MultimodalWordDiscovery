@@ -11,9 +11,14 @@ import os
 def train(image_model, train_loader, test_loader, args, device_id=0):
   # XXX
   if torch.cuda.is_available():
-    image_model = image_model.cuda(device_id=device_id)
-
+    image_model = image_model.cuda()
+  
   # Set up the optimizer
+  '''
+  for p in image_model.parameters():
+    if p.requires_grad:
+      print(p.size())
+  '''
   trainables = [p for p in image_model.parameters() if p.requires_grad]
   
   exp_dir = args.exp_dir 
@@ -39,16 +44,16 @@ def train(image_model, train_loader, test_loader, args, device_id=0):
     image_model.train()
     for i, image_input in enumerate(train_loader):
       # XXX
-      if i > 3:
-        break
+      #if i > 3:
+      #  break
 
       inputs, labels = image_input 
       inputs = Variable(inputs)
       labels = Variable(labels)
       # XXX
       if torch.cuda.is_available():
-        inputs = inputs.cuda(device_id=device_id)
-        labels = labels.cuda(device_id=device_id)
+        inputs = inputs.cuda()
+        labels = labels.cuda()
 
       optimizer.zero_grad()
 
@@ -56,8 +61,8 @@ def train(image_model, train_loader, test_loader, args, device_id=0):
 
       # Cross entropy loss
       loss = criterion(outputs, labels) 
-      running_loss += loss.data.cpu().numpy()[0]
-
+      #running_loss += loss.data.cpu().numpy()[0]
+      running_loss += loss.data.cpu().numpy()
       loss.backward()
       optimizer.step()
       
@@ -82,7 +87,7 @@ def train(image_model, train_loader, test_loader, args, device_id=0):
 
 def validate(image_model, test_loader, args):
   if torch.cuda.is_available():
-    image_model = image_model.cuda(device_id=device_id)
+    image_model = image_model.cuda()
   
   n_class = args.n_class
   if args.class2id_file is not None:
@@ -100,15 +105,15 @@ def validate(image_model, test_loader, args):
   #with torch.no_grad():
   for i, image_input in enumerate(test_loader):
     # XXX
-    if i > 3:
-      break
+    #if i > 3:
+    #  break
 
     images, labels = image_input
     images = Variable(images)
     labels = Variable(labels)
     if torch.cuda.is_available():
-      images = images.cuda(device_id=device_id)
-      labels = labels.cuda(device_id=device_id)
+      images = images.cuda()
+      labels = labels.cuda()
 
     outputs = image_model(images) 
     _, predicted = torch.max(outputs.data, 1) 
@@ -118,8 +123,9 @@ def validate(image_model, test_loader, args):
 
     correct += torch.sum(c)    
     for i_b in range(labels.size(0)):
-      label_idx = labels[i_b].data.cpu().numpy()[0] 
-      class_correct[label_idx] += c[i_b]
+      #label_idx = labels[i_b].data.cpu().numpy()[0] 
+      label_idx = labels[i_b].data.cpu().numpy()
+      class_correct[label_idx] += c[i_b].data.cpu().numpy()
       class_total[label_idx] += 1 
 
   print('Accuracy of the network: %d %%' % (100 * correct / total))
