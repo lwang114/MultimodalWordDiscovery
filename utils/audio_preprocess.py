@@ -13,6 +13,7 @@ PUNCT = ['.', ',', '?', '!', '`', '\'', ';']
 UNK = 'UNK'
 DELIMITER = '('
 FSAMPLE = 16000
+SIL = '_SIL_' 
 
 class FlickrAudioPreprocessor:
   def __init__(self, bnf_train_file, bnf_test_file, info_file, word_align_dir, phone_centroids_file=None, n_clusters=60, batch_size=100, max_feature_length=1000):
@@ -489,10 +490,10 @@ class FlickrAudioPreprocessor:
         test_trg.write('%s\n' % ' '.join(concept_list))
     train_trg.close()
     test_trg.close()
-  
-  # Map between the two transcripts of the same sentence since the word segmentation and the word-concept alignment are created 
-  # with a set of different tokenization rules for compound noun
+
   def _map_transcripts(self, trg_sent, ref_sent):
+    # Map between the two transcripts of the same sentence since the word segmentation and the word-concept alignment are created 
+    # with a set of different tokenization rules for compound noun
     trg2ref = [[] for i in range(len(trg_sent))]
     ref2trg = [[] for i in range(len(ref_sent))]
     
@@ -535,8 +536,8 @@ class FlickrAudioPreprocessor:
         merged.append(str(cur_id))
     return ' '.join(merged) 
   
-  # Cleanup the data by removing features for utterances that are too long 
   def data_cleanup(self, src_file, trg_file, alignment_file, feat2wav_file, max_len=1000):
+    # Cleanup the data by removing features for utterances that are too long 
     feats = np.load(src_file)
     
     with open(trg_file, "r") as f:
@@ -567,6 +568,132 @@ class FlickrAudioPreprocessor:
 
     with open(feat2wavs, "w") as f:
       json.dump(feat2wavs, f, indent=4, sort_keys=True)
+  
+  def alignment_to_word_units(self, feat_file, alignment_file, segmentation_file, word_unit_file='words.wrd', phone_unit_file='phones.phn', include_null=False):    
+    feat_npz = np.load(feat_file)
+    feat_ids = sorted(feat_npz, key=lambda x:int(x.split('_')[-1]))
+    with open(alignment_file, 'r') as f:
+      alignments = json.load(f)
+    segmentations = np.load(segmentation_file)
+
+    word_units = []
+    phn_units = []
+
+    for i, (align_info, segmentation) in enumerate(zip(alignments, segmentations)):
+      image_concepts = align_info['image_concepts']
+      a_sent = align_info['caption_text']
+      image_id = align_info['image_id']
+      capt_id = align_info['capt_id']
+      afeat = feat_npz[feat_ids[i]]
+      feat_len = afeat.shape[0]
+
+      alignment = align_info['alignment']
+      pair_id = 'pair_' + str(i)
+      print(pair_id)
+      mismatch = 0 
+      if len(a_sent) != len(segmentation):
+        print('Mismatch segmentation', len(a_sent), len(segmentation))
+        mismatch = 1
+      prev_align_idx = -1
+      start = 0
+      
+      for t, align_idx in enumerate(alignment):
+        if t == 0:
+          prev_align_idx = align_idx
+        
+        if prev_align_idx != align_idx:
+          if not include_null and prev_align_idx == 0:
+            prev_align_idx = align_idx
+            start = t
+            continue
+          word_units.append('%s %d %d %s\n' % (pair_id, start, t, image_concepts[prev_align_idx]))
+          prev_align_idx = align_idx
+          start = t
+        elif t == len(alignment) - 1:
+          if not include_null and prev_align_idx == 0:
+            continue
+          word_units.append('%s %d %d %s\n' % (pair_id, start, t + 1, image_concepts[prev_align_idx]))
+
+      if start == 0:
+        print('No concept found')
+        word_units.append('%s %d %d %s\n' % (pair_id, start, len(alignment) -1, UNK))
+
+      phn_units.append('%s %d %d %s\n' % (pair_id, 0, segmentation[0][0], SIL))
+      if mismatch:
+        for t, segment in enumerate(segmentation.tolist()):
+          if t > 0 and segmentation[t-1][1] - 1 > segment[0]:
+            print('Segments overlap', segmentation[t-1][1], segment[0]) 
+          if t > 0 and segmentation[t-1][1] - 1 < segment[0]:
+            phn_units.append('%s %d %d %s\n' % (pair_id, segmentation[t-1][1] - 1, segment[0], SIL))
+          phn_units.append('%s %d %d %d\n' % (pair_id, segment[0], segment[1] - 1, t))
+      else:
+        for t, segment in enumerate(segmentation.tolist()):
+          if t > 0 and segmentation[t-1][1] - 1 > segment[0]:
+            print('Segments overlap') 
+          if t > 0 and segmentation[t-1][1] - 1 < segment[0]:
+            phn_units.append('%s %d %d %s\n' % (pair_id, segmentation[t-1][1] - 1, segment[0], SIL))          
+          phn_units.append('%s %d %d %s\n' % (pair_id, segment[0], segment[1] - 1, a_sent[t]))
+
+      if segmentation[-1][1] < feat_len:
+        phn_units.append('%s %d %d %s\n' % (pair_id, segmentation[-1][1] - 1, feat_len - 1, SIL))
+    
+    with open(word_unit_file, 'w') as f:
+      f.write(''.join(word_units))
+    
+    with open(phone_unit_file, 'w') as f:
+      f.write(''.join(phn_units))      
+  
+  # TODO Remove silent intervals
+  def alignment_to_word_classes(self, alignment_file, word_class_file='words.class', include_null=False):   
+    with open(alignment_file, 'r') as f:
+      alignments = json.load(f)
+   
+    word_units = {}
+    # XXX
+    for i, align_info in enumerate(alignments):
+      image_concepts = align_info['image_concepts']
+      alignment = align_info['alignment']
+      pair_id = 'pair_' + str(i)
+      print(pair_id) 
+      prev_align_idx = -1
+      start = 0
+
+      '''
+      boundary_vec = np.zeros((len(alignment),))
+      for segment in segmentation.tolist():
+        seg_start = segment[0]
+        seg_end = min(segment[1], len(alignment))
+        boundary_vec[seg_start:seg_end] = 1
+      '''
+      for t, align_idx in enumerate(alignment):
+        if t == 0:
+          prev_align_idx = align_idx
+        
+        if prev_align_idx != align_idx:
+          if not include_null and prev_align_idx == 0:
+            prev_align_idx = align_idx
+            start = t
+            continue
+          if image_concepts[prev_align_idx] not in word_units:
+            word_units[image_concepts[prev_align_idx]] = ['%s %d %d\n' % (pair_id, start, t)]
+          else:
+            word_units[image_concepts[prev_align_idx]].append('%s %d %d\n' % (pair_id, start, t))
+          prev_align_idx = align_idx
+          start = t
+        elif t == len(alignment) - 1:
+          if not include_null and prev_align_idx == 0:
+            continue
+          if image_concepts[prev_align_idx] not in word_units:
+            word_units[image_concepts[prev_align_idx]] = ['%s %d %d\n' % (pair_id, start, t + 1)]
+          else:
+            word_units[image_concepts[prev_align_idx]].append('%s %d %d\n' % (pair_id, start, t + 1))
+      
+    with open(word_class_file, 'w') as f:
+      for i_c, c in enumerate(word_units):
+        #print(i_c, c)
+        f.write('Class %d:\n' % i_c)
+        f.write(''.join(word_units[c]))
+        f.write('\n')  
 
 if __name__ == '__main__':
   datapath = "../data/flickr30k/audio_level/"
@@ -587,14 +714,50 @@ if __name__ == '__main__':
   feat_to_wav_file = datapath + "flickr30k_gold_alignment.json_feat2wav.json" #"flickr30k_gold_alignment.json_feat2wav.json" #"flickr_mfcc_cmvn_htk_feat2wav.json" 
   
   audio_dir = '/home/lwang114/data/flickr_audio/wavs/'
+  
+  tasks = [6]
   bn_preproc = FlickrAudioPreprocessor(train_file, test_file, data_info_file, word_align_dir, phone_centroids_file=phnset)
-  #bn_preproc.extract_info(out_file=out_file)
-  #bn_preproc.label_captions()
-  #bn_preproc.create_gold_alignment(audio_dir, out_file, word_concept_align_file, out_file=gold_align_file)
-  #bn_preproc.json_to_xnmt_format(out_file, gold_align_file)
-  #bn_preproc.create_feat_to_wav_maps(audio_dir, gold_align_file)
-  #bn_preproc.create_gold_word_landmarks(out_file, gold_align_file, feat_to_wav_file, out_file=gold_lm_file)
-  #wrd_segment_loader = WordSegmentationLoader(word_align_dir)
-  #wrd_segment_loader.extract_info()  wrd_segment_loader.generate_gold_audio_concept_alignment(word_concept_align_file, bn_info_file, word_align_dir)
-  bn_preproc.create_segment_level_gold_alignment(align_file, segment_file, concept_only=True, file_prefix='flickr30k_segment_level_alignment')
-   
+  if 0 in tasks:
+    bn_preproc.extract_info(out_file=out_file)
+  if 1 in tasks:
+    bn_preproc.label_captions()
+  if 2 in tasks:
+    bn_preproc.create_gold_alignment(audio_dir, out_file, word_concept_align_file, out_file=gold_align_file)
+  if 3 in tasks: 
+    bn_preproc.json_to_xnmt_format(out_file, gold_align_file)
+  if 4 in tasks:
+    bn_preproc.create_feat_to_wav_maps(audio_dir, gold_align_file)
+  if 5 in tasks:
+    bn_preproc.create_gold_word_landmarks(out_file, gold_align_file, feat_to_wav_file, out_file=gold_lm_file)
+    bn_preproc.create_segment_level_gold_alignment(align_file, segment_file, concept_only=True, file_prefix='flickr30k_segment_level_alignment') 
+  # TODO
+  if 6 in tasks:
+    gold_alignment_file = datapath + 'flickr30k_gold_alignment.json' 
+    word_unit_file = datapath + 'flickr30k_audio_word_units.wrd'
+    phone_unit_file = datapath + 'flickr30k_audio_phone_units.phn'  
+    segmentation_file = datapath + 'flickr30k_gold_segmentation_mbn.npy'
+    feat_file = datapath + 'flickr_bnf_all_src.npz' 
+    bn_preproc.alignment_to_word_units(feat_file, gold_alignment_file, segmentation_file, word_unit_file, phone_unit_file)
+  if 7 in tasks:
+    model_names = ['seg_gmm_bn', 'seg_hmm_bn', 'gmm_bn', 'kmeans_bn']
+    pred_alignment_files = ['../smt/exp/aug_13_segembed_gmm_bn/flickr30k_pred_alignment.json',
+      '../hmm/exp/aug_15_flickr_bn/flickr30k_pred_alignment.json',
+      '../smt/exp/aug_16_gmm_mixture_5_bn/flickr30k_pred_alignment.json',
+      '../smt/exp/aug_19_kmeans_mixture_5_bn/flickr30k_pred_alignment.json'
+    ]
+    
+    for pred_alignment_file, model_name in zip(pred_alignment_files, model_names):
+      print(model_name)
+      bn_preproc.alignment_to_word_classes(pred_alignment_file, word_class_file='tdev2/WDE/share/discovered_words_%s.class' % model_name)
+
+    model_names = ['seg_gmm_mfcc', 'seg_hmm_mfcc', 'gmm_mfcc', 'kmeans_mfcc']
+    pred_alignment_files = [
+      '../smt/exp/aug_11_segembed_gmm/flickr30k_pred_alignment_resample.json', 
+      '../hmm/exp/aug_14_flickr_mfcc/flickr30k_pred_alignment_resample.json', 
+      '../smt/exp/aug_16_gmm_mixture_5_mfcc/flickr30k_pred_alignment_resample.json',
+      '../smt/exp/aug_19_kmeans_mixture_5_mfcc/flickr30k_pred_alignment_resample.json'
+    ]
+    
+    for pred_alignment_file, model_name in zip(pred_alignment_files, model_names):
+      print(model_name)
+      bn_preproc.alignment_to_word_classes(pred_alignment_file, word_class_file='tdev2/WDE/share/discovered_words_%s.class' % model_name)

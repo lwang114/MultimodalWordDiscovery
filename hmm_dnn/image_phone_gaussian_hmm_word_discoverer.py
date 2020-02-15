@@ -16,7 +16,7 @@ np.random.seed(1)
 # A word discovery model using image regions and phones
 # * The transition matrix is assumed to be Toeplitz 
 class ImagePhoneGaussianHMMWordDiscoverer:
-  def __init__(self, speechFeatureFile, imageFeatureFile, modelConfigs, initProbFile=None, transProbFile=None, obsProbFile=None, modelName='image_phone_hmm_word_discoverer'):
+  def __init__(self, speechFeatureFile, imageFeatureFile, modelConfigs, modelName='image_phone_hmm_word_discoverer'):
     self.modelName = modelName 
     # Initialize data structures for storing training data
     self.aCorpus = []                   # aCorpus is a list of acoustic features
@@ -37,9 +37,11 @@ class ImagePhoneGaussianHMMWordDiscoverer:
      
     # Read the corpus
     self.readCorpus(speechFeatureFile, imageFeatureFile, debug=False);
-    self.initProbFile = initProbFile
-    self.transProbFile = transProbFile
-    self.obsProbFile = obsProbFile
+    self.initProbFile = modelConfigs.get('init_prob_file', None)
+    self.transProbFile = modelConfigs.get('trans_prob_file', None)
+    self.obsProbFile = modelConfigs.get('obs_prob_file', None)
+    self.visualAnchorFile = modelConfigs.get('visual_anchor_file', None)
+     
      
   def readCorpus(self, speechFeatFile, imageFeatFile, debug=False):
     aCorpus = []
@@ -120,26 +122,34 @@ class ImagePhoneGaussianHMMWordDiscoverer:
       f = open(self.initProbFile)
       for line in f:
         m, s, prob = line.split()
+        if int(m) not in self.init:
+          self.init[int(m)] = np.zeros((int(m),))
         self.init[int(m)][int(s)] = float(prob)
       f.close()
-
+    
     if self.transProbFile:
       f = open(self.transProbFile)
       for line in f:
         m, cur_s, next_s, prob = line.split()
+        if int(m) not in self.trans:
+          self.trans[int(m)] = np.zeros((int(m), int(m)))
         self.trans[int(m)][int(cur_s)][int(next_s)] = float(prob)     
       f.close()
-
+    
     if self.obsProbFile:
       self.obs = np.load(self.obsProbFile)
     else:
       self.obs = 1. / self.audioFeatDim * np.ones((self.nWords, self.audioFeatDim))
 
-    # XXX
-    #self.mus = 10. * np.eye(self.nWords)
-    self.mus = KMeans(n_clusters=self.nWords).fit(np.concatenate(self.vCorpus, axis=0)).cluster_centers_
-    #self.mus = 1. * np.random.normal(size=(self.nWords, self.imageFeatDim))
+    # XXX    
+    if self.visualAnchorFile:
+      self.mus = np.load(self.visualAnchorFile)
+    else:
+      #self.mus = 10. * np.eye(self.nWords)
+      self.mus = KMeans(n_clusters=self.nWords).fit(np.concatenate(self.vCorpus, axis=0)).cluster_centers_
+      #self.mus = 1. * np.random.normal(size=(self.nWords, self.imageFeatDim))
     print("Finish initialization after %0.3f s" % (time.time() - begin_time))
+    self.printUnimodalCluster(filePrefix=self.modelName)
   
   # TODO
   # Inputs:
@@ -198,19 +208,22 @@ class ImagePhoneGaussianHMMWordDiscoverer:
       self.printModel('initial_model.txt')
     
     maxLikelihood = -np.inf
+    likelihoods = np.zeros((numIterations,))
     for epoch in range(numIterations): 
       begin_time = time.time()
       initCounts = {m: np.zeros((m,)) for m in self.lenProb}
       transCounts = {m: np.zeros((m, m)) for m in self.lenProb}
       phoneCounts = np.zeros((self.nWords, self.audioFeatDim))      
       conceptCounts = [np.zeros((vSen.shape[0], self.nWords)) for vSen in self.vCorpus]
+      self.conceptCounts = conceptCounts
 
       if printStatus:
         likelihood = self.computeAvgLogLikelihood()
+        likelihoods[epoch] = likelihood
         print('Epoch', epoch, 'Average Log Likelihood:', likelihood)
         if writeModel and likelihood > maxLikelihood:
           self.printModel(self.modelName + '_iter='+str(epoch)+'.txt')
-          model.printAlignment(self.modelName+'_iter='+str(epoch)+'_alignment', debug=False)                
+          self.printAlignment(self.modelName+'_iter='+str(epoch)+'_alignment', debug=False)                
           maxLikelihood = likelihood
       
       for ex, (vSen, aSen) in enumerate(zip(self.vCorpus, self.aCorpus)):
@@ -224,21 +237,13 @@ class ImagePhoneGaussianHMMWordDiscoverer:
         stateCounts = self.updateStateCounts(forwardProbs, backwardProbs)
         phoneCounts += np.sum(stateCounts, axis=1).T @ aSen
         
-        # XXX switch to approximate p(z_i|x, y) if the number of concepts
-        # is too large for exact computation
-        if self.nWords > 50:
-          conceptCounts[ex] += np.mean(stateCounts, axis=0)
-        else:
-          conceptCounts[ex] += self.updateConceptCounts(vSen, aSen)
-
+        conceptCounts[ex] += self.updateConceptCounts(vSen, aSen)
+             
+      self.conceptCounts = conceptCounts
       # Normalize
-      # XXX
       for m in self.lenProb:
         self.init[m] = np.maximum(initCounts[m], EPS) / np.sum(np.maximum(initCounts[m], EPS)) 
-        if debug:
-          print('self.init: ', self.init[m])
 
-      # XXX
       for m in self.lenProb:
         totCounts = np.sum(np.maximum(transCounts[m], EPS), axis=1)
         for s in range(m):
@@ -247,10 +252,7 @@ class ImagePhoneGaussianHMMWordDiscoverer:
             self.trans[m][s] = self.trans[m][s]
           else:
             self.trans[m][s] = np.maximum(transCounts[m][s], EPS) / totCounts[s]
-        if debug:
-          print('self.trans: ', self.trans[m])
       
-      # XXX 
       normFactor = np.sum(np.maximum(phoneCounts, EPS), axis=-1) 
       self.obs = (phoneCounts.T / normFactor).T
       
@@ -258,6 +260,7 @@ class ImagePhoneGaussianHMMWordDiscoverer:
         print('phoneCounts: ', phoneCounts)
         print('self.obs: ', self.obs)
       
+      # XXX
       self.updateSoftmaxWeight(conceptCounts, debug=False) 
 
       if (epoch + 1) % 10 == 0:
@@ -265,6 +268,8 @@ class ImagePhoneGaussianHMMWordDiscoverer:
 
       if printStatus:
         print('Epoch %d takes %.2f s to finish' % (epoch, time.time() - begin_time))
+
+    np.save(self.modelName+'_likelihoods.npy', likelihoods)
 
   # Inputs:
   # ------
@@ -626,6 +631,7 @@ class ImagePhoneGaussianHMMWordDiscoverer:
     for i, (aSen, vSen) in enumerate(zip(self.aCorpus, self.vCorpus)):
       alignment, alignProbs = self.align(aSen, vSen, debug=debug)
       clusters, clusterProbs = self.cluster(aSen, vSen, alignment)
+
       if DEBUG:
         print(aSen, vSen)
         print(type(alignment[1]))
@@ -634,6 +640,7 @@ class ImagePhoneGaussianHMMWordDiscoverer:
             'image_concepts': clusters,
             'alignment': alignment,
             'align_probs': alignProbs,
+            'concept_probs': self.conceptCounts[i].tolist(),
             'is_phoneme': isPhoneme
           }
       aligns.append(align_info)
@@ -645,9 +652,26 @@ class ImagePhoneGaussianHMMWordDiscoverer:
     # Write to a .json file for evaluation
     with open(filePrefix+'.json', 'w') as f:
       json.dump(aligns, f, indent=4, sort_keys=True)            
+  
+  def printUnimodalCluster(self, filePrefix):
+    f = open(filePrefix+'.txt', 'w')
+    cluster_infos = []
+    for i, (aSen, vSen) in enumerate(zip(self.aCorpus, self.vCorpus)):
+      clusterProbs = self.softmaxLayer(vSen)
+      clusters = np.argmax(clusterProbs, axis=1)
+      
+      cluster_info = {
+          'index': i,
+          'image_concepts': clusters.tolist(),
+          'cluster_probs': clusterProbs.tolist()
+        }
+      cluster_infos.append(cluster_info)
+    
+    with open(filePrefix+'.json', 'w') as f:
+      json.dump(cluster_infos, f, indent=4, sort_keys=True)
 
 if __name__ == '__main__':
-  tasks = [3]
+  tasks = [5]
   #----------------------------#
   # Word discovery on tiny.txt #
   #----------------------------#
@@ -740,3 +764,24 @@ if __name__ == '__main__':
     #model.simulatedAnnealing(numIterations=30, T0=50., debug=False)
     #model.printAlignment('exp/dec_30_mscoco/image_phone_alignment', debug=False) 
     model.printAlignment(modelName+'_alignment', debug=False)
+  if 4 in tasks:
+    speechFeatureFile = '../data/mscoco/src_mscoco_subset_subword_level_power_law.txt' 
+    imageFeatureFile = '../data/mscoco/mscoco_subset_subword_level_concept_gaussian_vectors.npz'
+    conceptIdxFile = 'exp/dec_30_mscoco/concept2idx.json'
+    exp_dir = 'exp/mscoco2k_gaussian_synthetic_momentum0.0_lr0.10000_stepscale0.10/'
+    modelConfigs = {'has_null': False, 'n_words': 65, 'momentum': 0.0, 'learning_rate': 0.1, 'normalize_vfeat': False, 'step_scale': 1.}
+    '''                'init_prob_file': exp_dir + 'image_phone_40_iter=24.txt_initialprobs.txt', 
+                    'trans_prob_file': exp_dir + 'image_phone_40_iter=24.txt_transitionprobs.txt', 
+                    'obs_prob_file': exp_dir + 'image_phone_40_iter=24.txt_observationprobs.npy', 
+                    'visual_anchor_file': exp_dir + 'image_phone_40_iter=24.txt_visualanchors.npy'}'''
+    modelName = 'exp/feb_4_test_posterior_and_decoding/image_phone'
+    model = ImagePhoneGaussianHMMWordDiscoverer(speechFeatureFile, imageFeatureFile, modelConfigs, modelName=modelName)
+    model.trainUsingEM(10, writeModel=False)
+  if 5 in tasks:
+    modelConfigs = {'has_null': False, 'n_words': 65, 'momentum': 0.0, 'learning_rate': 0.1, 'normalize_vfeat': False, 'step_scale': 1.}
+    modelName = 'exp/feb_5_test_cluster_quality/image_phone_unimodal_clusters'
+    speechFeatureFile = '../data/mscoco/src_mscoco_subset_subword_level_power_law.txt' 
+    imageFeatureFile = '../data/mscoco/mscoco_subset_subword_level_concept_gaussian_vectors.npz'
+    model = ImagePhoneGaussianHMMWordDiscoverer(speechFeatureFile, imageFeatureFile, modelConfigs, modelName=modelName)
+    model.trainUsingEM(2, writeModel=True)
+    model.printUnimodalCluster(filePrefix=modelName)

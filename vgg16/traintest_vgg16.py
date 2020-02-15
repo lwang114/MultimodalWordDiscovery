@@ -8,13 +8,13 @@ import sys
 import json
 import os
 
-def train(image_model, train_loader, test_loader, args, device_id=0):
-  # XXX
+def train(image_model, train_loader, test_loader, args, device_id=0): 
   if torch.cuda.is_available():
     image_model = image_model.cuda()
   
   # Set up the optimizer
-  '''
+  # XXX
+  '''  
   for p in image_model.parameters():
     if p.requires_grad:
       print(p.size())
@@ -67,7 +67,7 @@ def train(image_model, train_loader, test_loader, args, device_id=0):
       optimizer.step()
       
       # Adapt to the size of the dataset
-      n_print_step = 100
+      n_print_step = 1000
       if (i + 1) % n_print_step == 0:
         print('Epoch %d takes %.3f s to process %d batches, running loss %.5f' % (epoch, time.time()-begin_time, i, running_loss / n_print_step))
         running_loss = 0.
@@ -84,6 +84,8 @@ def train(image_model, train_loader, test_loader, args, device_id=0):
 
       torch.save(image_model.state_dict(),
               '%s/image_model.%d.pth' % (exp_dir, epoch))  
+      with open('%s/accuracy_%d.txt' % (exp_dir, epoch), 'w') as f:
+        f.write('%.5f' % avg_acc)
 
 def validate(image_model, test_loader, args):
   if torch.cuda.is_available():
@@ -102,37 +104,68 @@ def validate(image_model, test_loader, args):
   total = 0.
   class_correct = [0. for i in range(n_class)]
   class_total = [0. for i in range(n_class)]
-  #with torch.no_grad():
-  for i, image_input in enumerate(test_loader):
-    # XXX
-    #if i > 3:
-    #  break
+  begin_time = time.time()
+  embed1_all = {}
+  embed2_all = {}
+  with torch.no_grad():  
+    for i, image_input in enumerate(test_loader):
+      # XXX
+      #if i > 3:
+      #  break
 
-    images, labels = image_input
-    images = Variable(images)
-    labels = Variable(labels)
-    if torch.cuda.is_available():
-      images = images.cuda()
-      labels = labels.cuda()
+      images, labels = image_input
+      images = Variable(images)
+      labels = Variable(labels)
+      if torch.cuda.is_available():
+        images = images.cuda()
+        labels = labels.cuda()
 
-    outputs = image_model(images) 
-    _, predicted = torch.max(outputs.data, 1) 
-    total += labels.size(0)
-    c = torch.squeeze(predicted == labels.data)
-    #print(c.size())
+      outputs = image_model(images) 
+       
+      # TODO 
+      if args.save_features:
+        if args.image_model == 'vgg16':
+          embeds1, embeds2, outputs = image_model(images, save_features=args.save_features)
+          print(i, embeds1.size(), embeds2.size())
+          for i_b in range(embeds1.size()[0]):
+            feat_id = 'arr_'+str(i * args.batch_size + i_b)
+            embed1_all[feat_id] = embeds1[i_b]
+            embed2_all[feat_id] = embeds2[i_b]
+        elif args.image_model == 'res34':
+          embeds1, outputs = image_model(images, save_features=args.save_features)
+          print(i, embeds1.size())
+          for i_b in range(embeds1.size()[0]):
+            feat_id = 'arr_'+str(i * args.batch_size + i_b)
+            embed1_all[feat_id] = embeds1[i_b]     
+      
+      _, predicted = torch.max(outputs.data, 1) 
+      total += labels.size(0)
+      c = torch.squeeze(predicted == labels.data)
+      #print(c.size())
+      correct += torch.sum(c)    
+      for i_b in range(labels.size(0)):
+        #label_idx = labels[i_b].data.cpu().numpy()[0] 
+        label_idx = labels[i_b].data.cpu().numpy()
+        class_correct[label_idx] += c[i_b].data.cpu().numpy()
+        class_total[label_idx] += 1 
+      
+      n_print_step = 1000
+      if (i + 1) % n_print_step == 0:
+        print('Takes %.3f s to process %d batches, running accuracy: %d %%' % (time.time()-begin_time, i, 100 * correct / total))
 
-    correct += torch.sum(c)    
-    for i_b in range(labels.size(0)):
-      #label_idx = labels[i_b].data.cpu().numpy()[0] 
-      label_idx = labels[i_b].data.cpu().numpy()
-      class_correct[label_idx] += c[i_b].data.cpu().numpy()
-      class_total[label_idx] += 1 
+    print('Accuracy of the network: %d %%, %d/%d' % (100 * correct / total, correct, total))
 
-  print('Accuracy of the network: %d %%' % (100 * correct / total))
+    if args.print_class_accuracy:
+      top_classes = np.argsort(-np.asarray(class_correct) / np.maximum(1., np.asarray(class_total)))[:10]
+      for i_c in top_classes.tolist():
+        print('Accuracy of %s: %2d %%, %d/%d' % (
+          classes[i_c], 100 * class_correct[i_c] / np.maximum(1., class_total[i_c]), class_correct[i_c], class_total[i_c]))  
   
-  if args.print_class_accuracy:
-    for i_c in range(n_class):
-      print('Accuracy of %s: %2d %%' % (
-        classes[i_c], 100 * class_correct[i_c] / class_total[i_c]))
-  
-  return  100 * correct / total 
+  if not os.path.isdir('%s' % args.exp_dir):
+    os.mkdir('%s' % args.exp_dir)
+
+  if args.save_features:
+    np.savez(args.exp_dir+'/embed1_all.npz', **embed1_all)
+    np.savez(args.exp_dir+'/embed2_all.npz', **embed2_all)
+   
+  return  100 * correct / total

@@ -248,7 +248,7 @@ class Flickr_Preprocessor(object):
       for sent in sents:
         #print(sent)
         single_src = [str(ex+1)+','+str(w2idx[w]) for w in sent.split()]
-        single_trg = [str(ex+1)+','+c for c in concept.split()] 
+        single_trg = [str(ex+1)+','+c for c in concepts.split()] 
         
         src += single_src
         trg += single_trg
@@ -340,26 +340,41 @@ class Flickr_Preprocessor(object):
     src_fp.close()
     trg_fp.close()
  
-  def to_dpseg_text(self, phone_corpus_file, gold_align_file, out_file_prefix='flickr_deseg'):
+  def to_dpseg_text(self, phone_corpus_file, gold_align_file, single_letter_phones, out_file_prefix='flickr_deseg'):
     with open(gold_align_file, 'r') as f:
       gold_aligns = json.load(f)
     f = open(phone_corpus_file, 'r')
     a_corpus = []
+    phone_map = {}
+    n_phn = 0
     for line in f:
-      a_corpus.append(line.strip().split())
+      a_sent = line.strip().split()
+      for phn in a_sent:
+        if phn[-1] >= '0' and phn[-1] <= '9':
+          phn = phn[:-1]
+        
+        if phn not in phone_map:
+          phone_map[phn] = single_letter_phones[n_phn]
+          n_phn += 1
+          if n_phn >= len(single_letter_phones):
+            raise ValueError('Number of phone categories exceed limit; try reduce the phone set')
+      a_corpus.append(a_sent)
+      
     f.close()
-    
+
     a_corpus_segmented = []
     for i_ex, (a_sent, align_info) in enumerate(zip(a_corpus, gold_aligns)):
       alignment = align_info['alignment']
       cur_idx = alignment[0]
       a_sent_segmented = ''
       for phn, align_idx in zip(a_sent, alignment):
+        if phn[-1] >= '0' and phn[-1] <= '9':
+          phn = phn[:-1]
         if align_idx != cur_idx:
-          a_sent_segmented += ' ' + phn
+          a_sent_segmented += ' ' + phone_map[phn]
           cur_idx = align_idx
         else:
-          a_sent_segmented += phn
+          a_sent_segmented += phone_map[phn]
       a_corpus_segmented.append(a_sent_segmented)
     
     with open(out_file_prefix+'.txt', 'w') as f:
@@ -456,6 +471,7 @@ class Flickr_Preprocessor(object):
 
     assert len(a_corpus) == len(gold_aligns)
     a_corpus_topk = []
+    v_corpus_topk_str = []
     v_corpus_topk = {}
     gold_aligns_topk = []
     for i, (a_sent, v_sent, align_info) in enumerate(zip(a_corpus, v_corpus, gold_aligns)):
@@ -505,10 +521,14 @@ class Flickr_Preprocessor(object):
             }
           )
       a_corpus_topk.append(' '.join(a_sent_topk))
+      v_corpus_topk_str.append(' '.join(new_image_concepts))
       v_corpus_topk['arr_'+str(i)] = np.asarray(v_sent_topk)
 
     with open(out_file_prefix+'.txt', 'w') as f:
       f.write('\n'.join(a_corpus_topk))
+
+    with open(out_file_prefix+'_trg.txt', 'w') as f:
+      f.write('\n'.join(v_corpus_topk_str))
 
     with open(out_file_prefix+'_gold_alignment.json', 'w') as f:
       json.dump(gold_aligns_topk, f, indent=4, sort_keys=True)
@@ -581,6 +601,103 @@ class Flickr_Preprocessor(object):
           alignment = ' '.join([trg_words[idx] for idx in ali])
           f.write("%s\n" % alignment)
 
+  def alignment_to_word_units(self, alignment_file, phone_corpus,
+                                     word_unit_file='word_units.wrd',
+                                     phone_unit_file='phone_units.phn',
+                                     include_null = False):
+    f = open(phone_corpus, 'r')
+    a_corpus = []
+    for line in f: 
+      a_corpus.append(line.strip().split())
+    f.close()
+    
+    with open(alignment_file, 'r') as f:
+      alignments = json.load(f)
+    
+    word_units = []
+    phn_units = []
+    # XXX
+    for align_info, a_sent in zip(alignments, a_corpus):
+      image_concepts = align_info['image_concepts']
+      alignment = align_info['alignment']
+      pair_id = 'pair_' + str(align_info['index'])
+      print(pair_id) 
+      prev_align_idx = -1
+      start = 0
+      for t, align_idx in enumerate(alignment):
+        if t == 0:
+          prev_align_idx = align_idx
+        
+        phn_units.append('%s %d %d %s\n' % (pair_id, t, t + 1, a_sent[t]))
+        if prev_align_idx != align_idx:
+          if not include_null and prev_align_idx == 0:
+            prev_align_idx = align_idx
+            start = t
+            continue
+          word_units.append('%s %d %d %s\n' % (pair_id, start, t, image_concepts[prev_align_idx]))
+          prev_align_idx = align_idx
+          start = t
+        elif t == len(alignment) - 1:
+          if not include_null and prev_align_idx == 0:
+            continue
+          word_units.append('%s %d %d %s\n' % (pair_id, start, t + 1, image_concepts[prev_align_idx]))
+      
+    with open(word_unit_file, 'w') as f:
+      f.write(''.join(word_units))
+    
+    with open(phone_unit_file, 'w') as f:
+      f.write(''.join(phn_units))      
+  
+  def alignment_to_word_classes(self, alignment_file, phone_corpus,
+                                     word_class_file='words.class',
+                                     include_null = False):
+    f = open(phone_corpus, 'r')
+    a_corpus = []
+    for line in f: 
+      a_corpus.append(line.strip().split())
+    f.close()
+    
+    with open(alignment_file, 'r') as f:
+      alignments = json.load(f)
+    
+    word_units = {}
+    for align_info, a_sent in zip(alignments, a_corpus):
+      image_concepts = align_info['image_concepts']
+      alignment = align_info['alignment']
+      pair_id = 'pair_' + str(align_info['index'])
+      print(pair_id) 
+      prev_align_idx = -1
+      start = 0
+      for t, align_idx in enumerate(alignment):
+        if t == 0:
+          prev_align_idx = align_idx
+        
+        if prev_align_idx != align_idx:
+          if not include_null and prev_align_idx == 0:
+            prev_align_idx = align_idx
+            start = t
+            continue
+          if image_concepts[prev_align_idx] not in word_units:
+            word_units[image_concepts[prev_align_idx]] = ['%s %d %d\n' % (pair_id, start, t)]
+          else:
+            word_units[image_concepts[prev_align_idx]].append('%s %d %d\n' % (pair_id, start, t))
+          prev_align_idx = align_idx
+          start = t
+        elif t == len(alignment) - 1:
+          if not include_null and prev_align_idx == 0:
+            continue
+          if image_concepts[prev_align_idx] not in word_units:
+            word_units[image_concepts[prev_align_idx]] = ['%s %d %d\n' % (pair_id, start, t + 1)]
+          else:
+            word_units[image_concepts[prev_align_idx]].append('%s %d %d\n' % (pair_id, start, t + 1))
+      
+    with open(word_class_file, 'w') as f:
+      for i_c, c in enumerate(word_units):
+        #print(i_c, c)
+        f.write('Class %d:\n' % i_c)
+        f.write(''.join(word_units[c]))
+        f.write('\n')
+  
   def alignment_to_clusters(self, alignment_file, 
                                   cluster_file='clusters.json', 
                                   phoneme_level=False):
@@ -750,7 +867,7 @@ class Flickr_Preprocessor(object):
     return concept.split('.')[0]
     
 if __name__ == '__main__':
-  tasks = [8]
+  tasks = []
   '''instance_file = 'annotations/instances_val2014.json'
   caption_file = 'annotations/captions_val2014.json'
   json_file = 'val_mscoco_info_text_image.json'
@@ -808,7 +925,24 @@ if __name__ == '__main__':
     preproc.extract_top_k_concepts(speech_feat_file, image_feat_file, gold_align_file, out_file_prefix, topk=k, debug=True)
   if 8 in tasks:
     data_dir = '../data/flickr30k/phoneme_level/' #'../data/mscoco/'
-    speech_feat_file = data_dir + 'flickr30k.txt' #data_dir + 'src_mscoco_subset_subword_level_power_law.txt'
+    speech_feat_file = data_dir + 'src_flickr30k.txt' #data_dir + 'src_mscoco_subset_subword_level_power_law.txt'
     gold_alignment_file = data_dir + 'flickr30k_gold_alignment.json' #'mscoco_gold_alignment_power_law.json'
-    out_file_prefix = data_dir + 'flickr30k_segmented' 
-    preproc.to_dpseg_text(speech_feat_file, gold_alignment_file, out_file_prefix)
+    out_file_prefix = data_dir + 'flickr30k_segmented'
+    phones = '1234567890!@#$%^&*()_+qwertyuiop[]\{}|asdfghjkl;:zxcvbnm,./<>?' 
+    preproc.to_dpseg_text(speech_feat_file, gold_alignment_file, phones, out_file_prefix)
+  if 9 in tasks:
+    '''
+    data_dir = '../data/flickr30k/phoneme_level/' #'../data/mscoco/'
+    phone_corpus = data_dir + 'src_flickr30k.txt'
+    gold_alignment_file = data_dir + 'flickr30k_gold_alignment.json'
+    word_unit_file = data_dir + 'flickr30k_word_units.wrd'
+    phone_unit_file = data_dir + 'flickr30k_phone_units.phn'
+    preproc.alignment_to_word_units(gold_alignment_file, phone_corpus, word_unit_file, phone_unit_file)
+    '''
+    #model_name = 'hmm'
+    #pred_alignment_file = '../hmm/exp/aug_31_flickr/flickr30k_pred_alignment.json'
+    model_name = 'enriched'
+    pred_alignment_file = '../smt/exp/july_16_flickr_phoneme_enriched/flickr30k_pred_alignment.json'
+    #discovered_word_file = '../hmm/exp/aug_31_flickr/discovered_words.class'
+    discovered_word_file = 'tdev2/WDE/share/discovered_words_%s.class' % model_name
+    preproc.alignment_to_word_classes(pred_alignment_file, word_class_file=discovered_word_file)

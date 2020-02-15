@@ -26,6 +26,8 @@ class ImagePhoneHMMWordDiscoverer:
     self.momentum = modelConfigs.get('momentum', 0.)
     self.lr = modelConfigs.get('learning_rate', 10.)
     self.normalize_vfeat = modelConfigs.get('normalize_vfeat', False) 
+    self.imagePosteriorFile = modelConfigs.get('image_posterior_weights_file', None)
+
     self.init = {}
     self.trans = {}                 # trans[l][i][j] is the probabilities that target word e_j is aligned after e_i is aligned in a target sentence e of length l  
     self.lenProb = {}
@@ -47,6 +49,7 @@ class ImagePhoneHMMWordDiscoverer:
     nImages = 0
 
     vNpz = np.load(imageFeatFile)
+    # XXX
     vCorpus = [vNpz[k] for k in sorted(vNpz.keys(), key=lambda x:int(x.split('_')[-1]))]
     if self.normalize_vfeat:
       vCorpus = [(vSen.T / np.linalg.norm(vSen, ord=2, axis=-1)).T for vSen in vCorpus]  
@@ -56,8 +59,7 @@ class ImagePhoneHMMWordDiscoverer:
       print(len(vCorpus))
       print(vCorpus[0].shape)
     
-    # XXX
-    self.vCorpus = [vNpz[k] for k in sorted(vNpz, key=lambda x:int(x.split('_')[-1]))]
+    self.vCorpus = vCorpus
     if self.hasNull:
       # Add a NULL concept vector
       self.vCorpus = [np.concatenate((np.zeros((1, self.imageFeatDim)), vfeat), axis=0) for vfeat in self.vCorpus]   
@@ -134,8 +136,14 @@ class ImagePhoneHMMWordDiscoverer:
     
     # XXX
     #self.W = 10.*np.eye(self.nWords) 
-    self.W = 1. * np.random.normal(size=(self.nWords, self.imageFeatDim + 1))
-    self.W[:, -1] = 0.  
+    if self.imagePosteriorFile:
+      posteriorWeights = np.load(self.imagePosteriorFile)
+      weight, bias = posteriorWeights['weight'], posteriorWeights['bias']
+      
+      self.W = np.concatenate([weight, bias[:, np.newaxis]], axis=1)
+    else:
+      self.W = 1. * np.random.normal(size=(self.nWords, self.imageFeatDim + 1))
+      self.W[:, -1] = 0.  
     print("Finish initialization after %0.3f s" % (time.time() - begin_time))
   
   # TODO
@@ -195,6 +203,7 @@ class ImagePhoneHMMWordDiscoverer:
       self.printModel('initial_model.txt')
     
     maxLikelihood = -np.inf
+    likelihoods = np.zeros((numIterations,))   
     for epoch in range(numIterations): 
       begin_time = time.time()
       initCounts = {m: np.zeros((m,)) for m in self.lenProb}
@@ -204,6 +213,7 @@ class ImagePhoneHMMWordDiscoverer:
 
       if printStatus:
         likelihood = self.computeAvgLogLikelihood()
+        likelihoods[epoch] = likelihood
         print('Epoch', epoch, 'Average Log Likelihood:', likelihood)  
         if writeModel and likelihood > maxLikelihood:
           self.printModel(self.modelName + '_iter='+str(epoch)+'.txt')
@@ -220,7 +230,7 @@ class ImagePhoneHMMWordDiscoverer:
         transCounts[len(vSen)] += self.updateTransitionCounts(forwardProbs, backwardProbs, vSen, aSen, debug=False)
         stateCounts = self.updateStateCounts(forwardProbs, backwardProbs)
         phoneCounts += np.sum(stateCounts, axis=1).T @ aSen
-        conceptCounts[ex] += np.mean(stateCounts, axis=0)
+        conceptCounts[ex] += self.updateConceptCounts(vSen, aSen)
 
       # Normalize
       for m in self.lenProb:
@@ -239,14 +249,9 @@ class ImagePhoneHMMWordDiscoverer:
         if debug:
           print('self.trans: ', self.trans[m])
       
-      # XXX 
       normFactor = np.sum(np.maximum(phoneCounts, EPS), axis=-1) 
       self.obs = (phoneCounts.T / normFactor).T
       
-      if debug:
-        print('phoneCounts: ', phoneCounts)
-        print('self.obs: ', self.obs)
-      # XXX
       self.updateSoftmaxWeight(conceptCounts, debug=False) 
 
       if (epoch + 1) % 10 == 0:
@@ -255,6 +260,8 @@ class ImagePhoneHMMWordDiscoverer:
       if printStatus:
         print('Epoch %d takes %.2f s to finish' % (epoch, time.time() - begin_time))
 
+    np.save(self.modelName+'_likelihoods.npy', likelihoods) 
+   
   # Inputs:
   # ------
   #   vSen: Ty x Dy matrix storing the image feature (e.g., VGG 16 hidden activation)
@@ -424,6 +431,37 @@ class ImagePhoneHMMWordDiscoverer:
 
   # Inputs:
   # ------
+  #   vSen: Ty x Dx matrix storing the image feature (e.g., VGG16 hidden activations)
+  #   aSen: Tx x Dy matrix storing the phone sequence
+  #
+  # Outputs:
+  # -------
+  #   newConceptCounts: Ty x K maxtrix storing p(z_i|x, y) 
+  def updateConceptCounts(self, vSen, aSen, debug=False):
+    T = len(aSen)
+    nState = vSen.shape[0] 
+    newConceptCounts = np.zeros((nState, self.nWords)) 
+    for i in range(nState):
+      for k in range(self.nWords):    
+        probs_z_given_y = self.softmaxLayer(vSen)
+        probs_z_given_y[i] = 0.
+        probs_z_given_y[i, k] = 1.
+        probs_x_given_y = (probs_z_given_y @ (self.obs @ aSen.T)).T
+      
+        # Not using the forward function for better efficiency
+        forwardProbs = np.zeros((T, nState))   
+        forwardProbs[0] = self.init[nState] * probs_x_given_y[0]
+        for t in range(T-1):
+          forwardProbs[t+1] += (self.trans[nState].T @ forwardProbs[t]) * probs_x_given_y[t+1]    
+        newConceptCounts[i, k] = np.sum(forwardProbs[-1]) 
+
+    newConceptCounts = (newConceptCounts.T / np.sum(newConceptCounts, axis=1)).T 
+    if debug:
+      print(newConceptCounts)
+    return newConceptCounts
+
+  # Inputs:
+  # ------
   #   conceptCounts: a list of Ty x K matrices storing p(z_i|x, y) for each utterances
   #   numGDIterations: int, number of gradient descent iterations   
   #
@@ -438,12 +476,12 @@ class ImagePhoneHMMWordDiscoverer:
       # XXX
       vConcat = np.concatenate([vSen, np.ones((N, 1))], axis=1)
       zProb = self.softmaxLayer(vSen, debug=debug) 
-      dW += (conceptCount - zProb).T @ vConcat 
+      dW += 1. / len(self.vCorpus) * (conceptCount - zProb).T @ vConcat 
       if debug:
         print('dW: ', dW)
       
     self.W[:, :-1] = (1. - self.momentum) * self.W[:, :-1] + self.lr * dW[:, :-1]
-    self.W[:, -1] =  (1. - self.momentum) * self.W[:, -1] + self.lr / 10 * dW[:, -1]
+    self.W[:, -1] =  (1. - self.momentum) * self.W[:, -1] + self.lr * dW[:, -1]
 
   # Compute translation length probabilities q(m|n)
   def computeTranslationLengthProbabilities(self, smoothing=None):
@@ -604,7 +642,7 @@ class ImagePhoneHMMWordDiscoverer:
       json.dump(aligns, f, indent=4, sort_keys=True)            
 
 if __name__ == '__main__':
-  tasks = [3]
+  tasks = [0]
   #----------------------------#
   # Word discovery on tiny.txt #
   #----------------------------#
@@ -616,7 +654,7 @@ if __name__ == '__main__':
     with open('tiny.txt', 'w') as f:
       f.write(audio_feats)
     np.savez('tiny.npz', **image_feats)
-    modelConfigs = {'has_null': False, 'n_words': 3, 'momentum': 0., 'learning_rate': 0.1}
+    modelConfigs = {'has_null': False, 'n_words': 3, 'momentum': 0., 'learning_rate': 0.01}
     model = ImagePhoneHMMWordDiscoverer(speechFeatureFile, imageFeatureFile, modelConfigs, modelName='exp/jan_14_tiny/tiny')
     model.trainUsingEM(30, writeModel=True, debug=False)
     #model.simulatedAnnealing(numIterations=100, T0=1., debug=False) 

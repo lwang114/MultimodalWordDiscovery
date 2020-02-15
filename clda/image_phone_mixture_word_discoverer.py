@@ -55,20 +55,21 @@ class ImagePhoneMixtureWordDiscoverer:
     self.phone2idx = {}
     n_types = 0
     n_phones = 0
-    with open(speech_feat_file) as f:
-      a_corpus_dict = json.load(f)
-    for k in sorted(a_corpus_dict, key=lambda x:int(x.split('_')[-1])):
-      a_sent = a_corpus_dict[k]
+    
+    f = open(speech_feat_file, 'r')
+    for line in f:
+      a_sent = line.strip().split()
+      a_corpus_str.append(a_sent)
       for phn in a_sent:
         if phn not in self.phone2idx:
           self.phone2idx[phn] = n_types
           n_types += 1
         n_phones += 1
-      a_corpus_str.append(a_sent)
     f.close()
-
     self.audio_feat_dim = n_types
+    
     self.a_corpus = []
+    # XXX
     for a_sent_str in a_corpus_str:
       a_sent = np.zeros((len(a_sent_str), n_types))
       for t, phn in enumerate(a_sent_str):
@@ -76,6 +77,7 @@ class ImagePhoneMixtureWordDiscoverer:
       self.a_corpus.append(a_sent)
 
     v_npz = np.load(image_feat_file)
+    # XXX
     self.v_corpus = [np.array(v_npz[k]) for k in sorted(v_npz, key=lambda x:int(x.split('_')[-1]))] 
     self.image_feat_dim = self.v_corpus[0].shape[-1]
     n_images = 0
@@ -92,6 +94,7 @@ class ImagePhoneMixtureWordDiscoverer:
     # XXX
     #self.a_corpus = self.a_corpus[:10]
     #self.v_corpus = self.v_corpus[:10]
+    print(len(self.v_corpus), len(self.a_corpus))
     assert len(self.v_corpus) == len(self.a_corpus)
 
     print('----- Corpus Summary -----')
@@ -100,7 +103,7 @@ class ImagePhoneMixtureWordDiscoverer:
     print('Number of phones: ', n_phones)
     print('Number of objects: ', n_images)
 
-  def initialize_model(self, alignments=None):
+  def initialize_model(self, alignments=None, method='kmeans'):
     begin_time = time.time()
     self.compute_translation_length_probabilities()
 
@@ -123,26 +126,27 @@ class ImagePhoneMixtureWordDiscoverer:
     self.mu_v0 /= n_frames_v
     
     c = 3.    
-    cluster_centers_v = -np.inf * np.ones((self.Kmax, self.Mmax, self.image_feat_dim))
     self.fixed_variance_v = 0. # XXX: Assume fixed variances  
-    n_corpus = len(self.v_corpus)
-
-    for k in range(self.Kmax):
-      for m in range(self.Mmax):
-        #i_a = np.random.randint(0, n_frames_a-1)
-        #i_v = np.random.randint(0, n_frames_v-1)
-        #cluster_centers_a[k, m] = a_corpus_concat[i_a]
-        #cluster_centers_v[k, m] = v_corpus_concat[i_v] 
-        i_ex = np.random.randint(0, n_corpus-1)
-        if len(self.v_corpus[i_ex]) <= 1:
-          i_v = 0
-        else:
-          i_v = np.random.randint(0, len(self.v_corpus[i_ex])-1)
-        cluster_centers_v[k, m] = self.v_corpus[i_ex][i_v]
+    n_corpus = len(self.v_corpus)    
+    if method == 'rand':
+      for k in range(self.Kmax):
+        for m in range(self.Mmax):
+          #i_a = np.random.randint(0, n_frames_a-1)
+          #i_v = np.random.randint(0, n_frames_v-1)
+          #cluster_centers_a[k, m] = a_corpus_concat[i_a]
+          #cluster_centers_v[k, m] = v_corpus_concat[i_v] 
+          i_ex = np.random.randint(0, n_corpus-1)
+          if len(self.v_corpus[i_ex]) <= 1:
+            i_v = 0
+          else:
+            i_v = np.random.randint(0, len(self.v_corpus[i_ex])-1)
+          cluster_centers_v[k, m] = self.v_corpus[i_ex][i_v]
+    else:
+      cluster_centers_v = KMeans(n_clusters=self.Mmax * self.Kmax, max_iter=10).fit(np.concatenate(self.v_corpus, axis=0)).cluster_centers_.reshape(self.Kmax, self.Mmax, -1)
 
     for vfeat in self.v_corpus: 
-      self.fixed_variance_v += np.sum((vfeat - self.mu_v0)**2) / (c * n_frames_v * self.image_feat_dim)
-    
+      self.fixed_variance_v += np.sum((vfeat - self.mu_v0)**2) / (c * n_frames_v * self.image_feat_dim) 
+        
     self.image_obs_model['means'] = cluster_centers_v
     self.image_obs_model['weights'] = np.log(1./self.Mmax) * np.ones((self.Kmax, self.Mmax))
     self.image_obs_model['n_mixtures'] = self.Mmax * np.ones((self.Kmax,)) 
@@ -524,6 +528,8 @@ if __name__ == '__main__':
   test_case = 3
 
   if test_case == 0:
+    exp_dir = 'exp/feb_5_tiny/'
+    print(exp_dir)
     # Test KL-divergence
     p = np.array([0.1, 0.4, 0.5])
     q = np.array([0.2, 0.6, 0.2])
@@ -534,26 +540,18 @@ if __name__ == '__main__':
     eps = 0.
     # ``2, 1``, ``3, 2``, ``3, 1``
     image_feats = {'0':np.array([[eps/2., 1.-eps, eps/2.], [1-eps, eps/2., eps/2.]]), '1':np.array([[eps/2., eps/2., 1.-eps], [eps/2., 1.-eps, eps/2.]]), '2':np.array([[eps/2., eps/2., 1.-eps], [1.-eps, eps/2., eps/2.]])}
-    #image_feats = {'0':np.array([[1-eps, eps/2., eps/2.], [eps/2., 1.-eps, eps/2.]]), '1':np.array([[eps/2., 1.-eps, eps/2.], [eps/2., eps/2., 1.-eps]]), '2':np.array([[eps/2., eps/2., 1.-eps], [1.-eps, eps/2., eps/2.]])}
-    eps = 0.
-    # ``1, 2``, ``2, 3``, ``3, 1``
-    audio_feats = {'0':np.array([[1-eps, eps/2., eps/2.], [eps/2., 1.-eps, eps/2.]]), '1':np.array([[eps/2., 1.-eps, eps/2.], [eps/2., eps/2., 1.-eps]]), '2':np.array([[eps/2., eps/2., 1.-eps], [1.-eps, eps/2., eps/2.]])}
-    np.savez('tiny_v.npz', **image_feats)
-    np.savez('tiny_a.npz', **audio_feats)
+    audio_feats = '0 1\n1 2\n2 0'
+    with open(exp_dir + 'tiny.txt', 'w') as f:
+      f.write(audio_feats)
+    np.savez(exp_dir + 'tiny.npz', **image_feats)
   
     alignments = None
     model_configs = {'Kmax':3, 'Mmax':1, 'embedding_dim':3, 'has_null':False}
-    speechFeatureFile = 'tiny_a.npz'
-    imageFeatureFile = 'tiny_v.npz'
-    model = ImageAudioGMMWordDiscoverer(speechFeatureFile, imageFeatureFile, model_configs=model_configs, model_name='tiny')
+    speechFeatureFile = exp_dir + 'tiny.txt'
+    imageFeatureFile = exp_dir + 'tiny.npz'
+    model = ImagePhoneMixtureWordDiscoverer(speechFeatureFile, imageFeatureFile, model_configs=model_configs, model_name='tiny')
     model.train_using_EM(num_iterations=10)
-    print(model.align(image_feats['0'], image_feats['0']))
-    print(model.align(image_feats['1'], image_feats['1']))
-    print(model.align(image_feats['2'], image_feats['2']))
-    print(model.align_i(0))
-    print(model.align_i(1))
-    print(model.align_i(2))
-    model.print_alignment('tiny')
+    model.print_alignment(exp_dir + 'tiny')
   elif test_case == 1:  
     img = Image.open('../1000268201.jpg')
     width = 10
@@ -568,7 +566,7 @@ if __name__ == '__main__':
     
     speechFeatureFile = '../img_vec1.npz'
     imageFeatureFile = '../img_vec1.npz'
-    model = ImageAudioGMMWordDiscoverer(speechFeatureFile, imageFeatureFile, model_configs=model_configs, model_name='image_audio')
+    model = ImagePhoneMixtureWordDiscoverer(speechFeatureFile, imageFeatureFile, model_configs=model_configs, model_name='image_audio')
     model.train_using_EM(num_iterations=1)
     model.print_alignment('image_segmentation')
   elif test_case == 2:   
@@ -595,24 +593,29 @@ if __name__ == '__main__':
         
     print('segment_alignments: ', segment_alignments)
     
-    model_configs = {'Kmax':300, 'Mmax':1, 'embedding_dim':120, 'alignments':[segment_alignments], 'segmentations':segmentations}  
-    
-    model_configs = {'Kmax':300, 'Mmax':1, 'embedding_dim':120}  
-    model = ImageAudioWordDiscoverer(speech_feature_file, image_feature_file, model_configs=model_configs, model_name=exp_dir+'image_audio')
+    model_configs = {'Kmax':65, 'Mmax':1, 'embedding_dim':120, 'alignments':[segment_alignments], 'segmentations':segmentations}  
+     
+    model = ImagePhoneMixtureWordDiscoverer(speech_feature_file, image_feature_file, model_configs=model_configs, model_name=exp_dir+'image_audio')
     model.train_using_EM(num_iterations=10)
   elif test_case == 3:
+    model_configs = {'Kmax':65, 'Mmax':1, 'has_null':False}
     #align_file = '../data/flickr30k/audio_level/flickr30k_gold_alignment.json'
     #segment_file = '../data/flickr30k/audio_level/flickr30k_gold_landmarks_mfcc.npz'
     #speech_feature_file = '../data/flickr30k/sensory_level/flickr_concept_kamper_embeddings.npz'
-    speech_feature_file = '../data/mscoco/mscoco_subset_phone_power_law.json'
+    #speech_feature_file = '../data/mscoco/src_mscoco_subset_subword_level_power_law.txt'
+    # XXX
+    speech_feature_file = '../data/mscoco/src_mscoco_subset_130k_power_law_phone_captions.txt'
     #image_feature_file = '../data/flickr30k/sensory_level/flickr30k_vgg_penult.npz'
-    image_feature_file = '../data/mscoco/mscoco_vgg_penult.npz'
-    exp_dir = 'exp/nov_18_mscoco_mfcc_concept=66_mixture=3/'
+    #image_feature_file = '../data/mscoco/mscoco_subset_subword_level_concept_gaussian_vectors.npz'
+    image_feature_file = '../data/mscoco/mscoco_subset_130k_power_law_concept_gaussian_vectors.npz' 
+    #image_feature_file = '../data/mscoco/mscoco_subset_130k_res34_embed512dim.npz'
     # XXX
-    #exp_dir = 'exp/nov_10_mscoco_mfcc/'
-
-    # TODO
-    # XXX
-    model_configs = {'Kmax':66, 'Mmax':3, 'has_null':False}  
+    exp_dir = 'exp/feb_5_mscoco20k_synthetic_concept_%d_mixture=%d/' % (model_configs['Kmax'], model_configs['Mmax'])
+    print(exp_dir)      
     model = ImagePhoneMixtureWordDiscoverer(speech_feature_file, image_feature_file, model_configs=model_configs, model_name=exp_dir+'image_phone_mixture')
-    model.train_using_EM(num_iterations=20)
+    begin_time = time.time()
+    model.train_using_EM(num_iterations=10)
+    print('Take %.5f s to finish training !' % (time.time() - begin_time))
+    model.print_alignment(exp_dir + 'image_phone')
+    print('Take %.5f s to finish decoding !' % (time.time() - begin_time))
+
