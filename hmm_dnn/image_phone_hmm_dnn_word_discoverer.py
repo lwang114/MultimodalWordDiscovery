@@ -472,6 +472,7 @@ class ImagePhoneHMMDNNWordDiscoverer:
     T = len(aSen)
     nState = vSen.shape[0] 
     newConceptCounts = np.zeros((nState, self.nWords)) 
+    '''
     for i in range(nState):
       for k in range(self.nWords):    
         probs_z_given_y = self.softmaxLayer(self.hiddenLayer(vSen))
@@ -485,7 +486,22 @@ class ImagePhoneHMMDNNWordDiscoverer:
         for t in range(T-1):
           forwardProbs[t+1] += (self.trans[nState].T @ forwardProbs[t]) * probs_x_given_y[t+1]    
         newConceptCounts[i, k] = np.sum(forwardProbs[-1]) 
+    '''
+    probs_x_given_y_concat = np.zeros((T, nState * self.nWords, nState))
+    probs_z_given_y = self.softmaxLayer(self.hiddenLayer(vSen))
+    for i in range(nState):
+      for k in range(self.nWords):
+        probs_z_given_y_ik = deepcopy(probs_z_given_y)
+        probs_z_given_y_ik[i] = 0.
+        probs_z_given_y_ik[i, k] = 1.
+        probs_x_given_y_concat[:, i*self.nWords+k, :] = (probs_z_given_y_ik @ (self.obs @ aSen.T)).T
 
+    forwardProbsConcat = np.zeros((nState * self.nWords, nState))
+    forwardProbsConcat = self.init[nState] * probs_x_given_y_concat[0]
+    for t in range(T-1):
+      forwardProbsConcat = (forwardProbsConcat @ self.trans[nState]) * probs_x_given_y_concat[t+1]
+
+    newConceptCounts = np.sum(forwardProbsConcat, axis=-1).reshape((nState, self.nWords))
     newConceptCounts = (newConceptCounts.T / np.sum(newConceptCounts, axis=1)).T 
     if debug:
       print(newConceptCounts)
@@ -782,10 +798,10 @@ if __name__ == '__main__':
     #speechFeatureFile = '../data/mscoco/trg_mscoco_subset_subword_level_power_law.txt'
     #imageFeatureFile = '../data/mscoco/mscoco_subset_subword_level_concept_gaussian_vectors.npz'
     #imageFeatureFile = 'mscoco_subset_subword_level_concept_vectors.npz'
-    imageFeatureFile = '../data/mscoco/mscoco_subset_2k_res34_embed512dim.npz'
-    #imageFeatureFile = '../data/mscoco/mscoco_vgg_penult.npz'
+    #imageFeatureFile = '../data/mscoco/mscoco_subset_2k_res34_embed512dim.npz'
+    imageFeatureFile = '../data/mscoco/mscoco_vgg_penult.npz'
     
-    modelConfigs = {'has_null': False, 'n_words': 65, 'momentum': 0.0, 'learning_rate': 0.001, 'normalize_vfeat': False, 'step_scale': 0.001, 'hidden_dim': 512}
+    modelConfigs = {'has_null': False, 'n_words': 65, 'momentum': 0.0, 'learning_rate': 0.0001, 'normalize_vfeat': False, 'step_scale': 0.001, 'hidden_dim': 512}
     modelName = 'exp/jan_31_mscoco_gaussian_momentum%.1f_lr%.2f_stepscale%.3f_twolayer/image_phone' % (modelConfigs['momentum'], modelConfigs['learning_rate'], modelConfigs['step_scale']) 
     print(modelName)
     #model = ImagePhoneHMMWordDiscoverer(speechFeatureFile, imageFeatureFile, modelConfigs, modelName='exp/dec_30_mscoco/image_phone') 

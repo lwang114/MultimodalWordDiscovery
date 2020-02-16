@@ -441,20 +441,21 @@ class ImagePhoneHMMWordDiscoverer:
     T = len(aSen)
     nState = vSen.shape[0] 
     newConceptCounts = np.zeros((nState, self.nWords)) 
+    probs_x_given_y_concat = np.zeros((T, nState * self.nWords, nState))
+    probs_z_given_y = self.softmaxLayer(vSen)
     for i in range(nState):
-      for k in range(self.nWords):    
-        probs_z_given_y = self.softmaxLayer(vSen)
-        probs_z_given_y[i] = 0.
-        probs_z_given_y[i, k] = 1.
-        probs_x_given_y = (probs_z_given_y @ (self.obs @ aSen.T)).T
-      
-        # Not using the forward function for better efficiency
-        forwardProbs = np.zeros((T, nState))   
-        forwardProbs[0] = self.init[nState] * probs_x_given_y[0]
-        for t in range(T-1):
-          forwardProbs[t+1] += (self.trans[nState].T @ forwardProbs[t]) * probs_x_given_y[t+1]    
-        newConceptCounts[i, k] = np.sum(forwardProbs[-1]) 
+      for k in range(self.nWords):
+        probs_z_given_y_ik = deepcopy(probs_z_given_y)
+        probs_z_given_y_ik[i] = 0.
+        probs_z_given_y_ik[i, k] = 1.
+        probs_x_given_y_concat[:, i*self.nWords+k, :] = (probs_z_given_y_ik @ (self.obs @ aSen.T)).T
 
+    forwardProbsConcat = np.zeros((nState * self.nWords, nState))
+    forwardProbsConcat = self.init[nState] * probs_x_given_y_concat[0]
+    for t in range(T-1):
+      forwardProbsConcat = (forwardProbsConcat @ self.trans[nState]) * probs_x_given_y_concat[t+1]
+
+    newConceptCounts = np.sum(forwardProbsConcat, axis=-1).reshape((nState, self.nWords))
     newConceptCounts = (newConceptCounts.T / np.sum(newConceptCounts, axis=1)).T 
     if debug:
       print(newConceptCounts)
@@ -642,7 +643,7 @@ class ImagePhoneHMMWordDiscoverer:
       json.dump(aligns, f, indent=4, sort_keys=True)            
 
 if __name__ == '__main__':
-  tasks = [0]
+  tasks = [2]
   #----------------------------#
   # Word discovery on tiny.txt #
   #----------------------------#
@@ -707,7 +708,7 @@ if __name__ == '__main__':
   if 2 in tasks:      
     speechFeatureFile = '../data/mscoco/src_mscoco_subset_subword_level_power_law.txt'
     #imageFeatureFile = '../data/mscoco/mscoco_subset_subword_level_concept_gaussian_vectors.npz'
-    imageFeatureFile = '../data/mscoco/mscoco_subset_subword_level_concept_vectors.npz'
+    #imageFeatureFile = '../data/mscoco/mscoco_subset_subword_level_concept_vectors.npz'
     imageFeatureFile = '../data/mscoco/mscoco_vgg_penult.npz'
     modelConfigs = {'has_null': False, 'n_words': 65, 'momentum': 0.0, 'learning_rate': 0.01, 'normalize_vfeat': False, 'step_scale': 5}
     modelName = 'exp/jan_18_mscoco_vgg16_momentum%.1f_lr%.1f_stepscale%d_linear/image_phone' % (modelConfigs['momentum'], modelConfigs['learning_rate'], modelConfigs['step_scale']) 
