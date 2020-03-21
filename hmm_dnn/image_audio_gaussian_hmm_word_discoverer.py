@@ -209,6 +209,7 @@ class ImageAudioGaussianHMMWordDiscoverer:
       phoneCounts = np.zeros((self.nWords, self.nPhones))
       conceptCounts = [np.zeros((vSen.shape[0], self.nWords)) for vSen in self.vCorpus]
       self.conceptCounts = conceptCounts
+      self.conceptPhoneCounts = conceptPhoneCounts
 
       if printStatus:
         likelihood = self.computeAvgLogLikelihood()
@@ -233,20 +234,30 @@ class ImageAudioGaussianHMMWordDiscoverer:
         conceptCounts[ex] += self.updateConceptCounts(vSen, aSen)
              
       self.conceptCounts = conceptCounts
+      self.conceptPhoneCounts = conceptPhoneCounts
       # Normalize
       for m in self.lenProb:
-        self.init[m] = np.maximum(initCounts[m], EPS) / np.sum(np.maximum(initCounts[m], EPS)) 
+        # XXX
+        # self.init[m] = np.maximum(initCounts[m], EPS) / np.sum(np.maximum(initCounts[m], EPS)) 
+        self.init[m] = initCounts[m] / np.sum(initCounts[m]) 
 
       for m in self.lenProb:
-        totCounts = np.sum(np.maximum(transCounts[m], EPS), axis=1)
+        # XXX
+        # totCounts = np.sum(np.maximum(transCounts[m], EPS), axis=1)
+        totCounts = np.sum(transCounts[m], axis=1)
+
         for s in range(m):
           if totCounts[s] == 0:
             # Not updating the transition arc if it is not used          
             self.trans[m][s] = self.trans[m][s]
-          else:
-            self.trans[m][s] = np.maximum(transCounts[m][s], EPS) / totCounts[s]
-      
-      normFactor = np.sum(np.maximum(phoneCounts, EPS), axis=-1) 
+          else: 
+            # XXX
+            # self.trans[m][s] = np.maximum(transCounts[m][s], EPS) / totCounts[s]
+            self.trans[m][s] = transCounts[m][s] / totCounts[s]
+
+      # XXX
+      # normFactor = np.sum(np.maximum(phoneCounts, EPS), axis=-1) 
+      normFactor = np.sum(phoneCounts, axis=-1) 
       self.phoneProbs = (phoneCounts.T / normFactor).T
       
       if debug:
@@ -283,6 +294,7 @@ class ImageAudioGaussianHMMWordDiscoverer:
     
     probs_z_given_y = self.softmaxLayerV(vSen) 
     probs_ph_given_x = self.softmaxLayerA(aSen) 
+
     probs_x_t_given_z = (self.phoneProbs @ probs_ph_given_x.T).T
     
     forwardProbs[0] = np.tile(self.init[nState][:, np.newaxis], (1, self.nWords)) * probs_z_given_y * probs_x_t_given_z[0]
@@ -354,7 +366,9 @@ class ImageAudioGaussianHMMWordDiscoverer:
     initExpCounts = np.zeros((nState,))  
     for t in range(T):
       # XXX
-      initExpCounts += np.sum(np.maximum(forwardProbs[t] * backwardProbs[t], EPS), axis=-1) / np.sum(np.maximum(forwardProbs[t] * backwardProbs[t], EPS))
+      # initExpCounts += np.sum(np.maximum(forwardProbs[t] * backwardProbs[t], EPS), axis=-1) / np.sum(np.maximum(forwardProbs[t] * backwardProbs[t], EPS))
+      initExpCounts += np.sum(forwardProbs[t] * backwardProbs[t], axis=-1) / np.sum(forwardProbs[t] * backwardProbs[t])
+
       if debug:
         #print('forwardProbs, backwardProbs: ', forwardProbs[t], backwardProbs[t])    
         print('np.sum(forward*backward): ', np.sum(forwardProbs[t] * backwardProbs[t])) 
@@ -397,8 +411,9 @@ class ImageAudioGaussianHMMWordDiscoverer:
         print('diag count: ', alpha * trans_off_diag * np.sum(prob_x_t_z_given_y * backwardProbs[t+1], axis=-1))
         print("transExpCount: ", transExpCount)
       # XXX
-      transExpCount = np.maximum(transExpCount, EPS) / np.sum(np.maximum(transExpCount, EPS))
-
+      # transExpCount = np.maximum(transExpCount, EPS) / np.sum(np.maximum(transExpCount, EPS))
+      transExpCount = transExpCount / np.sum(transExpCount)
+      
       # XXX
       # Reduce the number of parameters if the length of image-caption pairs vary too much by maintaining the Toeplitz assumption
       if len(self.lenProb) >= 6:
@@ -431,7 +446,9 @@ class ImageAudioGaussianHMMWordDiscoverer:
     #assert np.sum(forwardProbs, axis=1).all() and np.sum(backwardProbs, axis=1).all()
     T = forwardProbs.shape[0]
     nState = forwardProbs.shape[1]
-    normFactor = np.maximum(np.sum(np.sum(forwardProbs * backwardProbs, axis=-1), axis=-1), EPS)
+    # XXX
+    # normFactor = np.maximum(np.sum(np.sum(forwardProbs * backwardProbs, axis=-1), axis=-1), EPS)
+    normFactor = np.sum(np.sum(forwardProbs * backwardProbs, axis=-1), axis=-1)
     newStateCounts = np.transpose(np.transpose(forwardProbs * backwardProbs, (1, 2, 0)) / normFactor, (2, 0, 1)) 
    
     return newStateCounts
@@ -505,7 +522,8 @@ class ImageAudioGaussianHMMWordDiscoverer:
       Delta = conceptCount - zProb 
       musNext += Delta.T @ vSen
       normFactor += np.sum(Delta, axis=0)
-      normFactor = np.sign(normFactor) * np.maximum(np.abs(normFactor), EPS)  
+      # XXX
+      # normFactor = np.sign(normFactor) * np.maximum(np.abs(normFactor), EPS)  
       self.musV = (musNext.T / normFactor).T
     else:
       dmus = np.zeros((self.nWords, self.imageFeatDim))
@@ -528,7 +546,8 @@ class ImageAudioGaussianHMMWordDiscoverer:
         Delta = np.sum(conceptPhoneCount, axis=1) - phProb 
         musNext += Delta.T @ aSen
         normFactor += np.sum(Delta, axis=0)
-      normFactor = np.sign(normFactor) * np.maximum(np.abs(normFactor), EPS)  
+      # XXX
+      # normFactor = np.sign(normFactor) * np.maximum(np.abs(normFactor), EPS)  
       self.musA = (musNext.T / normFactor).T
     else:
       dmus = np.zeros((self.nPhones, self.audioFeatDim))
@@ -600,7 +619,8 @@ class ImageAudioGaussianHMMWordDiscoverer:
       forwardProb = self.forward(vSen, aSen)
       #backwardProb = self.backward(tSen, fSen)
       # XXX
-      likelihood = np.maximum(np.sum(forwardProb[-1]), EPS)
+      # likelihood = np.maximum(np.sum(forwardProb[-1]), EPS)
+      likelihood = np.sum(forwardProb[-1])
       ll += math.log(likelihood)
     return ll / len(self.vCorpus)
 

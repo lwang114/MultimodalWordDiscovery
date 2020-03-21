@@ -25,6 +25,7 @@ parser.add_argument('--width', type=float, default=1., help='width parameter of 
 parser.add_argument('--image_posterior_weights_file', type=str, default=None, help='Pretrained weights for the image posteriors')
 parser.add_argument('--audio_posterior_weights_file', type=str, default=None, help='Pretrained weights for the audio posteriors')
 parser.add_argument('--date', type=str, default='', help='Date of starting the experiment')
+parser.add_argument('--n_phones', type=int, default=None, help='Number of phone-like clusters')
 
 args = parser.parse_args()
 
@@ -51,10 +52,13 @@ if args.dataset == 'mscoco2k':
 
   imageConceptFile = dataDir + 'trg_mscoco_subset_subword_level_power_law.txt'
   nWords = 65
-  if args.model_type == 'gaussian':
-    nPhones = 42
+  if args.n_phones is None:
+    if args.model_type == 'gaussian':
+      nPhones = 42
+    else:
+      nPhones = 49
   else:
-    nPhones = 49
+    nPhones = args.n_phones
 elif args.dataset == 'flickr':
   goldAlignFile = dataDir + 'sensory_level/flickr30k_gold_alignment.json'
   speechFeatureFile = dataDir + 'sensory_level/flickr_concept_kamper_embeddings.npz'
@@ -203,7 +207,7 @@ if 1 in tasks:
     elif args.model_type == 'two-layer':
       model = ImageAudioHMMDNNWordDiscoverer(speechFeatureFile, imageFeatureFile, modelConfigs, modelName=modelName)
 
-    model.trainUsingEM(10, writeModel=True, debug=False)
+    model.trainUsingEM(20, writeModel=True, debug=False)
     print('Take %.5s s to finish training the model !' % (time.time() - begin_time))
     #model.simulatedAnnealing(numIterations=100, T0=1., debug=False)
     model.printAlignment(modelName+'_alignment', debug=False) 
@@ -215,12 +219,13 @@ if 2 in tasks:
 
   with open(conceptIdxFile, 'r') as f:
     concept2idx = json.load(f)
-
+  
   if args.audio_feat_type == 'synthetic' and args.image_feat_type: 
     for snr in SNRs:
       accs = []
       f1s = []
-      purities = []
+      vpurities = []
+      apurities = []
       for rep in range(nReps):
         modelName = expDir + 'image_phone_{}dB_{}'.format(snr, rep)
         print(modelName)
@@ -237,17 +242,22 @@ if 2 in tasks:
             gold.append(g['image_concepts'])
           else:
             raise ValueError('Invalid Dataset')
-        purities.append(cluster_confusion_matrix(gold, pred, file_prefix='image_confusion_matrix', print_result=False, return_result=True))
-        #cluster_confusion_matrix(gold, pred, alignment=gold_info, file_prefix='audio_confusion_matrix') 
+        vpurities.append(cluster_confusion_matrix(pred, gold, file_prefix='image_confusion_matrix', print_result=False, return_result=True))  
+        if args.dataset == 'flickr':
+          apurities.append(word_cluster_confusion_matrix(pred_info, gold_info, concept2idx=concept2idx, file_prefix='audio_confusion_matrix'))
+        else:
+          apurities.append(word_cluster_confusion_matrix(pred_info, gold_info, file_prefix='audio_confusion_matrix'))
         acc = accuracy(pred_info, gold_info)
+        
         rec, prec, f1 = boundary_retrieval_metrics(pred_info, gold_info, return_results=True, print_results=False)
         accs.append(acc)
         f1s.append(f1)
-      print('Average purities and deviation: ', np.mean(purities), np.var(purities)**.5)
+      print('Average word cluster purities and deviation: ', np.mean(apurities), np.var(apurities)**.5)
+      print('Average visual concept cluster purities and deviation: ', np.mean(vpurities), np.var(vpurities)**.5)
       print('Average accuracy and deviation: ', np.mean(accs), np.var(accs)**.5)
       print('Average F1 score and deviation: ', np.mean(f1s), np.var(f1s)**.5)
       
-  else:   
+  else:
     with open(predAlignmentFile, 'r') as f:
       pred_info = json.load(f)
     
@@ -259,10 +269,16 @@ if 2 in tasks:
       elif args.dataset == 'mscoco2k' or args.dataset == 'mscoco20k':
         gold.append(g['image_concepts'])
       else:
-        raise ValueError('Invalid Dataset')
+        raise ValueError('Invalid Dataset') 
+    print('Concept cluster purity:')
+    cluster_confusion_matrix(pred, gold, file_prefix='image_confusion_matrix') 
 
-    cluster_confusion_matrix(gold, pred, file_prefix='image_confusion_matrix')
-    #cluster_confusion_matrix(gold, pred, alignment=gold_info, file_prefix='audio_confusion_matrix') 
+    print('Word cluster purity:')
+    if args.dataset == 'flickr':
+      word_cluster_confusion_matrix(pred_info, gold_info, concept2idx=concept2idx, file_prefix='audio_confusion_matrix') 
+    else:
+      word_cluster_confusion_matrix(pred_info, gold_info, file_prefix='audio_confusion_matrix') 
+
     print('Alignment accuracy: ', accuracy(pred_info, gold_info))
     boundary_retrieval_metrics(pred_info, gold_info)
 

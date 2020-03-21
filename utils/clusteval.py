@@ -44,7 +44,7 @@ def cluster_confusion_matrix(pred, gold, create_plot=True, alignment=None, file_
     for c_p, c_g in zip(p, g):
       cm[c_p, c_g] += 1.
 
-  cm = (cm.T / np.maximum(np.sum(cm, axis=-1), EPS)).T
+  cm = (cm / np.maximum(np.sum(cm, axis=0), EPS)).T
   print('Cluster purity: ', np.mean(np.max(cm, axis=-1)))
   if create_plot:
     fig, ax = plt.subplots(figsize=(20, 30))
@@ -56,6 +56,38 @@ def cluster_confusion_matrix(pred, gold, create_plot=True, alignment=None, file_
     plt.savefig(file_prefix, dpi=100)
     plt.close()
   np.savez(file_prefix+'.npz', cm)
+
+def word_cluster_confusion_matrix(pred_info, gold_info, concept2idx=None, file_prefix='audio_confusion_matrix'):
+  pred, gold = [], []
+  for p, g in zip(pred_info, gold_info):
+    pred_assignment = p['concept_alignment']
+    gold_alignment = g['alignment']
+
+    i_prev = gold_alignment[0]
+    if concept2idx is not None:
+      concepts = [concept2idx[c] for c in g['image_concepts']]     
+    else:
+      concepts = g['image_concepts']
+
+    gold_words = [concepts[i_prev]]
+    gold_segmentations = [0]
+    # Find the true concept label for each segment
+    for i in gold_alignment:
+      if i != i_prev:
+        gold_words.append(concepts[i])
+        gold_segmentations.append(i)
+        i_prev = i
+    gold.append(gold_words)
+
+    pred_words = []
+    for start, end in zip(gold_segmentations[:-1], gold_segmentations[1:]):
+      segment = pred_assignment[start:end] 
+      counts = {c:0 for c in list(set(segment))}
+      for c in segment:
+        counts[c] += 1
+      pred_words.append(sorted(counts, key=lambda x:counts[x], reverse=True)[0])
+    pred.append(pred_words)
+  cluster_confusion_matrix(pred, gold) 
 
 #
 # Parameters:
