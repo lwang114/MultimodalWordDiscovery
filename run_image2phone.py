@@ -26,7 +26,7 @@ args = parser.parse_args()
 
 if args.dataset == 'mscoco2k':
   dataDir = 'data/mscoco/'
-  speechFeatureFile = dataDir + 'src_mscoco_subset_subword_level_power_law.txt'
+  speechFeatureFile = 'tdnn/exp/blstm2_mscoco_train_sgd_lr_0.00010_feb28/phone_features_discrete.txt' # XXX dataDir + 'src_mscoco_subset_subword_level_power_law.txt'
   imageConceptFile = dataDir + 'trg_mscoco_subset_subword_level_power_law.txt'
   if args.feat_type == 'synthetic':
     imageFeatureFile = dataDir + 'mscoco_subset_subword_level_concept_gaussian_vectors.npz'
@@ -40,7 +40,8 @@ if args.dataset == 'mscoco2k':
   nWords = 65
 elif args.dataset == 'mscoco20k':
   dataDir = 'data/mscoco/'
-  speechFeatureFile = dataDir + 'src_mscoco_subset_130k_power_law_phone_captions.txt'
+  speechFeatureFile = 'tdnn/exp/blstm2_mscoco_train_sgd_lr_0.00010_feb28/phone_features_discrete.txt'
+  #'tdnn/exp/blstm2_mscoco_train_sgd_lr_0.00010_feb28/hyps_all.txt' # dataDir + 'src_mscoco_subset_130k_power_law_phone_captions.txt'
   imageConceptFile = dataDir + 'trg_mscoco_subset_130k_power_law_phone_captions.txt'
   if args.feat_type == 'synthetic':
     imageFeatureFile = dataDir + 'mscoco_subset_130k_power_law_concept_gaussian_vectors.npz'
@@ -179,7 +180,7 @@ if 1 in tasks:
     elif args.model_type == 'two-layer':
       model = ImagePhoneHMMDNNWordDiscoverer(speechFeatureFile, imageFeatureFile, modelConfigs, modelName=modelName)
 
-    model.trainUsingEM(30, writeModel=True, debug=False)
+    model.trainUsingEM(20, writeModel=True, debug=False)
     print('Take %.5s s to finish training the model !' % (time.time() - begin_time))
     #model.simulatedAnnealing(numIterations=100, T0=1., debug=False)
     model.printAlignment(modelName+'_alignment', debug=False) 
@@ -201,7 +202,7 @@ if 2 in tasks:
       f1s = []
       purities = []
       for rep in range(nReps):
-        modelName = expDir + 'image_phone_{}'.format(snr)
+        modelName = expDir + 'image_phone_{}dB_{}'.format(snr, rep)
         print(modelName)
         predAlignmentFile = modelName + '_alignment.json'
         with open(predAlignmentFile, 'r') as f:

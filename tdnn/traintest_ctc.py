@@ -102,6 +102,9 @@ def train(audio_model, train_loader, test_loader, args, device_id=0):
         f.write('%.5f' % avg_acc)
 
 def validate(audio_model, test_loader, args):
+  if not isinstance(audio_model, torch.nn.DataParallel):
+    audio_model = nn.DataParallel(audio_model)
+
   if torch.cuda.is_available():
     audio_model = audio_model.cuda()
   
@@ -113,7 +116,7 @@ def validate(audio_model, test_loader, args):
   else:
     classes = [str(i) for i in range(n_class)]
 
-  audio_model.eval()
+  # audio_model.eval()
   correct = 0.
   error = 0.
   ins_error = 0.
@@ -123,11 +126,13 @@ def validate(audio_model, test_loader, args):
 
   begin_time = time.time()
   embed1_all = {}
+  hyps_all = {}
   with torch.no_grad():  
     for i, audio_input in enumerate(test_loader):
       # XXX
-      # if i > 1:
-      #   break
+      # print(i)
+      # if i < 619:
+      #   continue
 
       audios, labels, nframes, nphones = audio_input
       # XXX
@@ -136,7 +141,8 @@ def validate(audio_model, test_loader, args):
       if torch.cuda.is_available():
         audios = audios.cuda()
 
-      outputs = audio_model(audios) 
+      embeds1, outputs = audio_model(audios, save_features=True)
+      hyps = ctc_decode(outputs)
       dist, ins, dels, subs, corrs = calc_wer_stat(outputs, labels, nphones)
       error += dist
       ins_error += ins
@@ -147,12 +153,10 @@ def validate(audio_model, test_loader, args):
 
       if args.save_features:
         if args.audio_model == 'blstm2':
-          embeds1, outputs = audio_model(audios, save_features=args.save_features)
-          # print(i, embeds1.size())
           for i_b in range(embeds1.size()[0]):
             feat_id = 'arr_'+str(i * args.batch_size + i_b)
-            embed1_all[feat_id] = embeds1[i_b]     
-          
+            embed1_all[feat_id] = embeds1[i_b].data.cpu().numpy()     
+            hyps_all[feat_id] = [classes[p_idx] for p_idx in hyps[i_b]]    
       n_print_step = 20
       if (i + 1) % n_print_step == 0:
         print('Takes %.3f s to process %d batches, running phone accuracy: %d %%, running phone error rate: %d %%, ins/del/sub error rates: %d %%, %d %%, %d %%' % (time.time()-begin_time, i, 100 * correct / total, 100 * error / total, 100 * ins_error / total, 100 * dels_error / total, 100 * subs_error / total))
@@ -163,4 +167,8 @@ def validate(audio_model, test_loader, args):
     os.mkdir('%s' % args.exp_dir)
 
   np.savez(args.exp_dir+'/embed1_all.npz', **embed1_all)   
+  with open(args.exp_dir+'/hyps_all.txt', 'w') as f:
+    for feat_id in sorted(hyps_all, key=lambda x:int(x.split('_')[-1])):
+      f.write(' '.join(hyps_all[feat_id]) + '\n')
+
   return  100 * correct / total

@@ -25,7 +25,7 @@ parser.add_argument('--dataset', default='TIMIT', choices=['TIMIT', 'mscoco_trai
 parser.add_argument('--n_epoch', type=int, default=20)
 parser.add_argument('--class2id_file', type=str, default=None)
 parser.add_argument('--n_class', type=int, default=62)
-parser.add_argument('--audio_model', type=str, default='blstm2', choices=['blstm2'], help='Acoustic model architecture')
+parser.add_argument('--audio_model', type=str, default='blstm2', choices=['blstm2', 'blstm3'], help='Acoustic model architecture')
 parser.add_argument('--optim', type=str, default='sgd',
         help="training optimizer", choices=["sgd", "adam"])
 parser.add_argument('--print_class_accuracy', action='store_true', help='Print accuracy for each image class')
@@ -33,7 +33,7 @@ parser.add_argument('--pretrain_model_file', type=str, default=None, help='Pretr
 parser.add_argument('--save_features', action='store_true', help='Save the hidden activations of the neural networks')
 parser.add_argument('--exp_dir', type=str, default=None, help='Experimental directory')
 parser.add_argument('--date', type=str, default='', help='Date of the experiment')
-parser.add_argument('--feat_type', type=str, default='last', choices=['mean', 'last', 'resample'], help='Method to extract the hidden phoneme representation')
+parser.add_argument('--feat_type', type=str, default='last', choices=['mean', 'last', 'resample', 'discrete'], help='Method to extract the hidden phoneme representation')
 
 args = parser.parse_args()
 
@@ -46,7 +46,7 @@ if args.exp_dir is None:
 # TODO
 feat_configs = {}
 
-tasks = [3]
+tasks = [1, 3]
 
 #------------------#
 # Network Training #
@@ -72,7 +72,10 @@ if 0 in tasks:
   train_loader = torch.utils.data.DataLoader(trainset, batch_size=args.batch_size, shuffle=True)
   test_loader = torch.utils.data.DataLoader(testset, batch_size=args.batch_size, shuffle=False) 
 
-  audio_model = BLSTM2(n_class=args.n_class)
+  if args.audio_model == 'blstm2':
+    audio_model = BLSTM2(n_class=args.n_class)
+  elif args.audio_model == 'blstm3':
+    audio_model = BLSTM3(n_class=args.n_class, )
 
   train(audio_model, train_loader, test_loader, args) 
 
@@ -86,7 +89,7 @@ if 1 in tasks:
   
   if args.dataset == 'mscoco_train':
     audio_root_path = '/home/lwang114/data/mscoco/audio/val2014/wav/'
-    audio_sequence_file = '../data/mscoco/mscoco_subset_phone_power_law_info.json'
+    audio_sequence_file = '../data/mscoco/mscoco_subset_130k_phone_power_law_info.json'
     args.class2id_file = '../data/mscoco/mscoco_train_phone_segments_phone2id.json'
     
     with open(args.class2id_file, 'r') as f:
@@ -131,14 +134,17 @@ if 2 in tasks:
 #-----------------------------------------#
 if 3 in tasks:
   ffeats_npz = np.load(args.exp_dir + '/embed1_all.npz') 
+  weight_dict = np.load(args.exp_dir + '/classifier_weights.npz')
+  W = weight_dict['weight'] 
+  b = weight_dict['bias']
   if args.dataset == 'mscoco_train':
     feat_type = args.feat_type
     skip_ms = 10. # in ms
-    audio_sequence_file = '../data/mscoco/mscoco_subset_phone_power_law_info.json'
+    audio_sequence_file = '../data/mscoco/mscoco_subset_130k_phone_power_law_info.json'
     with open(audio_sequence_file, 'r') as f:
       audio_seqs = json.load(f) 
   else:
-    raise NotImplementedError
+    raise NotImplementedError('Invalid dataset for phone-level feature extraction')
 
   feat_ids = sorted(ffeats_npz, key=lambda x:int(x.split('_')[-1]))
   # print('len(feat_ids): ', len(feat_ids))
@@ -175,8 +181,21 @@ if 3 in tasks:
           sfeats.append(mean_feat)
         elif feat_type == 'last':
           sfeats.append(sfeat[-1])
+        elif feat_type == 'discrete':
+          scores = W @ np.mean(sfeat, axis=0) + b
+          sfeats.append(np.argmax(scores[1:]))
         else:
           raise ValueError('Feature type not found')
-      pfeats[feat_id] = np.stack(sfeats, axis=0)
+      if feat_type == 'discrete':
+        pfeats[feat_id] = sfeats
+      else:
+        pfeats[feat_id] = np.stack(sfeats, axis=0)
     
-  np.savez('%s/phone_features_%s.npz' % (args.exp_dir, args.feat_type), **pfeats) 
+  if feat_type == 'discrete':
+    with open('%s/phone_features_%s.txt' % (args.exp_dir, args.feat_type), 'w') as f:
+      for feat_id in sorted(pfeats, key=lambda x:int(x.split('_')[-1])):
+        feat = pfeats[feat_id]
+        feat = [str(phn) for phn in feat]
+        f.write(' '.join(feat) + '\n') 
+  else:
+    np.savez('%s/phone_features_%s.npz' % (args.exp_dir, args.feat_type), **pfeats) 

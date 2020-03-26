@@ -5,10 +5,11 @@ from nltk.corpus import wordnet as wn
 from nltk.corpus import cmudict
 import numpy as np
 from scipy.io import loadmat, wavfile
-from pycocotools.coco import COCO
+#from pycocotools.coco import COCO
 from PIL import Image
 import random
-from speechcoco_API.speechcoco.speechcoco import SpeechCoco
+#from speechcoco_API.speechcoco.speechcoco import SpeechCoco
+import os
 
 random.seed(2)
 np.random.seed(2)
@@ -153,7 +154,36 @@ class MSCOCO_Preprocessor():
     
     with open(text_file, 'w') as f:
       f.write('\n'.join(text_pairs)) 
- 
+    
+  def to_xnmt_text(self, text_file, xnmt_file, database_start_index=None):
+    i = 0
+    fp = open(text_file)
+    trg_sents = []
+    src_sents = []
+    for line in fp:
+      if i % 3 == 0:
+        trg_sents.append(line)
+      elif i % 3 == 1:
+        src_sents.append(line)
+      i += 1
+    fp.close()
+    
+    assert len(src_sents) == len(trg_sents)
+    if type(database_start_index) == int:
+      ids = [str(database_start_index + i) for i in range(len(src_sents))]
+      id_fp = open(xnmt_file + '.ids', 'w')
+      id_fp.write('\n'.join(ids))
+      id_fp.close()
+
+    src_fp = open('src_' + xnmt_file, 'w')
+    trg_fp = open('trg_' + xnmt_file, 'w')
+
+    src_fp.write(''.join(src_sents))
+    trg_fp.write(''.join(trg_sents))
+
+    src_fp.close()
+    trg_fp.close() 
+
   # XXX: Only find the first hit
   def find_concept_occurrence_time(self, c, word_aligns):
     for i_w, word_align in enumerate(word_aligns):
@@ -285,6 +315,8 @@ class MSCOCO_Preprocessor():
       concept_list = []
       data_ids = []
       n_concept_remain = sum([concept_counts[c] < concept_counts_all[c] for c in concepts])
+      if n_concept_remain == 0:
+        break
       m = min(n_concepts_per_example, n_concept_remain)
       while len(concept_list) < m:
         c = concepts[random_draw(priors)]
@@ -521,7 +553,9 @@ class MSCOCO_Preprocessor():
   def create_gold_alignment(self, data_file, concept2idx_file, out_file='gold_align.json', is_phoneme=True):
     with open(data_file, 'r') as f:
       data_info = json.load(f)
-      
+    with open(concept2idx_file, 'r') as f:
+      concept2idx = json.load(f)
+     
     align_info = []
     for i, k in enumerate(sorted(data_info, key=lambda x:int(x.split('_')[-1]))):
       datum_info = data_info[k]
@@ -535,6 +569,10 @@ class MSCOCO_Preprocessor():
             sent.append(phone_info[0])
             alignment.append(i_c) 
         concepts.append(concept2idx[c])
+      
+      if len(concepts) == 0:
+        print('Pair with no concept')
+        break
       align_info.append(
         { 'index': i,
           'alignment': alignment,
@@ -547,7 +585,126 @@ class MSCOCO_Preprocessor():
     with open(out_file, 'w') as f:
       json.dump(align_info, f, indent=4, sort_keys=True)
 
+  def json_to_text_gclda(self, json_file, text_file_prefix, allow_repeated_concepts=False):
+    json_pairs = None
+    text_pairs = []
+    with open(json_file, 'r') as f:
+      json_pairs = json.load(f)
 
+    if not os.path.exists(text_file_prefix):
+      print('Create a new directory: ', text_file_prefix)
+      os.mkdir(text_file_prefix)
+    # Temporary: comment this line out once the json file is in proper format
+    #json_pairs = json_pairs['data']
+    src = ['document id, phone id']
+    trg = ['document id, concept id']
+    img_ids = []  
+
+    word_labels = []    
+    # XXX
+    for ex, k in enumerate(sorted(json_pairs, key=lambda x:int(x.split('_')[-1]))):
+      pair = json_pairs[k]
+      sents = pair['data_ids']
+
+      for sent in sents:
+        for token in sent[2]:
+          w = token[0]
+          if w not in word_labels:
+            word_labels.append(w)
+    
+    word_labels = sorted(word_labels)
+    print('len(word_labels): ', len(word_labels))
+    w2idx = {w: i for i, w in enumerate(word_labels)}
+
+    pmids = []
+    # XXX
+    for ex, k in enumerate(sorted(json_pairs, key=lambda x:int(x.split('_')[-1]))):
+      pair = json_pairs[k]
+            
+      # TODO: Retokenize
+      word_infos = pair['data_ids']
+      
+      pmids.append(str(ex+1))
+      single_src = []
+      for i_w, w_info in enumerate(word_infos):
+        img_id = w_info[0]
+        for w in w_info[2]:
+          single_src.append(str(ex+1)+','+str(w2idx[w[0]]))
+      
+      concepts = pair['concepts']
+      if not allow_repeated_concepts:
+        concepts = sorted(list(set(concepts)))
+      single_trg = [str(ex+1)+','+c for c in concepts] 
+        
+      src += single_src
+      trg += single_trg
+    
+    with open(text_file_prefix+'/wordindices.txt', 'w') as f:
+      f.write('\n'.join(src))
+    with open(text_file_prefix+'/conceptindices.txt', 'w') as f:
+      f.write('\n'.join(trg))
+    with open(text_file_prefix+'/pmids.txt', 'w') as f:
+      f.write('\n'.join(pmids))
+    with open(text_file_prefix+'/wordlabels.txt', 'w') as f:
+      f.write('\n'.join(word_labels))
+
+  def extract_image_labels(self, image_npz_file, concept2image_file, out_file_prefix='mscoco_image_labels', random_split=True):
+    with open(concept2image_file, 'r') as f:
+      concept2image = json.load(f)
+    
+    image2concept = {img_id_info[0]:c for c, img_id_infos in concept2image.items() for img_id_info in img_id_infos}
+
+    image_npz = np.load(image_npz_file)
+    image_ids = sorted(image_npz, key=lambda x:int(x.split('_')[-1]))
+    labels = []
+    for image_id in image_ids:
+      print(image_id)
+      label = image2concept[image_id]
+      labels.append('%s %s\n' % (image_id, label))
+
+    with open(out_file_prefix+'.txt', 'w') as f:
+      f.write(''.join(labels))
+    
+    if random_split:
+      n_data = len(image_ids)
+      random_indices = np.random.permutation(n_data)
+      train_indices = random_indices[:int(0.8*n_data)]
+      test_indices = random_indices[int(0.8*n_data):]
+      with open(out_file_prefix+'_train.txt', 'w') as f:
+        for i in train_indices:
+          f.write(labels[i])
+
+      with open(out_file_prefix+'_test.txt', 'w') as f:
+        for i in test_indices:
+          f.write(labels[i]) 
+  
+  def extract_image_bboxes(self, concept2bbox_file, out_file_prefix='mscoco_image_labels', random_split=True):
+    with open(concept2image_file, 'r') as f:
+      concept2image = json.load(f)
+    
+    image2concept = {img_id_info[0]:c for c, img_id_infos in concept2image.items() for img_id_info in img_id_infos}
+    image_ids = sorted(image2concept, key=lambda x:int(x.split('_')[-1]))
+    labels = []
+    for image_id in image_ids:
+      print(image_id)
+      label = image2concept[image_id]
+      labels.append('%s %s\n' % (image_id, label))
+
+    with open(out_file_prefix+'.txt', 'w') as f:
+      f.write(''.join(labels))
+    
+    if random_split:
+      n_data = len(image_ids)
+      random_indices = np.random.permutation(n_data)
+      train_indices = random_indices[:int(0.8*n_data)]
+      test_indices = random_indices[int(0.8*n_data):]
+      with open(out_file_prefix+'_train.txt', 'w') as f:
+        for i in train_indices:
+          f.write(labels[i])
+
+      with open(out_file_prefix+'_test.txt', 'w') as f:
+        for i in test_indices:
+          f.write(labels[i]) 
 
 def random_draw(p):
   x = random.random()
@@ -576,33 +733,39 @@ def is_nonspeech(phn):
 
 if __name__ == '__main__':
   tasks = [0]
-  instance_file = 'annotations/instances_val2014.json'
-  caption_file = 'annotations/captions_val2014.json'
-  speech_file = '/home/lwang114/data/mscoco/val_2014.sqlite3'
-  json_file = 'val_mscoco_info_text_image.json'
-  image_base_path = '/home/lwang114/data/mscoco/val2014/' 
+  instance_file = 'annotations/instances_train2014.json'
+  #'annotations/instances_val2014.json'
+  caption_file = 'annotations/captions_train2014.json' 
+  #'annotations/captions_val2014.json'
+  speech_file = '/home/lwang114/data/mscoco/audio/train2014/train_2014.sqlite3'
+  #'/home/lwang114/data/mscoco/val_2014.sqlite3'
+  json_file = 'train_mscoco_info_text_image.json'
+  image_base_path = '/home/lwang114/data/mscoco/train2014/' 
+  #'/home/lwang114/data/mscoco/val2014/' 
   preproc = MSCOCO_Preprocessor(instance_file, caption_file, speech_file)
   if 0 in tasks:
     max_num_per_class = 2000 
     subset_size = int(max_num_per_class * 65 / 5)
     file_prefix = 'mscoco_subset_%dk' % (int((max_num_per_class * 65) / 1000)) 
 
-    #preproc.extract_info(json_file)
+    preproc.extract_info(json_file)
     #preproc.extract_image_audio_subset(json_file, image_base_path=image_base_path)
     #preproc.extract_image_audio_subset_power_law()
     #preproc.extract_image_audio_curriculum_power_law()
     #preproc.extract_image_audio_phone_level_subset('../data/mscoco/mscoco_subset_concept_info_syllabus_0.json', out_file_prefix='mscoco_subset_phone_syllabus_0')
     #preproc.extract_image_audio_phone_level_subset('../data/mscoco/mscoco_subset_concept_info_syllabus_1.json', out_file_prefix='mscoco_subset_phone_syllabus_1') 
     #preproc.extract_image_audio_subset(json_file, image_base_path=image_base_path, max_num_per_class=max_num_per_class, file_prefix=file_prefix)
-    preproc.extract_image_audio_subset_power_law(file_prefix=file_prefix, subset_size=subset_size)
-    preproc.extract_image_audio_phone_level_subset('../data/mscoco/%s_concept_info_power_law.json' % file_prefix, out_file_prefix='%s_phone_power_law' % file_prefix)
+    #preproc.extract_image_audio_subset_power_law(file_prefix=file_prefix, subset_size=subset_size)
+    #preproc.extract_image_audio_phone_level_subset('../data/mscoco/%s_concept_info_power_law.json' % file_prefix, out_file_prefix='%s_phone_power_law' % file_prefix)
   if 1 in tasks:
     max_num_per_class = 2000 
     subset_size = int(max_num_per_class * 65 / 5)
+    # XXX
     file_prefix = 'mscoco_subset_%dk' % (int((max_num_per_class * 65) / 1000)) 
     json_file = '../data/mscoco/%s_phone_power_law_info.json' % file_prefix
     preproc.extract_phone_info(json_file, '%s_subword_level_power_law' % file_prefix)
   if 2 in tasks:
+    '''
     data_info_file = '../data/mscoco/mscoco_subset_phone_power_law_info.json'
     concept_info_file = '../data/mscoco/mscoco_subset_concept_counts_power_law.json'
     concept2idx_file = '../data/mscoco/concept2idx.json'
@@ -613,4 +776,13 @@ if __name__ == '__main__':
     with open(concept2idx_file, 'w') as f:
       json.dump(concept2idx, f, indent=4, sort_keys=True)
 
-    preproc.create_gold_alignment(data_info_file, concept2idx_file, out_file='../data/mscoco/mscoco_gold_alignment_power_law.json') 
+    preproc.create_gold_alignment(data_info_file, concept2idx_file, out_file='../data/mscoco/mscoco_gold_alignment_power_law.json')
+    '''
+    data_info_file = '../data/mscoco/mscoco_subset_130k_phone_power_law_info.json'
+    concept2idx_file = '../data/mscoco/concept2idx.json'
+    preproc.create_gold_alignment(data_info_file, concept2idx_file, out_file='../data/mscoco/mscoco_gold_alignment_130k_power_law.json') 
+  if 3 in tasks:
+    preproc.to_xnmt_text('../data/mscoco/mscoco_subset_subword_level_power_law.txt', 'mscoco_subset_subword_level_power_law.txt')
+  if 4 in tasks:
+    data_info_file = '../data/mscoco/mscoco_subset_130k_phone_power_law_info.json'
+    preproc.json_to_text_gclda(data_info_file, text_file_prefix='../data/mscoco/gclda_20k') 

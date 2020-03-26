@@ -327,7 +327,7 @@ class ImagePhoneGaussianHMMWordDiscoverer:
     backwardProbs = np.zeros((T, nState, self.nWords))
     probs_z_given_y = self.softmaxLayer(vSen)
 
-    backwardProbs[T-1] = probs_z_given_y
+    backwardProbs[T-1] = 1.
     for t in range(T-1, 0, -1):
       prob_x_t_z_given_y = probs_z_given_y * (self.obs @ aSen[t]) 
       backwardProbs[t-1] += np.diag(np.diag(self.trans[nState])) @ (backwardProbs[t] * (self.obs @ aSen[t])) 
@@ -450,16 +450,28 @@ class ImagePhoneGaussianHMMWordDiscoverer:
   # Outputs:
   # -------
   #   newConceptCounts: Ty x K maxtrix storing p(z_i|x, y) 
-  def updateConceptCounts(self, vSen, aSen):
-    nState = vSen.shape[0]
+  def updateConceptCounts(self, vSen, aSen, debug=False):
+    T = len(aSen)
+    nState = vSen.shape[0] 
     newConceptCounts = np.zeros((nState, self.nWords)) 
-    
+    probs_x_given_y_concat = np.zeros((T, nState * self.nWords, nState))
+    probs_z_given_y = self.softmaxLayer(vSen)
     for i in range(nState):
       for k in range(self.nWords):
-        forwardProbs = self.forward(vSen, aSen, restrictState=[i, k])
-        newConceptCounts[i, k] = np.sum(forwardProbs[-1]) 
+        probs_z_given_y_ik = deepcopy(probs_z_given_y)
+        probs_z_given_y_ik[i] = 0.
+        probs_z_given_y_ik[i, k] = 1.
+        probs_x_given_y_concat[:, i*self.nWords+k, :] = (probs_z_given_y_ik @ (self.obs @ aSen.T)).T
 
-    newConceptCounts = (newConceptCounts.T / np.sum(newConceptCounts, axis=1)).T 
+    forwardProbsConcat = np.zeros((nState * self.nWords, nState))
+    forwardProbsConcat = self.init[nState] * probs_x_given_y_concat[0]
+    for t in range(T-1):
+      forwardProbsConcat = (forwardProbsConcat @ self.trans[nState]) * probs_x_given_y_concat[t+1]
+
+    newConceptCounts = np.sum(forwardProbsConcat, axis=-1).reshape((nState, self.nWords))
+    newConceptCounts = ((probs_z_given_y * newConceptCounts).T / np.sum(probs_z_given_y * newConceptCounts, axis=1)).T 
+    if debug:
+      print(newConceptCounts)
     return newConceptCounts
 
   # Inputs:
@@ -671,7 +683,7 @@ class ImagePhoneGaussianHMMWordDiscoverer:
       json.dump(cluster_infos, f, indent=4, sort_keys=True)
 
 if __name__ == '__main__':
-  tasks = [5]
+  tasks = [0]
   #----------------------------#
   # Word discovery on tiny.txt #
   #----------------------------#
@@ -680,14 +692,15 @@ if __name__ == '__main__':
     imageFeatureFile = 'tiny.npz'   
     image_feats = {'arr_0':np.array([[1., 0., 0.], [0., 1., 0.]]), 'arr_1':np.array([[0., 1., 0.], [0., 0., 1.]]), 'arr_2':np.array([[0., 0., 1.], [1., 0., 0.]])}   
     audio_feats = '0 1\n1 2\n2 0'
-    with open('tiny.txt', 'w') as f:
+    exp_dir = 'exp/jan_14_tiny/'
+    with open(exp_dir + 'tiny.txt', 'w') as f:
       f.write(audio_feats)
-    np.savez('tiny.npz', **image_feats)
-    modelConfigs = {'has_null': False, 'n_words': 3, 'momentum': 0., 'learning_rate': 0.1}
+    np.savez(exp_dir + 'tiny.npz', **image_feats)
+    modelConfigs = {'has_null': False, 'n_words': 3, 'momentum': 0., 'learning_rate': 1.}
     model = ImagePhoneGaussianHMMWordDiscoverer(speechFeatureFile, imageFeatureFile, modelConfigs, modelName='exp/jan_14_tiny/tiny')
     model.trainUsingEM(30, writeModel=True, debug=False)
     #model.simulatedAnnealing(numIterations=100, T0=50., debug=False) 
-    model.printAlignment('exp/jan_14_tiny/tiny', debug=False)
+    model.printAlignment(exp_dir+'tiny', debug=False)
   #-------------------------------#
   # Feature extraction for MSCOCO #
   #-------------------------------#

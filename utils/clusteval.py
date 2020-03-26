@@ -121,10 +121,10 @@ def boundary_retrieval_metrics(pred, gold, out_file='class_retrieval_scores.txt'
     v = max(max(set(g_ali)), max(set(p_ali))) + 1
     confusion = np.zeros((v, v))
    
-    if debug:
-      print("examples " + str(n_ex)) 
-      print("# of frames in predicted alignment and gold alignment: %d %d" % (len(p_ali), len(g_ali))) 
-    assert len(p_ali) == len(g_ali)
+    # if debug:
+    #   print("examples " + str(n_ex)) 
+    #   print("# of frames in predicted alignment and gold alignment: %d %d" % (len(p_ali), len(g_ali))) 
+    # XXX assert len(p_ali) == len(g_ali)
     
     for a_p, a_g in zip(p_ali, g_ali):
       confusion[a_g, a_p] += 1.
@@ -194,13 +194,13 @@ def accuracy(pred, gold, max_len=2000):
   for n_ex, (p, g) in enumerate(zip(pred, gold)):
     ali_p = p['alignment'][:max_len]
     ali_g = g['alignment'][:max_len]
-    #if DEBUG:
-    logging.debug("examples " + str(n_ex)) 
-    print("examples " + str(n_ex))
-    #logging.debug("# of frames in predicted alignment and gold alignment: %d %d" % (len(ali_p), len(ali_g))) 
-    print("# of frames in predicted alignment and gold alignment: %d %d" % (len(ali_p), len(ali_g)))
+    # if DEBUG:
+    # logging.debug("examples " + str(n_ex)) 
+    # print("examples " + str(n_ex))
+    # logging.debug("# of frames in predicted alignment and gold alignment: %d %d" % (len(ali_p), len(ali_g))) 
+    # print("# of frames in predicted alignment and gold alignment: %d %d" % (len(ali_p), len(ali_g)))
     
-    assert len(ali_p) == len(ali_g)
+    # XXX assert len(ali_p) == len(ali_g)
     for a_p, a_g in zip(ali_p, ali_g):
       acc += (a_p == a_g)
       n += 1

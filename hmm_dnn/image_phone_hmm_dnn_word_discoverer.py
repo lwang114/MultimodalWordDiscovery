@@ -345,7 +345,7 @@ class ImagePhoneHMMDNNWordDiscoverer:
     backwardProbs = np.zeros((T, nState, self.nWords))
     probs_z_given_y = self.softmaxLayer(self.hiddenLayer(vSen))
 
-    backwardProbs[T-1] = deepcopy(probs_z_given_y)
+    backwardProbs[T-1] = 1.
     for t in range(T-1, 0, -1):
       prob_x_t_z_given_y = probs_z_given_y * (self.obs @ aSen[t]) 
       backwardProbs[t-1] += np.diag(np.diag(self.trans[nState])) @ (backwardProbs[t] * (self.obs @ aSen[t])) 
@@ -472,21 +472,7 @@ class ImagePhoneHMMDNNWordDiscoverer:
     T = len(aSen)
     nState = vSen.shape[0] 
     newConceptCounts = np.zeros((nState, self.nWords)) 
-    '''
-    for i in range(nState):
-      for k in range(self.nWords):    
-        probs_z_given_y = self.softmaxLayer(self.hiddenLayer(vSen))
-        probs_z_given_y[i] = 0.
-        probs_z_given_y[i, k] = 1.
-        probs_x_given_y = (probs_z_given_y @ (self.obs @ aSen.T)).T
-      
-        # Not using the forward function for better efficiency
-        forwardProbs = np.zeros((T, nState))   
-        forwardProbs[0] = self.init[nState] * probs_x_given_y[0]
-        for t in range(T-1):
-          forwardProbs[t+1] += (self.trans[nState].T @ forwardProbs[t]) * probs_x_given_y[t+1]    
-        newConceptCounts[i, k] = np.sum(forwardProbs[-1]) 
-    '''
+    
     probs_x_given_y_concat = np.zeros((T, nState * self.nWords, nState))
     probs_z_given_y = self.softmaxLayer(self.hiddenLayer(vSen))
     for i in range(nState):
@@ -502,7 +488,7 @@ class ImagePhoneHMMDNNWordDiscoverer:
       forwardProbsConcat = (forwardProbsConcat @ self.trans[nState]) * probs_x_given_y_concat[t+1]
 
     newConceptCounts = np.sum(forwardProbsConcat, axis=-1).reshape((nState, self.nWords))
-    newConceptCounts = (newConceptCounts.T / np.sum(newConceptCounts, axis=1)).T 
+    newConceptCounts = ((probs_z_given_y * newConceptCounts).T / np.sum(probs_z_given_y * newConceptCounts, axis=1)).T 
     if debug:
       print(newConceptCounts)
     return newConceptCounts

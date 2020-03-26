@@ -49,7 +49,8 @@ class MSCOCOSyntheticCaptionDataset(Dataset):
     
     seq_ids = sorted(sequence_info, key=lambda x:int(x.split('_')[-1]))
     for seq_id in seq_ids:
-      self.phone_sequences.append(sequence_info[seq_id]['data_ids'])
+      if len(sequence_info[seq_id]['data_ids']) > 0:
+        self.phone_sequences.append(sequence_info[seq_id]['data_ids'])
 
   def __len__(self):
     return len(self.phone_sequences)
@@ -91,6 +92,7 @@ class MSCOCOSyntheticCaptionDataset(Dataset):
     nframes = min(mfcc.shape[1], self.max_nframes)
     mfcc = self.convert_to_fixed_length(mfcc)
     mfcc = mfcc.T
+    # print('mfcc.shape', mfcc.shape)
 
     nphones = min(len(labels), self.max_nphones)
     int_labels = [self.phone2idx[labels[i]] if i < len(labels) else self.ES for i in range(self.max_nphones)] 

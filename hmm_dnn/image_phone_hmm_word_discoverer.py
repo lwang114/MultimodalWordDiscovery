@@ -314,7 +314,7 @@ class ImagePhoneHMMWordDiscoverer:
     backwardProbs = np.zeros((T, nState, self.nWords))
     probs_z_given_y = self.softmaxLayer(vSen)
 
-    backwardProbs[T-1] = probs_z_given_y
+    backwardProbs[T-1] = 1.
     for t in range(T-1, 0, -1):
       prob_x_t_z_given_y = probs_z_given_y * (self.obs @ aSen[t]) 
       backwardProbs[t-1] += np.diag(np.diag(self.trans[nState])) @ (backwardProbs[t] * (self.obs @ aSen[t])) 
@@ -456,7 +456,7 @@ class ImagePhoneHMMWordDiscoverer:
       forwardProbsConcat = (forwardProbsConcat @ self.trans[nState]) * probs_x_given_y_concat[t+1]
 
     newConceptCounts = np.sum(forwardProbsConcat, axis=-1).reshape((nState, self.nWords))
-    newConceptCounts = (newConceptCounts.T / np.sum(newConceptCounts, axis=1)).T 
+    newConceptCounts = ((probs_z_given_y * newConceptCounts).T / np.sum(probs_z_given_y * newConceptCounts, axis=1)).T 
     if debug:
       print(newConceptCounts)
     return newConceptCounts
