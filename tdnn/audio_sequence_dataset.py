@@ -49,8 +49,7 @@ class AudioSequenceDataset(Dataset):
         # if i > 16:
         #   break
         i += 1 
-        audio_info = line.strip().split()
-        
+        audio_info = line.strip().split()        
         self.phone_sequences.append(audio_info[1:])
         self.audio_filenames.append(audio_info[0])
 

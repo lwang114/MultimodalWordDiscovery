@@ -105,12 +105,12 @@ class BLSTM3(nn.Module):
     self.n_class = n_class
     self.rnn1 = BLSTM2(n_class, embedding_dim)
     if layer1_pretrain_file:
-      self.rnn1.load_state_dict(layer1_pretrain_file)
-    self.rnn2 = nn.LSTM(input_size=embedding_dim, hidden_size=embedding_dim, num_layers=n_layers, batch_first=True, bidirectional=True)
+      self.rnn1.load_state_dict(torch.load(layer1_pretrain_file))
+    self.rnn2 = nn.LSTM(input_size=2*embedding_dim, hidden_size=embedding_dim, num_layers=n_layers, batch_first=True, bidirectional=True)
     self.fc = nn.Linear(2 * embedding_dim, n_class)
 
   def forward(self, x, save_features=False):
-    x = self.rnn1(x, save_features=True) 
+    x, _ = self.rnn1(x, save_features=True) 
     B = x.size(0)
     T = x.size(1)
     h0 = torch.zeros((2 * self.n_layers, B, self.embedding_dim))
@@ -123,8 +123,7 @@ class BLSTM3(nn.Module):
     else:
       return torch.stack(outputs, dim=1)
 
-# TODO
-'''class SegmentalLSTM(nn.Module):
+class SegmentedLSTM(nn.Module):
   def __init__(self, n_class, embedding_dim=100, n_layers=1):
     super(SegmentalLSTM, self).__init__()
     self.embedding_dim = embedding_dim
@@ -133,23 +132,25 @@ class BLSTM3(nn.Module):
     self.rnn = nn.LSTM(input_size=40, hidden_size=embedding_dim, num_layers=n_layers, batch_first=True, bidirectional=True)
     self.fc = nn.Linear(2 * embedding_dim, n_class)   
 
-  # TODO
-  def forward(self, x, timestamps, save_features=False):
+  def forward(self, x, save_features=False):
     if x.dim() < 3:
       x.unsqueeze(0)
 
     B = x.size(0)
     T = x.size(1)
+    h0 = torch.zeros((2 * self.n_layers, B, self.embedding_dim))
+    c0 = torch.zeros((2 * self.n_layers, B, self.embedding_dim))
+    if torch.cuda.is_available():
+      h0 = h0.cuda()
+      c0 = c0.cuda()
+       
+    embed, _ = self.rnn(x, (h0, c0))
     outputs = []
     for b in range(B):
-      output = []
-      for seg in timesteps:
-        start, end = seg[0], seg[1]
-        embed, _ = self.rnn(x[b, start:end], (h0, c0))
-        output.append(self.fc(torch.t(embed))[-1])
-      # TODO
-      outputs.append(output)
-      outputs.append(output) 
-      for b in range(B)
-      output.append(self.fc(embed[b])
-'''   
+      out = F.log_softmax(self.fc(embed[b]))
+      outputs.append(out)
+
+    if save_features:
+      return embed, torch.stack(outputs, dim=1)
+    else:
+      return torch.stack(outputs, dim=1)   

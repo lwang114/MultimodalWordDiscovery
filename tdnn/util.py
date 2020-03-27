@@ -125,6 +125,16 @@ def sampled_margin_rank_loss(image_outputs, audio_outputs, nframes, margin=1., s
     loss = loss / n
     return loss
 
+def mask_cross_entropy_loss(outputs, labels, masks):
+    """
+    Compute the cross entropy loss where certain labels are ignored according to the
+    binary mask.
+    Assume outputs is a (batchsize, n_class) tensor with log probability as each entry  
+    """
+    n = int(torch.sum(mask).data[0])
+    loss = -torch.sum(outputs[range(outputs.shape[0]), labels] * masks)
+    return loss / n
+
 def compute_matchmap_similarity_matrix(image_outputs, audio_outputs, nframes, simtype='MISA'):
     """
     Assumes image_outputs is a (batchsize, embedding_dim, rows, height) tensor

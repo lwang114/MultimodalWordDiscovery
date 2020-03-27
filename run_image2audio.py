@@ -169,15 +169,10 @@ if 0 in tasks:
   centroids = 10 * np.random.normal(size=(nTypes, imgFeatDim)) 
    
   for ex, vSenStr in enumerate(vCorpusStr):
-    N = len(vSenStr)
-    if args.image_feat_type == 'one-hot':
-      vSen = np.zeros((N, nTypes))
-      for i, vWord in enumerate(vSenStr):
-        vSen[i, concept2idx[vWord]] = 1.
-    elif args.image_feat_type == 'gaussian':
-      vSen = np.zeros((N, imgFeatDim))
-      for i, vWord in enumerate(vSenStr):
-        vSen[i] = centroids[concept2idx[vWord]] + 0.1 * np.random.normal(size=(imgFeatDim,))
+    N = len(vSenStr)     
+    vSen = np.zeros((N, imgFeatDim))
+    for i, vWord in enumerate(vSenStr):
+      vSen[i] = centroids[concept2idx[vWord]] + 0.1 * np.random.normal(size=(imgFeatDim,))
     vCorpus['arr_'+str(ex)] = vSen
   
   np.savez(imageFeatureFile, **vCorpus)

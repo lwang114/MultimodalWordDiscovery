@@ -40,9 +40,7 @@ if args.dataset == 'mscoco2k':
   nWords = 65
 elif args.dataset == 'mscoco20k':
   dataDir = 'data/mscoco/'
-  speechFeatureFile = 'tdnn/exp/blstm2_mscoco_train_sgd_lr_0.00010_feb28/hyps_all.txt'
-  #'tdnn/exp/blstm2_mscoco_train_sgd_lr_0.00010_feb28/phone_features_discrete.txt'
-  # dataDir + 'src_mscoco_subset_130k_power_law_phone_captions.txt'
+  speechFeatureFile = dataDir + 'src_mscoco_subset_130k_power_law_phone_captions.txt'
   imageConceptFile = dataDir + 'trg_mscoco_subset_130k_power_law_phone_captions.txt'
   if args.feat_type == 'synthetic':
     imageFeatureFile = dataDir + 'mscoco_subset_130k_power_law_concept_gaussian_vectors.npz'

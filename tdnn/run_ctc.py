@@ -7,6 +7,7 @@ import torchvision
 from AudioModels import *
 import torchvision.transforms as transforms
 from traintest_ctc import *
+from audio_sequence_dataset import *
 from mscoco_synthetic_caption_dataset import *
 import json
 import numpy as np
@@ -46,7 +47,7 @@ if args.exp_dir is None:
 # TODO
 feat_configs = {}
 
-tasks = [1, 3]
+tasks = [0]
 
 #------------------#
 # Network Training #
@@ -75,7 +76,7 @@ if 0 in tasks:
   if args.audio_model == 'blstm2':
     audio_model = BLSTM2(n_class=args.n_class)
   elif args.audio_model == 'blstm3':
-    audio_model = BLSTM3(n_class=args.n_class, )
+    audio_model = BLSTM3(n_class=args.n_class, layer1_pretrain_file='exp/blstm2_mscoco_train_sgd_lr_0.00010_feb27/audio_model.15.pth')
 
   train(audio_model, train_loader, test_loader, args) 
 
