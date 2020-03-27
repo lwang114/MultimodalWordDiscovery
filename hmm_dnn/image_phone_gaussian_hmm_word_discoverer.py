@@ -216,6 +216,7 @@ class ImagePhoneGaussianHMMWordDiscoverer:
       phoneCounts = np.zeros((self.nWords, self.audioFeatDim))      
       conceptCounts = [np.zeros((vSen.shape[0], self.nWords)) for vSen in self.vCorpus]
       self.conceptCounts = conceptCounts
+      self.conceptCountsA = [np.zeros((aSen.shape[0], self.nWords)) for aSen in self.aCorpus]
 
       if printStatus:
         likelihood = self.computeAvgLogLikelihood()
@@ -238,8 +239,9 @@ class ImagePhoneGaussianHMMWordDiscoverer:
         phoneCounts += np.sum(stateCounts, axis=1).T @ aSen
         
         conceptCounts[ex] += self.updateConceptCounts(vSen, aSen)
-             
+        self.conceptCountsA[ex] += np.sum(stateCounts, axis=1)
       self.conceptCounts = conceptCounts
+
       # Normalize
       for m in self.lenProb:
         self.init[m] = np.maximum(initCounts[m], EPS) / np.sum(np.maximum(initCounts[m], EPS)) 
@@ -642,14 +644,16 @@ class ImagePhoneGaussianHMMWordDiscoverer:
     #  print(len(self.aCorpus))
     for i, (aSen, vSen) in enumerate(zip(self.aCorpus, self.vCorpus)):
       alignment, alignProbs = self.align(aSen, vSen, debug=debug)
-      clusters, clusterProbs = self.cluster(aSen, vSen, alignment)
+      clustersV, clusterProbs = self.cluster(aSen, vSen, alignment)
+      conceptAlignment = np.argmax(self.conceptCounts[i], axis=1).tolist() 
 
       if DEBUG:
         print(aSen, vSen)
         print(type(alignment[1]))
       align_info = {
             'index': i,
-            'image_concepts': clusters,
+            'image_concepts': clustersV,
+            'concept_alignment': conceptAlignment,
             'alignment': alignment,
             'align_probs': alignProbs,
             'concept_probs': self.conceptCounts[i].tolist(),
@@ -663,8 +667,7 @@ class ImagePhoneGaussianHMMWordDiscoverer:
     
     # Write to a .json file for evaluation
     with open(filePrefix+'.json', 'w') as f:
-      json.dump(aligns, f, indent=4, sort_keys=True)            
-  
+      json.dump(aligns, f, indent=4, sort_keys=True)             
   def printUnimodalCluster(self, filePrefix):
     f = open(filePrefix+'.txt', 'w')
     cluster_infos = []

@@ -8,6 +8,9 @@ import numpy as np
 # from clda.image_audio_gmm_word_discoverer_fixed_var import ImageAudioGMMWordDiscovererFixedVar  
 from hmm_dnn.image_audio_gaussian_hmm_word_discoverer import *
 from hmm_dnn.image_audio_hmm_word_discoverer import *
+from hmm_dnn.image_phone_gaussian_hmm_word_discoverer import *
+from hmm_dnn.image_phone_hmm_word_discoverer import *
+from hmm_dnn.image_phone_hmm_dnn_word_discoverer import *
 from utils.clusteval import * 
 
 parser = argparse.ArgumentParser()
@@ -15,7 +18,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--has_null', help='Include NULL symbol in the image feature', action='store_true')
 parser.add_argument('--dataset', choices={'mscoco2k', 'mscoco20k', 'flickr'}, help='Dataset used for training the model')
 parser.add_argument('--image_feat_type', choices={'synthetic', 'vgg16_penult', 'res34'}, help='Type of image features')
-parser.add_argument('--audio_feat_type', choices={'synthetic', 'kamper', 'blstm_mean', 'blstm_last'}, help='Type of acoustic features')
+parser.add_argument('--audio_feat_type', choices={'synthetic', 'force_align', 'kamper', 'blstm_mean', 'blstm_last'}, help='Type of acoustic features')
 parser.add_argument('--model_type', choices={'linear', 'gaussian', 'two-layer', 'clda'}, default='gaussian', help='Word discovery model type')
 parser.add_argument('--momentum', type=float, default=0.0, help='Momentum used for GD iterations (hmm-dnn only)')
 parser.add_argument('--lr', type=float, default=0.1, help='Learning rate used for GD iterations (hmm-dnn only)')
@@ -42,13 +45,17 @@ if args.dataset == 'mscoco2k' or args.dataset == 'mscoco20k':
       speechFeatureFile = dataDir + 'mscoco2k_subset_subword_level_phone_gaussian_vectors.npz'
     else:
       speechFeatureFile = dataDir + 'mscoco20k_subset_subword_level_phone_gaussian_vectors.npz'
-
   elif args.audio_feat_type == 'kamper': 
     if args.dataset == 'mscoco2k':
       speechFeatureFile = dataDir + 'mscoco_kamper_embeddings_phone_power_law.npz'
     else:
       speechFeatureFile = dataDir + 'mscoco20k_kamper_embeddings.npz'
-  
+  elif args.audio_feat_type == 'force_align':
+    if args.dataset == 'mscoco2k':
+      speechFeatureFile = dataDir + 'mscoco2k_force_align.txt'
+    elif args.dataset == 'mscoco20k':
+      speechFeatureFile = dataDir + 'mscoco20k_force_align.txt'
+
   # TODO: generate 20k features
   elif args.audio_feat_type == 'blstm_mean': 
     speechFeatureFile = dataDir + 'mscoco_subset_2k_blstm_mean.npz'
@@ -235,7 +242,15 @@ if 1 in tasks:
     #model.simulatedAnnealing(numIterations=100, T0=1., debug=False)
     model.printAlignment(modelName+'_alignment', debug=False) 
     print('Take %.5s s to finish decoding !' % (time.time() - begin_time))
- 
+
+  if args.audio_feat_type == 'force_align':
+    if args.model_type == 'linear':
+      model = ImagePhoneHMMWordDiscoverer(speechFeatureFile, imageFeatureFile, modelConfigs, modelName=modelName)
+    elif args.model_type == 'gaussian':
+      model = ImagePhoneGaussianHMMWordDiscoverer(speechFeatureFile, imageFeatureFile, modelConfigs, modelName=modelName)
+    elif args.model_type == 'two-layer':
+      model = ImagePhoneHMMDNNWordDiscoverer(speechFeatureFile, imageFeatureFile, modelConfigs, modelName=modelName)
+   
 if 2 in tasks:
   with open(goldAlignmentFile, 'r') as f:
     gold_info = json.load(f)
