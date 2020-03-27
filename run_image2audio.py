@@ -44,7 +44,7 @@ if args.dataset == 'mscoco2k' or args.dataset == 'mscoco20k':
     if args.dataset == 'mscoco2k':
       speechFeatureFile = dataDir + 'mscoco2k_subset_subword_level_phone_gaussian_vectors.npz'
     else:
-      speechFeatureFile = dataDir + 'mscoco20k_subset_subword_level_phone_gaussian_vectors.npz'
+      speechFeatureFile = dataDir + 'mscoco20k_phone_gaussian_vectors.npz'
   elif args.audio_feat_type == 'kamper': 
     if args.dataset == 'mscoco2k':
       speechFeatureFile = dataDir + 'mscoco_kamper_embeddings_phone_power_law.npz'
@@ -66,7 +66,7 @@ if args.dataset == 'mscoco2k' or args.dataset == 'mscoco20k':
     if args.dataset == 'mscoco2k':
       imageFeatureFile = dataDir + 'mscoco2k_subset_subword_level_concept_gaussian_vectors.npz'
     else:
-      imageFeatureFile = dataDir + 'mscoco20k_subset_subword_level_concept_gaussian_vectors.npz'
+      imageFeatureFile = dataDir + 'mscoco20k_concept_gaussian_vectors.npz'
 
   elif args.image_feat_type == 'vgg16_penult':
     if args.dataset == 'mscoco2k':
@@ -141,15 +141,15 @@ SNRs = [40]
 tasks = [1, 2]
 if 0 in tasks:
   if args.dataset == 'mscoco2k':
-    phoneCaptionFile = '../data/mscoco/src_mscoco_subset_subword_level_power_law.txt'
-    speechFeatureFile = '../data/mscoco/mscoco_subset_subword_level_phone_gaussian_vectors.npz'
-    imageConceptFile = '../data/mscoco/trg_mscoco_subset_subword_level_power_law.txt'
-    imageFeatureFile = '../data/mscoco/mscoco_subset_subword_level_concept_gaussian_vectors.npz'
+    phoneCaptionFile = 'data/mscoco/src_mscoco_subset_subword_level_power_law.txt'
+    speechFeatureFile = 'data/mscoco/mscoco_subset_subword_level_phone_gaussian_vectors.npz'
+    imageConceptFile = 'data/mscoco/trg_mscoco_subset_subword_level_power_law.txt'
+    imageFeatureFile = 'data/mscoco/mscoco_subset_subword_level_concept_gaussian_vectors.npz'
   elif args.dataset == 'mscoco20k':
-    phoneCaptionFile = '../data/mscoco/src_mscoco_subset_130k_subword_level_power_law.txt'
-    speechFeatureFile = '../data/mscoco/mscoco20k_subset_subword_level_phone_gaussian_vectors.npz'
-    imageConceptFile = '../data/mscoco/trg_mscoco_subset_130k_subword_level_power_law.txt'
-    imageFeatureFile = '../data/mscoco/mscoco20k_subset_subword_level_concept_gaussian_vectors.npz'
+    phoneCaptionFile = 'data/mscoco/src_mscoco_subset_130k_power_law_phone_captions.txt'
+    speechFeatureFile = 'data/mscoco/mscoco20k_phone_gaussian_vectors.npz'
+    imageConceptFile = 'data/mscoco/trg_mscoco_subset_130k_power_law_phone_captions.txt'
+    imageFeatureFile = 'data/mscoco/mscoco20k_concept_gaussian_vectors.npz'
   
   vCorpus = {}
   concept2idx = {}
@@ -170,11 +170,11 @@ if 0 in tasks:
    
   for ex, vSenStr in enumerate(vCorpusStr):
     N = len(vSenStr)
-    if featType == 'one-hot':
+    if args.image_feat_type == 'one-hot':
       vSen = np.zeros((N, nTypes))
       for i, vWord in enumerate(vSenStr):
         vSen[i, concept2idx[vWord]] = 1.
-    elif featType == 'gaussian':
+    elif args.image_feat_type == 'gaussian':
       vSen = np.zeros((N, imgFeatDim))
       for i, vWord in enumerate(vSenStr):
         vSen[i] = centroids[concept2idx[vWord]] + 0.1 * np.random.normal(size=(imgFeatDim,))
@@ -205,11 +205,11 @@ if 0 in tasks:
    
   for ex, aSenStr in enumerate(aCorpusStr):
     T = len(aSenStr)
-    if featType == 'one-hot':
+    if args.audio_feat_type == 'one-hot':
       aSen = np.zeros((T, nPhones))
       for i, aWord in enumerate(aSenStr):
         aSen[i, phone2idx[aWord]] = 1.
-    elif featType == 'gaussian':
+    elif args.audio_feat_type == 'gaussian':
       aSen = np.zeros((T, spFeatDim))
       for i, aWord in enumerate(aSenStr):
         aSen[i] = centroids[phone2idx[aWord]] + 0.1 * np.random.normal(size=(spFeatDim,))
@@ -242,6 +242,11 @@ if 1 in tasks:
       model = ImagePhoneGaussianHMMWordDiscoverer(speechFeatureFile, imageFeatureFile, modelConfigs, modelName=modelName)
     elif args.model_type == 'two-layer':
       model = ImagePhoneHMMDNNWordDiscoverer(speechFeatureFile, imageFeatureFile, modelConfigs, modelName=modelName)
+    model.trainUsingEM(20, writeModel=False, debug=False)
+    print('Take %.5s s to finish training the model !' % (time.time() - begin_time))
+    #model.simulatedAnnealing(numIterations=100, T0=1., debug=False)
+    model.printAlignment(modelName+'_alignment', debug=False) 
+    print('Take %.5s s to finish decoding !' % (time.time() - begin_time)) 
   else:
     if args.model_type == 'linear':
       model = ImageAudioHMMWordDiscoverer(speechFeatureFile, imageFeatureFile, modelConfigs, modelName=modelName)
@@ -250,7 +255,7 @@ if 1 in tasks:
     elif args.model_type == 'two-layer':
       model = ImageAudioHMMDNNWordDiscoverer(speechFeatureFile, imageFeatureFile, modelConfigs, modelName=modelName)
 
-    model.trainUsingEM(20, writeModel=True, debug=False)
+    model.trainUsingEM(20, writeModel=False, debug=False)
     print('Take %.5s s to finish training the model !' % (time.time() - begin_time))
     #model.simulatedAnnealing(numIterations=100, T0=1., debug=False)
     model.printAlignment(modelName+'_alignment', debug=False) 
@@ -299,7 +304,6 @@ if 2 in tasks:
       print('Average visual concept cluster purities and deviation: ', np.mean(vpurities), np.var(vpurities)**.5)
       print('Average accuracy and deviation: ', np.mean(accs), np.var(accs)**.5)
       print('Average F1 score and deviation: ', np.mean(f1s), np.var(f1s)**.5)
-      
   else:
     with open(predAlignmentFile, 'r') as f:
       pred_info = json.load(f)
