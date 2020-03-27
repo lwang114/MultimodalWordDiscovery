@@ -140,10 +140,16 @@ SNRs = [40]
 
 tasks = [1, 2]
 if 0 in tasks:
-  phoneCaptionFile = '../data/mscoco/src_mscoco_subset_subword_level_power_law.txt'
-  speechFeatureFile = '../data/mscoco/mscoco_subset_subword_level_phone_gaussian_vectors.npz'
-  imageConceptFile = '../data/mscoco/trg_mscoco_subset_subword_level_power_law.txt'
-  imageFeatureFile = '../data/mscoco/mscoco_subset_subword_level_concept_gaussian_vectors.npz'
+  if args.dataset == 'mscoco2k':
+    phoneCaptionFile = '../data/mscoco/src_mscoco_subset_subword_level_power_law.txt'
+    speechFeatureFile = '../data/mscoco/mscoco_subset_subword_level_phone_gaussian_vectors.npz'
+    imageConceptFile = '../data/mscoco/trg_mscoco_subset_subword_level_power_law.txt'
+    imageFeatureFile = '../data/mscoco/mscoco_subset_subword_level_concept_gaussian_vectors.npz'
+  elif args.dataset == 'mscoco20k':
+    phoneCaptionFile = '../data/mscoco/src_mscoco_subset_130k_subword_level_power_law.txt'
+    speechFeatureFile = '../data/mscoco/mscoco20k_subset_subword_level_phone_gaussian_vectors.npz'
+    imageConceptFile = '../data/mscoco/trg_mscoco_subset_130k_subword_level_power_law.txt'
+    imageFeatureFile = '../data/mscoco/mscoco20k_subset_subword_level_concept_gaussian_vectors.npz'
   
   vCorpus = {}
   concept2idx = {}
