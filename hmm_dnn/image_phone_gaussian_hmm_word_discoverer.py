@@ -645,7 +645,7 @@ class ImagePhoneGaussianHMMWordDiscoverer:
     for i, (aSen, vSen) in enumerate(zip(self.aCorpus, self.vCorpus)):
       alignment, alignProbs = self.align(aSen, vSen, debug=debug)
       clustersV, clusterProbs = self.cluster(aSen, vSen, alignment)
-      conceptAlignment = np.argmax(self.conceptCounts[i], axis=1).tolist() 
+      conceptAlignment = np.argmax(self.conceptCountsA[i], axis=1).tolist() 
 
       if DEBUG:
         print(aSen, vSen)

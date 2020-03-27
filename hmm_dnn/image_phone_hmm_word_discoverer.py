@@ -210,6 +210,7 @@ class ImagePhoneHMMWordDiscoverer:
       transCounts = {m: np.zeros((m, m)) for m in self.lenProb}
       phoneCounts = np.zeros((self.nWords, self.audioFeatDim))      
       conceptCounts = [np.zeros((vSen.shape[0], self.nWords)) for vSen in self.vCorpus]
+      self.conceptCountsA = [np.zeros((aSen.shape[0], self.nWords)) for aSen in self.aCorpus]
 
       if printStatus:
         likelihood = self.computeAvgLogLikelihood()
@@ -228,9 +229,11 @@ class ImagePhoneHMMWordDiscoverer:
           print('backward prob: ', backwardProbs)
         initCounts[len(vSen)] += self.updateInitialCounts(forwardProbs, backwardProbs, vSen, aSen, debug=False)
         transCounts[len(vSen)] += self.updateTransitionCounts(forwardProbs, backwardProbs, vSen, aSen, debug=False)
-        stateCounts = self.updateStateCounts(forwardProbs, backwardProbs)
+        stateCounts = self.updateStateCounts(forwardProbs, backwardProbs) 
         phoneCounts += np.sum(stateCounts, axis=1).T @ aSen
         conceptCounts[ex] += self.updateConceptCounts(vSen, aSen)
+        self.conceptCountsA[ex] += np.sum(stateCounts, axis=1)
+      self.conceptCounts = conceptCounts
 
       # Normalize
       for m in self.lenProb:
@@ -622,12 +625,14 @@ class ImagePhoneHMMWordDiscoverer:
     for i, (aSen, vSen) in enumerate(zip(self.aCorpus, self.vCorpus)):
       alignment, alignProbs = self.align(aSen, vSen, debug=debug)
       clusters, clusterProbs = self.cluster(aSen, vSen, alignment)
+      conceptAlignment = np.argmax(self.conceptCountsA[i], axis=1).tolist()
       if DEBUG:
         print(aSen, vSen)
         print(type(alignment[1]))
       align_info = {
             'index': i,
             'image_concepts': clusters,
+            'concept_alignment': conceptAlignment,
             'alignment': alignment,
             'align_probs': alignProbs,
             'is_phoneme': isPhoneme
