@@ -235,6 +235,13 @@ if 1 in tasks:
         model.trainUsingEM(25, writeModel=True, debug=False)
         model.printAlignment(modelName+'_alignment', debug=False)
     print('Take %.5s s to finish training and decoding the model !' % (time.time() - begin_time)) 
+  elif args.audio_feat_type == 'force_align':
+    if args.model_type == 'linear':
+      model = ImagePhoneHMMWordDiscoverer(speechFeatureFile, imageFeatureFile, modelConfigs, modelName=modelName)
+    elif args.model_type == 'gaussian':
+      model = ImagePhoneGaussianHMMWordDiscoverer(speechFeatureFile, imageFeatureFile, modelConfigs, modelName=modelName)
+    elif args.model_type == 'two-layer':
+      model = ImagePhoneHMMDNNWordDiscoverer(speechFeatureFile, imageFeatureFile, modelConfigs, modelName=modelName)
   else:
     if args.model_type == 'linear':
       model = ImageAudioHMMWordDiscoverer(speechFeatureFile, imageFeatureFile, modelConfigs, modelName=modelName)
@@ -248,15 +255,7 @@ if 1 in tasks:
     #model.simulatedAnnealing(numIterations=100, T0=1., debug=False)
     model.printAlignment(modelName+'_alignment', debug=False) 
     print('Take %.5s s to finish decoding !' % (time.time() - begin_time))
-
-  if args.audio_feat_type == 'force_align':
-    if args.model_type == 'linear':
-      model = ImagePhoneHMMWordDiscoverer(speechFeatureFile, imageFeatureFile, modelConfigs, modelName=modelName)
-    elif args.model_type == 'gaussian':
-      model = ImagePhoneGaussianHMMWordDiscoverer(speechFeatureFile, imageFeatureFile, modelConfigs, modelName=modelName)
-    elif args.model_type == 'two-layer':
-      model = ImagePhoneHMMDNNWordDiscoverer(speechFeatureFile, imageFeatureFile, modelConfigs, modelName=modelName)
-   
+  
 if 2 in tasks:
   with open(goldAlignmentFile, 'r') as f:
     gold_info = json.load(f)
