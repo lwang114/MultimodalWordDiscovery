@@ -86,7 +86,7 @@ if 0 in tasks:
 #--------------------------------#
 if 1 in tasks:
   if args.pretrain_model_file is None:
-    args.pretrain_model_file = 'exp/blstm2_mscoco_train_sgd_lr_0.00010_feb27/audio_model.4.pth'
+    args.pretrain_model_file = 'exp/blstm3_mscoco_train_sgd_lr_0.00001_mar25/audio_model.7.pth'
   
   if args.dataset == 'mscoco_train':
     audio_root_path = '/home/lwang114/data/mscoco/audio/val2014/wav/'
@@ -101,10 +101,20 @@ if 1 in tasks:
     test_loader = torch.utils.data.DataLoader(testset, batch_size=args.batch_size, shuffle=False)
   else:
     raise NotImplementedError
-
-  audio_model = BLSTM2(n_class=args.n_class)
-  audio_model.load_state_dict(torch.load(args.pretrain_model_file))
   
+  if args.audio_model == 'blstm2':
+    if args.pretrain_model_file is None:
+      args.pretrain_model_file = 'exp/blstm2_mscoco_train_sgd_lr_0.00010_feb27/audio_model.4.pth'    
+    audio_model = BLSTM2(n_class=args.n_class)
+    audio_model.load_state_dict(torch.load(args.pretrain_model_file))
+  elif args.audio_model == 'blstm3':
+    if args.pretrain_model_file is None:
+      args.pretrain_model_file = 'exp/blstm3_mscoco_train_sgd_lr_0.00001_mar25/audio_model.7.pth'
+    audio_model = BLSTM3(n_class=args.n_class)
+    audio_model.load_state_dict(torch.load(args.pretrain_model_file))
+  else:
+    raise NotImplementedError
+
   args.save_features = True
   validate(audio_model, test_loader, args)
 
@@ -129,6 +139,25 @@ if 2 in tasks:
     weight_dict = {'weight': audio_model.fc.weight.cpu().detach().numpy(),
                    'bias': audio_model.fc.bias.cpu().detach().numpy()}
     np.savez('%s/classifier_weights.npz' % args.exp_dir, **weight_dict)
+  elif args.audio_model == 'blstm3':
+    if args.pretrain_model_file is None:
+      args.pretrain_model_file = 'exp/blstm3_mscoco_train_sgd_lr_0.00001_mar25/audio_model.7.pth'
+
+    if args.dataset == 'mscoco_train':
+      args.class2id_file = '../data/mscoco/mscoco_train_phone_segments_phone2id.json'
+
+    with open(args.class2id_file, 'r') as f:
+      class2idx = json.load(f)
+    args.n_class = len(class2idx.keys())
+
+    audio_model = BLSTM3(n_class=args.n_class)
+    audio_model.load_state_dict(torch.load(args.pretrain_model_file))
+
+    weight_dict = {'weight': audio_model.fc.weight.cpu().detach().numpy(),
+                   'bias': audio_model.fc.bias.cpu().detach().numpy()}
+    np.savez('%s/classifier_weights.npz' % args.exp_dir, **weight_dict)
+  else:
+    raise NotImplementedError
 
 #-----------------------------------------#
 # Frame to Phone Level Feature Conversion #
