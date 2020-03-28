@@ -56,11 +56,17 @@ if args.dataset == 'mscoco2k' or args.dataset == 'mscoco20k':
     elif args.dataset == 'mscoco20k':
       speechFeatureFile = dataDir + 'mscoco20k_force_align.txt'
 
-  # TODO: generate 20k features
   elif args.audio_feat_type == 'blstm_mean': 
-    speechFeatureFile = dataDir + 'mscoco_subset_2k_blstm_mean.npz'
+    if args.dataset == 'mscoco2k':
+      speechFeatureFile = dataDir + 'mscoco_subset_2k_blstm_mean.npz'
+    elif args.dataset == 'mscoco20k':
+      speechFeatureFile = dataDir + 'mscoco_subset_20k_blstm_mean.npz'
+
   elif args.audio_feat_type == 'blstm_last':
-    speechFeatureFile = dataDir + 'mscoco_subset_2k_blstm_last.npz'
+    if args.dataset == 'mscoco2k': 
+      speechFeatureFile = dataDir + 'mscoco_subset_2k_blstm_last.npz'
+    elif args.dataset == 'mscoco20k':
+      speechFeatureFile = dataDir + 'mscoco_subset_20k_blstm_last.npz'
 
   if args.image_feat_type == 'synthetic':
     if args.dataset == 'mscoco2k':
