@@ -31,8 +31,9 @@ parser.add_argument('--frame_dim', type=int, default=12, help="Dimension of the 
 parser.add_argument("--context_width", type=int, default=0, help="Width of the context window in acoustic feature; used only in frame-level models")
 parser.add_argument("--preseg_file", type=str, default=None, help="Pre-segmentation for the segmental models")
 parser.add_argument("--temperature", type=float, default=10, help="temperature for the attention/align probability matrix plot")
-parser.add_argument("--num_iterations", type=int, default=30, help="Number of iterations for training")
+parser.add_argument("--num_iterations", type=int, default=20, help="Number of iterations for training")
 parser.add_argument("--max_feat_len", type=int, default=2000, help="Maximal number of feature frames for an utterance")
+parser.add_argument('--use_null', help='Use NULL concept', action='store_true')
 args = parser.parse_args() 
 
 
@@ -60,6 +61,7 @@ if args.exp_dir:
 
 # Dataset specific variables (TODO: make it more general)
 if args.dataset == 'flickr':
+  args.use_null = True 
   word_level_info_file = 'data/flickr30k/phoneme_level/flickr30k_info_phoneme_concept.json'
   train_file = '/home/lwang114/data/flickr/flickr_40k_speech_mbn/flickr_40k_speech_train.npz'
   test_file = '/home/lwang114/data/flickr/flickr_40k_speech_mbn/flickr_40k_speech_test.npz'
@@ -95,13 +97,10 @@ if args.dataset == 'flickr':
 elif args.dataset == 'mscoco20k':
   # XXX
   args.embed_dim = 560
-
-  # TODO Generate this files
+  
   landmarks_file = datapath + "mscoco20k_landmarks.npz" 
   pred_landmark_segmentation_file = exp_smt_dir + "mscoco20k_pred_landmark_segmentation.npy"
   pred_segmentation_file = exp_smt_dir + "mscoco20k_pred_segmentation.npy"
- 
-  # TODO
   gold_alignment_file = datapath + 'mscoco20k_gold_alignment.json'
   pred_alignment_smt_prefix = exp_smt_dir + 'mscoco20k_pred_alignment' 
   pred_boundary_file = exp_smt_dir + "pred_boundaries.npy"
@@ -114,13 +113,9 @@ elif args.dataset == 'mscoco20k':
 elif args.dataset == 'mscoco2k':
   # XXX
   args.embed_dim = 560
-
-  # TODO Generate this files
   landmarks_file = datapath + "mscoco2k_landmarks.npz" 
   pred_landmark_segmentation_file = exp_smt_dir + "mscoco2k_pred_landmark_segmentation.npy"
   pred_segmentation_file = exp_smt_dir + "mscoco2k_pred_segmentation.npy"
-  
-  # TODO
   gold_alignment_file = datapath + 'mscoco2k_gold_alignment.json'
   pred_alignment_smt_prefix = exp_smt_dir + 'mscoco2k_pred_alignment' 
   pred_boundary_file = exp_smt_dir + "pred_boundaries.npy"
@@ -180,6 +175,7 @@ if start < 2 and end >= 2:
                                       embedDim=args.embed_dim,
                                       modelDir = model_dir,
                                       minWordLen=args.min_word_len, maxWordLen=args.max_word_len,
+                                      useNULL=args.use_null,
                                       landmarkFile=args.preseg_file)
     elif args.smt_model == "segembed-hmm":
       model_dir = None

@@ -31,9 +31,10 @@ class SegEmbedGMMWordDiscoverer:
               sourceCorpusFile=None, targetCorpusFile=None, 
               landmarkFile=None, 
               modelDir=None,
-              fCorpus=None, tCorpus=None,
+              fCorpus=None, tCorpus=None, useNULL=False,
               embedDim=None, minWordLen=-np.inf, maxWordLen=np.inf):
       self.acoustic_model = acousticModel
+      self.useNULL = useNULL
       self.fCorpus = fCorpus
       self.tCorpus = tCorpus
       if sourceCorpusFile and targetCorpusFile:
@@ -68,7 +69,11 @@ class SegEmbedGMMWordDiscoverer:
       fp = open(targetFile, 'r')
       tCorpus = fp.read().split('\n')
       # XXX XXX
-      self.tCorpus = [[NULL] + sorted(tSen.split()) for tSen in tCorpus[:10]]
+      if self.useNULL:
+        self.tCorpus = [[NULL] + sorted(tSen.split()) for tSen in tCorpus[-10:]]
+      else:
+        self.tCorpus = [sorted(tSen.split()) for tSen in tCorpus[-10:]]
+         
       fCorpus = np.load(sourceFile)
       # XXX XXX
       self.fCorpus = [fCorpus[fKey] for fKey in sorted(fCorpus.keys(), key=lambda x:int(x.split('_')[-1]))[:10]]
@@ -151,16 +156,15 @@ class SegEmbedGMMWordDiscoverer:
 
     def segmentStep(self):
       self.segmentations = []
+      self.embeddings = []
       numSent = len(self.fCorpus) 
-      sent_order = list(range(numSent))
-      random.shuffle(sent_order)
-       
-      for i in sent_order: 
-        fSen = self.fCorpus[i]
-        tSen = self.tCorpus[i]
-        segmentation, segmentProb = self.segment(self.embeddingTable[i], tSen, self.minWordLen, self.maxWordLen, reassign=True)        
+      # sent_order = list(range(numSent))
+      # random.shuffle(sent_order)
+
+      for fSen, tSen, embedTable in zip(self.fCorpus, self.tCorpus, self.embeddingTable): 
+        segmentation, segmentProb = self.segment(embedTable, tSen, self.minWordLen, self.maxWordLen, reassign=True)        
         self.segmentations.append(segmentation)
-        self.embeddings[i] = self.getSentEmbeds(fSen, segmentation)
+        self.embeddings.append(self.getSentEmbeds(fSen, segmentation))
 
     def segment(self, embedTable, tSen, minWordLen, maxWordLen, reassign=False, sent_id=None):
       fLen = embedTable.shape[1]
@@ -256,7 +260,7 @@ class SegEmbedGMMWordDiscoverer:
     def align(self, i):
       fSen = self.fCorpus[i]
       fLen = fSen.shape[0]
-      tSen = sorted(self.tCorpus[i])
+      tSen = self.tCorpus[i]
       tLen = len(self.tCorpus[i])
       alignment = []
       align_probs = []
@@ -301,40 +305,7 @@ class SegEmbedGMMWordDiscoverer:
       # Write to a .json file for evaluation
       with open(filePrefix+'.json', 'w') as f:
         json.dump(aligns, f, indent=4, sort_keys=True)            
-
-'''def reassign(self, tSen, 
-                newEmbeds, oldEmbeds, 
-                oldAssignProbs, newAssignProbs):
-      tSen = sorted(tSen)
-      newMeans = {}
-      newVars = {}
-      # Remove old components
-      for k_t, tw in enumerate(tSen):
-        for m in range(self.numMixtures[tw]):
-          self.mixturePriors[tw][m] = np.exp(self.mixturePriors[tw][m]) * self.numMembers[tw][m] - np.sum(np.exp(self.oldAssignProbs[:, k_t, m])) 
-          self.transVars[tw][m] = self.transMeans[tw][m] * self.numMembers[tw][m] - np.dot(np.exp(oldAssignProbs[:, k_t, m]), (np.asarray(oldEmbeds) - self.transMeans[tw][m])**2) 
-          self.transMeans[tw][m] = self.transMeans[tw][m] * self.numMembers[tw][m] - np.dot(np.exp(oldAssignProbs[:, k_t, m]), oldEmbeds)
-          self.numMembers[tw][m] -= np.sum(np.exp(oldAssignProbs[:, k_t, m]))
-
-          if self.numMembers[tw][m] > 0:
-            self.mixturePriors[tw][m] = np.log(self.mixturePriors[tw][m]) - np.log(self.numMembers[tw][m])
-            self.transMeans[tw][m] /= self.numMembers[tw][m]
-            self.transVars[tw][m] /= self.numMembers[tw][m]
-            
-          else:
-            self.removeCluster(tw, m)
-            self.numMixtures[tw] -= 1
-
-      # Add new components
-      for k_t, tw in enumerate(tSen):
-        for m in range(self.numMixtures[tw]):
-          transVars[tw][m] = self.transVars[tw][m] * self.numMembers[tw][m] + np.dot(np.exp(newAssignProbs[:, k_t, m]), (np.asarray(newEmbeds) - self.transMeans[tw][m]) ** 2) 
-          transMeans[tw][m] = self.transMeans[tw][m] * self.numMembers[tw][m] + np.dot(np.exp(newAssignProbs[:, k_t, m]), np.asarray(newEmbeds))
-          self.numMembers[tw][m] += np.sum(np.exp(newAssignProbs[:, k_t, m]))
-    
-          self.transMeans[tw][m] /= self.numMembers[tw][m]
-          self.transVars[tw][m] /= self.numMembers[tw][m]
-'''      
+      
 
 # Return log-probability of a Gaussian distribution
 def gaussian(x, mean, cov, cov_type='diag', log_prob=False):
