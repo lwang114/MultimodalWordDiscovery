@@ -1,7 +1,6 @@
 import numpy as np
 import math
 import json
-from audio_hmm_word_discoverer import *
 from scipy.misc import logsumexp
 import scipy.signal as signal
 import scipy.interpolate as interpolate 
@@ -14,14 +13,15 @@ ORDER = 'C'
 # Audio-level word discovery model
 # * The transition matrix is assumed to be Toeplitz 
 class SegEmbedHMMWordDiscoverer:
-  def __init__(self, numMixtures, frameDim, embedDim, 
+  def __init__(self, acousticModel, numMixtures, frameDim, embedDim, 
               sourceCorpusFile, targetCorpusFile, 
               landmarkFile,
               modelDir=None,
               minWordLen=20,
               maxWordLen=100,
               modelName='audio_segembed_hmm_word_discoverer', maxLen=2000):
-    self.modelName = modelName 
+    self.modelName = modelName
+    self.acoustic_model = acousticModel
     self.initProbFile = None
     self.transProbFile = None
     self.obsModelFile = None
@@ -83,7 +83,7 @@ class SegEmbedHMMWordDiscoverer:
       if i >= 1 and i <= 4: 
         print(i, self.embeddings[i])
 
-    self.acoustic_model = AudioHMMWordDiscoverer(self.numMixtures, self.frameDim, 
+    self.acoustic_model = self.acoustic_model(self.numMixtures, self.frameDim, 
                         fCorpus=self.embeddings, tCorpus=self.tCorpus, 
                         initProbFile=initProbFile,
                         transProbFile=transProbFile,

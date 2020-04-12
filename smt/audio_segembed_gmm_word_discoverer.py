@@ -12,9 +12,9 @@ import scipy.signal as signal
 import scipy.interpolate as interpolate
 import logging
 import os
+import math
+from scipy.misc import logsumexp
 #from _cython_utils import *
-from audio_gmm_word_discoverer import *
-from audio_kmeans_word_discoverer import * 
 
 NULL = 'NULL'
 EPS = np.finfo(float).eps
@@ -23,19 +23,17 @@ flatten_order = "C"
 if os.path.exists("*.log"):
   os.system("rm *.log")
 
-# XXX
-#random.seed(2)
-#np.random.seed(2)
-logging.basicConfig(filename="audio_segembed_gmm_word_discoverer.log", format="%(asctime)s %(message)s", level=logging.DEBUG)
-#logging.basicConfig(format="%(asctime)s %(message)s", level=logging.DEBUG)
-
+random.seed(2)
+np.random.seed(2)
+# TODO Remove unused arguments
 class SegEmbedGMMWordDiscoverer:
-    def __init__(self, numMixtures, frameDim, 
+    def __init__(self, acousticModel, numMixtures, frameDim, 
               sourceCorpusFile=None, targetCorpusFile=None, 
               landmarkFile=None, 
               modelDir=None,
               fCorpus=None, tCorpus=None,
-              embedDim=None, minWordLen=20, maxWordLen=80):
+              embedDim=None, minWordLen=-np.inf, maxWordLen=np.inf):
+      self.acoustic_model = acousticModel
       self.fCorpus = fCorpus
       self.tCorpus = tCorpus
       if sourceCorpusFile and targetCorpusFile:
@@ -45,14 +43,15 @@ class SegEmbedGMMWordDiscoverer:
       self.assignments = []
       self.segmentations = []
       self.embeddings = []
+      self.embeddingTable = []
       self.numMembers = {}
       self.numMixturesMax = numMixtures
       self.numMixtures = {}
       
       self.embedDim = embedDim
       self.featDim = self.fCorpus[0].shape[1]
-      #self.minWordLen = minWordLen
-      #self.maxWordLen = maxWordLen
+      self.minWordLen = minWordLen
+      self.maxWordLen = maxWordLen
       self.logProbX = -np.inf  
      
       self.mixturePriorFile = None
@@ -69,10 +68,10 @@ class SegEmbedGMMWordDiscoverer:
       fp = open(targetFile, 'r')
       tCorpus = fp.read().split('\n')
       # XXX XXX
-      self.tCorpus = [[NULL] + sorted(tSen.split()) for tSen in tCorpus]
+      self.tCorpus = [[NULL] + sorted(tSen.split()) for tSen in tCorpus[:10]]
       fCorpus = np.load(sourceFile)
       # XXX XXX
-      self.fCorpus = [fCorpus[fKey] for fKey in sorted(fCorpus.keys(), key=lambda x:int(x.split('_')[-1]))]
+      self.fCorpus = [fCorpus[fKey] for fKey in sorted(fCorpus.keys(), key=lambda x:int(x.split('_')[-1]))[:10]]
       self.fCorpus = [fSen[:maxLen] for fSen in self.fCorpus] 
       self.data_ids = [fKey for fKey in sorted(fCorpus.keys(), key=lambda x:int(x.split('_')[-1]))]
 
@@ -102,37 +101,29 @@ class SegEmbedGMMWordDiscoverer:
             segmentation.append(b)
           self.segmentations.append(segmentation)
       else:
-        # Initialize a random segmentation and then use kmeans++
+        # Initialize every frame as a segment
         self.segmentations = []
         for i, (tSen, fSen) in enumerate(zip(self.tCorpus, self.fCorpus)):
           fLen = fSen.shape[0]
-          if p_boundary > 0:
-            b_vec = np.random.binomial(1, p_boundary, size=(fLen,))
-            #b_vec = np.ones((fLen,))
-          else:
-            b_vec = np.array([fLen])
-          
-          b_vec[0] = 1
-          b_vec = np.asarray(b_vec.tolist() + [1])
-          segmentation = list(b_vec.nonzero()[0])
-          self.segmentations.append(segmentation)
+          self.segmentations.append(list(range(fLen)))
       
       for i, (fSen, segmentation) in enumerate(zip(self.fCorpus, self.segmentations)):      
-        if DEBUG:
-          print(i)
-        self.embeddings.append(self.getSentEmbeds(fSen, segmentation, frameDim=self.frameDim))
-      
-      if DEBUG:
-        print("embeddings[0].shape: ", self.embeddings[0].shape)
-        print("embeddings[0][:10]", self.embeddings[0][:10])
-      self.acoustic_model = GMMWordDiscoverer(
-                    fCorpus=self.embeddings, tCorpus=self.tCorpus,
-                    numMixtures=self.numMixturesMax, 
-                    mixturePriorFile=mixturePriorFile, 
-                    transMeanFile=transMeanFile, 
-                    transVarFile=transVarFile, 
-                    initMethod=initMethod
-                    )
+        embedTable = np.nan * np.ones((len(fSen)-1, len(fSen), self.embedDim))
+        for t in range(1, len(fSen)):
+          for s in range(t):
+            embedTable[s, t] = self.embed(fSen[s:t])
+        self.embeddingTable.append(embedTable)
+        
+        # TODO: Use embed table instead of raw feature to compute this
+        self.embeddings.append(self.getSentEmbeds(fSen, segmentation))
+
+      self.acoustic_model = self.acoustic_model(
+                        fCorpus=self.embeddings, tCorpus=self.tCorpus,
+                        numMixtures=self.numMixturesMax, 
+                        mixturePriorFile=mixturePriorFile, 
+                        transMeanFile=transMeanFile, 
+                        transVarFile=transVarFile, 
+                        initMethod=initMethod)
 
     def trainUsingEM(self, numIterations=10, numGMMSteps=1, centroidFile=None, modelPrefix='', writeModel=False, initMethod='kmeans++'):
       if writeModel:
@@ -141,27 +132,62 @@ class SegEmbedGMMWordDiscoverer:
       self.prev_segmentations = deepcopy(self.segmentations)
       
       n_iter = 0
-      prevLogProbX = -np.inf
       for n_iter in range(numIterations): 
-        print("Starting training iteration "+str(n_iter))
-        begin_time = time.time()
-        
-        #self.segmentStep()
-        #print('Segment step takes %0.5f s to finish' % (time.time() - begin_time))
+        print("Starting training iteration "+str(n_iter))       
 
         begin_time = time.time()
         self.acoustic_model.trainUsingEM(numIterations=numGMMSteps)
-        print('GMM training takes %0.5f s to finish' % (time.time() - begin_time))
+        print('GMM training takes %0.5f s to finish' % (time.time() - begin_time)) 
+
+        begin_time = time.time()        
+        self.segmentStep()
+        print('Segment step takes %0.5f s to finish' % (time.time() - begin_time))
  
         if writeModel:
           self.printModel(modelPrefix+"model_iter="+str(n_iter))
          
       if writeModel:
         self.printModel(modelPrefix+"model_final")
+
+    def segmentStep(self):
+      self.segmentations = []
+      numSent = len(self.fCorpus) 
+      sent_order = list(range(numSent))
+      random.shuffle(sent_order)
+       
+      for i in sent_order: 
+        fSen = self.fCorpus[i]
+        tSen = self.tCorpus[i]
+        segmentation, segmentProb = self.segment(self.embeddingTable[i], tSen, self.minWordLen, self.maxWordLen, reassign=True)        
+        self.segmentations.append(segmentation)
+        self.embeddings[i] = self.getSentEmbeds(fSen, segmentation)
+
+    def segment(self, embedTable, tSen, minWordLen, maxWordLen, reassign=False, sent_id=None):
+      fLen = embedTable.shape[1]
+      tLen = len(tSen)
+      tSen = sorted(tSen)
+      forwardProbs = -np.inf * np.ones((fLen+1,))
+      forwardProbs[0] = 0.
+      segmentAssigns = np.nan * np.ones((fLen+1,)) 
+      segmentation = [0]*(fLen+1)
+      mixturePriors = np.concatenate([self.acoustic_model.mixturePriors[tw] / len(tSen) for tw in tSen], axis=0)
+      transMeans = np.concatenate([self.acoustic_model.transMeans[tw] for tw in tSen], axis=0)
+      transVars = np.concatenate([self.acoustic_model.transVars[tw] for tw in tSen], axis=0)
          
-    def printModel(self, filename):
-      self.acoustic_model.printModel(filename) 
-    
+      for t in range(1, fLen):
+        scores = forwardProbs[:t]
+        scores += (t - np.arange(t)) * gmmProb(embedTable[:t, t], mixturePriors, transMeans, transVars, log_prob=True)  
+        forwardProbs[t+1] = np.max(scores)
+        segmentAssigns[t+1] = np.argmax(scores)
+
+      end = fLen
+      segmentation = [fLen]
+      while end != 0:
+        segmentation.append(int(segmentAssigns[end])) 
+        end = int(segmentAssigns[end])
+
+      return segmentation[::-1], forwardProbs
+   
     # Embed a segment into a fixed-length vector 
     def embed(self, y, frameDim=None, technique="resample"):
       #assert self.embedDim % self.featDim == 0
@@ -194,16 +220,12 @@ class SegEmbedGMMWordDiscoverer:
               ).flatten(flatten_order) #.flatten("F")
       return y_new
     
-    def getSentEmbeds(self, x, segmentation, frameDim=12):
+    def getSentEmbeds(self, x, segmentation):
       n_words = len(segmentation) - 1
       embeddings = []
       for i_w in range(n_words):
         seg = x[segmentation[i_w]:segmentation[i_w+1]]
-        if DEBUG:
-          print("seg.shape", seg.shape)
-          print("seg:", segmentation[i_w+1])
-          print("embed of seg:", self.embed(seg))
-        embeddings.append(self.embed(seg, frameDim=frameDim))  
+        embeddings.append(self.embed(seg))  
       return np.array(embeddings)
      
     def getSentDurations(self, segmentation):
@@ -250,6 +272,9 @@ class SegEmbedGMMWordDiscoverer:
         align_probs.extend([scores] * dur)
         start = start + dur
       return alignment, align_probs
+
+    def printModel(self, filename):
+      self.acoustic_model.printModel(filename)  
     
     def printAlignment(self, filePrefix):
       f = open(filePrefix+'.txt', 'w')
@@ -277,36 +302,6 @@ class SegEmbedGMMWordDiscoverer:
       with open(filePrefix+'.json', 'w') as f:
         json.dump(aligns, f, indent=4, sort_keys=True)            
 
-# TODO
-'''def segmentStep(self):
-      assert self.minWordLen * self.featDim >= self.embedDim 
-      self.segmentations = []
-      numSent = len(self.fCorpus) 
-      sent_order = list(range(numSent))
-      random.shuffle(sent_order)
-       
-      for i in sent_order: 
-        fSen = self.fCorpus[i]
-        tSen = self.tCorpus[i]
-        #if DEBUG:
-        logging.debug("processing sentence %d" % (i))
-        logging.debug("src sent len %d, trg sent len %d" % (fSen.shape[0], len(tSen)))
-
-        segmentation, segmentProb = self.segment(fSen, tSen, self.minWordLen, self.maxWordLen, reassign=True)        
-        self.segmentations.append(segmentation)
-        self.logProbX += 1. / numSent * segmentProb
-'''
-
-'''
-    def checkConvergence(self, curLikelihood, prevLikelihood, tol=1e-3):
-      if prevLikelihood == -np.inf:
-        return False
-      elif abs(curLikelihood - prevLikelihood) / abs(curLikelihood + EPS) < tol:
-        return True
-      else:
-        return False
-    '''
- 
 '''def reassign(self, tSen, 
                 newEmbeds, oldEmbeds, 
                 oldAssignProbs, newAssignProbs):
@@ -339,144 +334,63 @@ class SegEmbedGMMWordDiscoverer:
     
           self.transMeans[tw][m] /= self.numMembers[tw][m]
           self.transVars[tw][m] /= self.numMembers[tw][m]
-          
-    def segment(self, fSen, tSen, minWordLen, maxWordLen, reassign=False, sent_id=None):
-      fLen = fSen.shape[0]
-      tLen = len(tSen)
-      tSen = sorted(tSen)
-      forwardProbs = -np.inf * np.ones((fLen,))
-      forwardProbs[0] = 0.
-      segmentAssigns = np.nan * np.ones((fLen,)) 
-      
-      segmentPaths = [0]*fLen
-      
-      embeds = np.zeros((fLen * (maxWordLen - minWordLen + 1), self.embedDim))
-      if DEBUG:
-        print("embeds.shape: ", embeds.shape)
-      embedIds = -1 * np.ones((fLen * (fLen + 1) / 2, )).astype("int")
-      i_embed = 0
-      for cur_end in range(minWordLen-1, fLen):
-        for cur_len in range(minWordLen, maxWordLen+1):
-          if cur_end - cur_len + 1 == 0 or cur_end - cur_len + 1 >= minWordLen:
-            t = cur_end
-            i = t * (t + 1) / 2 + cur_len - 1 
-            #if DEBUG:
-            #  logging.debug("end, len: %s %s" % (str(t), str(cur_len)))
-            embedIds[i] = i_embed
-            #if DEBUG:
-            #  print("segment.shape", fSen[t-cur_len+1:t+1].shape)
-            #  print("current embed.shape: ", self.embed(fSen[t-cur_len+1:t+1]).shape) 
-            embeds[i_embed] = self.embed(fSen[t-cur_len+1:t+1])
-            i_embed += 1
-      
-      for i_f in range(minWordLen-1, fLen):
-        cur_embeds = []
-        cur_embedLens = []
-        for j_f in range(minWordLen, maxWordLen+1):
-          if i_f - j_f + 1 == 0 or i_f - j_f + 1 >= minWordLen:
-            t = i_f
-            i = t * (t + 1) / 2 + j_f - 1
-            i_embed = embedIds[i]
-            cur_embeds.append(embeds[i_embed])
-            cur_embedLens.append(j_f)
-            
-            if DEBUG:
-              logging.debug("segment ended at %d with length %d" % (t, j_f))
-      
-        numCandidates = len(cur_embeds)
-        end = i_f
-        start = (end - np.array(cur_embedLens)).tolist()    
-        
-        # Forward filtering
-        for i_t, tw in enumerate(tSen):     
-          for m in range(self.numMixtures[tw]):
-            # Log probability with uniform prior over concepts
-            forwardProbVec = forwardProbs[start] - np.log(tLen) + np.asarray(cur_embedLens) * gmmProb(np.asarray(cur_embeds), self.mixturePriors[tw], self.transMeans[tw], self.transVars[tw], log_prob=True)
-            forwardProbs[end] = logsumexp(forwardProbVec)
+'''      
 
-            # Unweighted distance
-            #costs[i_t, m, :] = segmentCosts[start] + self.computeDist(np.array(cur_embeds), self.centroids[tw][m])            
-        
-      # Backward sampling: randomly sample a segment according to p(q_t|x_1:t, y)
-      # TODO: Use gimpel sampling
-      # TODO: Add annealing temperature
-      segmentation = [0]
-      segmentProb = 0.
-      i_f = fLen - 1
-      new_embeds = []
-      while i_f >= 0.:
-        end = i_f
-        cur_embeds = [] 
-        cur_embed_lens = []
-        for l in range(minWordLen, maxWordLen):
-          if end - l + 1 >= minWordLen or end - l + 1 == 0:
-            t = i_f
-            i = t * (t + 1) / 2 + l - 1
-            i_embed = embedIds[i]
-            cur_embeds.append(embeds[i_embed])
-            cur_embed_lens.append(l)
+# Return log-probability of a Gaussian distribution
+def gaussian(x, mean, cov, cov_type='diag', log_prob=False):
+  d = mean.shape[0]
+  if cov_type == 'diag':
+    assert np.min(np.diag(cov)) > 0.
+    if log_prob:
+      log_norm_const = float(d) / 2. * np.log(2. * math.pi) + np.sum(np.log(np.diag(cov))) / 2.
+      prob = - log_norm_const - np.sum((x - mean) ** 2 / (2. * np.diag(cov)), axis=-1) 
+    else:
+      norm_const = np.sqrt(2. * math.pi) ** float(d)
+      norm_const *= np.prod(np.sqrt(np.diag(cov))) 
+      x_z = x - mean
+      prob = np.exp(- np.sum(x_z ** 2 / (2. * np.diag(cov)), axis=-1)) / norm_const 
+  else:
+    assert np.linalg.det(cov) > 0.
+    chol_cov = np.linalg.cholesky(cov)
+    norm_const = np.sqrt(2. * math.pi) ** float(d)
+    norm_const *= np.linalg.det(chol_cov)
+    prob = np.exp(-np.dot(np.dot((x - mean).T, np.linalg.inv(cov)), x - mean) / 2.) / norm_const
 
-        start = (end - np.array(cur_embed_lens) + 1).tolist()
-        #if DEBUG:
-        print("end, cur_embedLens: ", end, cur_embedLens)    
-        
-        for tw in tSen:
-          print("mixturePriors.shape, numMixtures: ", self.mixturePriors[tw].shape, self.numMixtures[tw])
-          backwardProbVec = forwardProbs[start] - np.log(tLen) + np.asarray(cur_embed_lens) * gmmProb(np.asarray(cur_embeds), self.mixturePriors[tw], self.transMeans[tw], self.transVars[tw], log_prob=True)
-        backwardProbVec -= logsumexp(backwardProbVec)
+  return prob
 
-        lenIdx = randomDraw(np.exp(backwardProbVec))
-        bestLen = cur_embed_lens[lenIdx]
-        segmentProb += backwardProbVec[lenIdx]
+def gmmProb(x, priors, means, covs, log_prob=False):
+  #log_prob = 0.
+  m = priors.shape[0]
+  if len(x.shape) == 1:
+    probs = np.zeros((m,))
+  elif len(x.shape) == 2:
+    probs = np.zeros((m, x.shape[0]))
+  else:
+    raise ValueError('x has to be 1-d or 2-d array')
 
-        if DEBUG:
-          logging.debug("start time of the current segments: " + str(start))
-          logging.debug("end time of the current segments: " + str(i_f))
-          logging.debug("len(cur_embeds): " + str(len(cur_embeds)))
-          logging.debug("log prob: " + str(segmentProb))
-          logging.debug("best segmentation point: " + str(cur_embed_lens[np.argmin(minCosts)])) 
+  #log_probs = np.zeros((m,))
+  for i in range(m):
+    if len(covs.shape) == 2:
+      #log_probs[i] = gaussian(x, means[i], np.diag(covs[i]))
+      probs[i] = gaussian(x, means[i], np.diag(covs[i]), log_prob=log_prob)
+      #probs[i] = multivariate_normal.pdf(x, means[i], np.diag(covs[i]))
+    else:
+      #log_probs[i] = gaussian(x, means[i], covs[i])
+      probs[i] = gaussian(x, means[i], covs[i], log_prob=log_prob)
+  
+  if log_prob:
+    if len(x.shape) == 1:
+      return logsumexp(priors + probs)
+    elif len(x.shape) == 2:
+      log_probs = np.zeros((x.shape[0],))
+      for t in range(x.shape[0]):
+        log_probs[t] = logsumexp(priors + probs[:, t])
+    else:
+      raise ValueError('x has to be 1-d or 2-d array')
 
-        segmentation.append(i_f - bestLen)
-        i = i_f * (i_f + 1) / 2 + bestLen - 1
-        embed_id = embedIds[i]
-        new_embeds.append(embeds[embed_id])
-        i_f = i_f - bestLen  
-
-      if DEBUG:
-        logging.debug("segment costs: %s" % str(segmentCosts))
-        #logging.debug("best segment cost: %s" % str(segmentCosts[fLen - 1]))
-        logging.debug("sampled segment path: %s" % str(segmentation[::-1]))
-
-      segmentation = segmentation[::-1]
-      new_embeds = new_embeds[::-1]
-      print("len(new_embeds), len(segmentation): ", len(new_embeds), len(segmentation))
-      assert len(new_embeds) == len(segmentation) - 1
-
-      # Update the centroids based on the new assignments
-      if reassign:
-        assert sent_id is not None
-        old_segments = self.prev_segmentations[sent_id] 
-        old_assign_probs = self.prev_assign_probs[sent_id] 
-        
-        # TODO: Make this more efficient; avoid recomputing the assign probs
-        n_words = len(segmentation)
-        new_assign_probs = -np.inf * np.ones((nWords, tLen, self.numMixturesMax))
-        for i_w in range(n_words):
-          for k_t, tw in enumerate(tSen):
-            for m in self.numMixtures[tw]:
-              new_assign_probs[i_w, k_t, m] = self.mixturePriors[tw][m] + gaussian(new_embeds[i_w], self.transMeans[tw][m], self.transVars[tw][m], log_prob=True)  
-        
-        for i_w in range(n_words):
-          norm_factor = logsumexp(new_assign_probs[i_w].flatten(order=ORD))
-          new_assign_probs[i_w] -= norm_factor
-
-        self.reassign(tSen, new_embeds, self.embeddings[sent_id], new_assign_probs, old_assign_probs)
-        self.embeddings[sent_id] = new_embeds
-        self.assignProbs[sent_id] = new_assign_probs
-
-      return segmentation, segmentProb
-    '''
-
+    return log_probs
+  else:
+    return np.dot(priors, probs)
 
 if __name__ == '__main__':
   

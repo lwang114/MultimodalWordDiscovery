@@ -216,12 +216,7 @@ class GMMWordDiscoverer:
                 self.transVars[ts[k_t]][m] += np.sum((fs - self.transMeans[ts[k_t]][m]) ** 2, axis=0) / conceptCounts[ts[k_t]][m]
           else:
             for tw in self.transMeans:
-              self.transVars[tw] = fixedVariance * np.ones((self.maxNumMixtures, self.featDim))    
-
-              if DEBUG:
-                print("tw, transVars: ", tw, self.transVars[tw])              
-                print("# of mixturess: ", self.numMixtures[tw])
-
+              self.transVars[tw] = fixedVariance * np.ones((self.maxNumMixtures, self.featDim))
 
     # Uses the EM algorithm to learn the model's parameters
     def trainUsingEM(self, numIterations=30, writeModel=False, modelPrefix='', epsilon=1e-5, smoothing=None):
