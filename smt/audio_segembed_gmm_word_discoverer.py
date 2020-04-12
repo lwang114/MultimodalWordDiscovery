@@ -13,7 +13,7 @@ import scipy.interpolate as interpolate
 import logging
 import os
 import math
-from scipy.misc import logsumexp
+from scipy.special import logsumexp
 #from _cython_utils import *
 
 NULL = 'NULL'

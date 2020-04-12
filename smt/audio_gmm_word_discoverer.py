@@ -11,7 +11,7 @@ except:
   from audio_kmeans_word_discoverer import *
 
 from sklearn.mixture import GaussianMixture
-from scipy.misc import logsumexp
+from scipy.special import logsumexp
 #from _cython_utils import *
 
 # Constant for NULL word at position zero in target sentence
