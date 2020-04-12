@@ -56,25 +56,28 @@ def downsample(y, n, args):
   return y_new
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--embed_dim", type=int, default=120, help="Dimension of the embedding vector")
+parser.add_argument("--embed_dim", type=int, default=560, help="Dimension of the embedding vector")
 parser.add_argument("--n_slices_min", type=int, default=0, help="Minimum slices between landmarks per segments")
 parser.add_argument("--n_slices_max", type=int, default=6, help="Maximum slices between landmarks per segments")
 parser.add_argument("--min_duration", type=int, default=0, help="Minimum slices of a segment")
 parser.add_argument("--technique", choices={"resample", "interpolate", "rasanen"}, default="resample", help="Downsampling technique")
 parser.add_argument("--am_class", choices={"fbgmm", "kmeans", "multimodal-fbgmm", "multimodal-kmeans"}, help="Class of acoustic model")
-parser.add_argument("--am_K", type=int, default=10, help="Number of clusters")
+parser.add_argument("--am_K", type=int, default=65, help="Number of clusters")
 parser.add_argument("--exp_dir", type=str, default='./', help="Experimental directory")
 parser.add_argument("--feat_type", type=str, choices={"mfcc", "bn"}, help="Acoustic feature type")
 parser.add_argument("--mfcc_dim", type=int, default=12, help="Number of the MFCC/delta feature")
 parser.add_argument("--landmarks_file", default="../data/flickr30k/audio_level/flickr_landmarks_combined.npz", type=str, help="Npz file with landmark locations")
+parser.add_argument('--dataset', choices={'flickr', 'mscoco2k', 'mscoco20k'})
 args = parser.parse_args()
 print(args)
+
 if args.feat_type == "bn":
   datapath = "../data/flickr30k/audio_level/flickr_bnf_all_src.npz"
 elif args.feat_type == "mfcc":
   datapath = "../data/flickr30k/audio_level/flickr_mfcc_cmvn_htk.npz"
 else:
   raise ValueError("Please specify the feature type")
+
 
 image_concept_file = "../data/flickr30k/audio_level/flickr_bnf_all_trg.txt"
 concept2idx_file = "../data/flickr30k/concept2idx.json"
