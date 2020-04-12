@@ -12,7 +12,6 @@ import scipy.signal as signal
 import scipy.interpolate as interpolate 
 import logging
 import os
-from audio_kmeans_word_discoverer import *
 
 NULL = 'NULL'
 DEBUG = False
@@ -24,7 +23,7 @@ logging.basicConfig(filename="audio_segembed_kmeans_word_discoverer.log", format
 #logging.basicConfig(format="%(asctime)s %(message)s", level=logging.DEBUG)
 
 class SegEmbedKMeansWordDiscoverer:
-    def __init__(self, numMixtures, sourceCorpusFile=None, targetCorpusFile=None, 
+    def __init__(self, acousticModel, numMixtures, sourceCorpusFile=None, targetCorpusFile=None, 
                   embedDim=300, minWordLen=20, maxWordLen=80,
                   fCorpus=None, tCorpus=None,
                   centroidFile=None, boundaryFile=None, 
@@ -46,7 +45,7 @@ class SegEmbedKMeansWordDiscoverer:
       self.maxWordLen = maxWordLen
 
       self.avgCentroidDistance = np.inf
-      self.kmeans = None
+      self.kmeans = acousticModel
       begin_time = time.time()
       self.initialize(centroidFile=centroidFile, boundaryFile=boundaryFile, initMethod=initMethod)
       print("Takes %0.5f to finish initialization using %s" % (time.time() - begin_time, initMethod))
@@ -102,7 +101,6 @@ class SegEmbedKMeansWordDiscoverer:
         self.embeddings.append(embeds_i)   
         
       # Initialize centroids and assignments
-      self.kmeans = KMeansWordDiscoverer(fCorpus=self.embeddings, tCorpus=self.tCorpus, numMixtures=self.numMixtures, centroidFile=centroidFile)
       self.centroids = self.kmeans.centroids
       self.assignments = self.kmeans.assignments
       self.numMembers = self.kmeans.numMembers

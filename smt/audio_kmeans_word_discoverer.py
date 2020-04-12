@@ -62,10 +62,7 @@ class KMeansWordDiscoverer:
           self.centroids = {tw: np.array(c) for tw, c in self.centroids.items()} 
         return         
 
-      # Initialize assignment
-      if DEBUG:
-        print("len(self.assignments) in kmeans: ", len(self.assignments))
-      
+      # Initialize assignment      
       sent_ids = []
       concept2frame = {}
       tot_frames = 0
@@ -139,7 +136,7 @@ class KMeansWordDiscoverer:
         # Compute the distance of frames in the subset to the nearest centroid, 
         # and choose according to a distribution proportional to their distances
         for i_t, (tw, rand_frames) in enumerate(sorted(candidate_subset.items(), key=lambda x:x[0])):
-          print("initialize centroid %d" % i_t)
+          # print("initialize centroid %d" % i_t)
           if i_t == 0:
             n_rand_frames = rand_frames.shape[0]
             self.centroids[tw] = np.zeros((self.numMixtures, self.featDim))
@@ -169,7 +166,6 @@ class KMeansWordDiscoverer:
               self.centroids[tw][m] = rand_frames[rand_idx]           
       elif initMethod == "rand":
         for k, (tw, frame_ids) in enumerate(concept2frame.items()):
-          print("initialize centroid %d" % k)
           frame_ids = np.asarray(frame_ids)
           rand_frame_ids = frame_ids[np.random.randint(0, len(frame_ids)-1, size=(self.numMixtures,)).tolist()]
           if tw not in self.centroids:
