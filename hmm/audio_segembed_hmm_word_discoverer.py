@@ -1,7 +1,7 @@
 import numpy as np
 import math
 import json
-from scipy.misc import logsumexp
+from scipy.special import logsumexp
 import scipy.signal as signal
 import scipy.interpolate as interpolate 
 
