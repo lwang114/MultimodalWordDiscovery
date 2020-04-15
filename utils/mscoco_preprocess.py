@@ -692,9 +692,12 @@ class MSCOCO_Preprocessor():
  
   def create_gold_phone_landmarks(self, data_info_file, frame_ms=10, output_file='mscoco_phone_landmarks'):
     with open(data_info_file, 'r') as f:
-      data_info = json.load(data_info_file)
+      data_info = json.load(f)
+
     landmarks = {}
-    for i, datum_info in enumerate(data_info):
+    for i, k in enumerate(sorted(data_info, key=lambda x:int(x.split('_')[-1]))):
+      print(k)
+      datum_info = data_info[k]
       index = 'arr_' + str(i)
       data_ids = datum_info['data_ids']
       landmark_i = []
@@ -712,9 +715,11 @@ class MSCOCO_Preprocessor():
 
   def create_gold_word_segmentation(self, data_info_file, frame_ms=10, output_file='mscoco_gold_segmentations', level='frame'):
     with open(data_info_file, 'r') as f:
-      data_info = json.load(data_info_file)
+      data_info = json.load(f)
     segmentations = {}
-    for i, datum_info in enumerate(data_info):
+    for i, k in enumerate(sorted(data_info, key=lambda x:int(x.split('_')[-1]))):
+      print(k)
+      datum_info = data_info[k]
       index = 'arr_' + str(i)
       data_ids = datum_info['data_ids']
       segmentation_i = []
@@ -915,16 +920,22 @@ if __name__ == '__main__':
     preproc.extract_phone_info(json_file, '%s_subword_level_power_law' % file_prefix)
   if 2 in tasks:
     
-    data_info_file = '../data/mscoco/mscoco_subset_phone_power_law_info.json'
+    data_info_file = '../data/mscoco/mscoco2k_phone_info.json'
     concept_info_file = '../data/mscoco/mscoco_subset_concept_counts_power_law.json'
     # preproc.create_gold_alignment(data_info_file, concept2idx_file, out_file='../data/mscoco/mscoco_gold_alignment_power_law.json')
     
-    data_info_file = '../data/mscoco/mscoco_subset_130k_phone_power_law_info.json'
+    # data_info_file = '../data/mscoco/mscoco_subset_130k_phone_power_law_info.json'
     concept2idx_file = '../data/mscoco/concept2idx.json'
     # preproc.create_gold_alignment(data_info_file, concept2idx_file, out_file='../data/mscoco/mscoco_gold_alignment_130k_power_law.json') 
-    preproc.create_gold_word_segmentation(data_info_file, level='frame', output_file='mscoco_gold_word_segmentations')
-    preproc.create_gold_word_segmentation(data_info_file, level='phone', output_file='mscoco_gold_word_segmentations_phone_level')
-    preproc.create_gold_phone_landmark(data_info_file)
+    # preproc.create_gold_word_segmentation(data_info_file, level='frame', output_file='mscoco2k_gold_word_segmentations')
+    # preproc.create_gold_word_segmentation(data_info_file, level='phone', output_file='mscoco2k_gold_word_segmentations_phone_level')
+    # preproc.create_gold_phone_landmarks(data_info_file, output_file='mscoco2k_gold_phone_lankmarks')
+  
+    data_info_file = '../data/mscoco/mscoco20k_phone_info.json'
+    preproc.create_gold_word_segmentation(data_info_file, level='frame', output_file='mscoco20k_gold_word_segmentations')
+    preproc.create_gold_word_segmentation(data_info_file, level='phone', output_file='mscoco20k_gold_word_segmentations_phone_level')
+    preproc.create_gold_phone_landmarks(data_info_file, output_file='mscoco20k_gold_phone_lankmarks')
+  
   if 3 in tasks:
     preproc.to_xnmt_text('../data/mscoco/mscoco_subset_subword_level_power_law.txt', 'mscoco_subset_subword_level_power_law.txt')
   if 4 in tasks:
