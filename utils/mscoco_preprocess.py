@@ -585,6 +585,155 @@ class MSCOCO_Preprocessor():
     with open(out_file, 'w') as f:
       json.dump(align_info, f, indent=4, sort_keys=True)
 
+  def alignment_to_word_units(self, alignment_file, phone_corpus,
+                                     word_unit_file='word_units.wrd',
+                                     phone_unit_file='phone_units.phn',
+                                     include_null = False):
+    f = open(phone_corpus, 'r')
+    a_corpus = []
+    for line in f: 
+      a_corpus.append(line.strip().split())
+    f.close()
+    
+    with open(alignment_file, 'r') as f:
+      alignments = json.load(f)
+    
+    word_units = []
+    phn_units = []
+    # XXX
+    for align_info, a_sent in zip(alignments, a_corpus):
+      image_concepts = align_info['image_concepts']
+      alignment = align_info['alignment']
+      pair_id = 'pair_' + str(align_info['index'])
+      print(pair_id) 
+      prev_align_idx = -1
+      start = 0
+      for t, align_idx in enumerate(alignment):
+        if t == 0:
+          prev_align_idx = align_idx
+        
+        phn_units.append('%s %d %d %s\n' % (pair_id, t, t + 1, a_sent[t]))
+        if prev_align_idx != align_idx:
+          if not include_null and prev_align_idx == 0:
+            prev_align_idx = align_idx
+            start = t
+            continue
+          word_units.append('%s %d %d %s\n' % (pair_id, start, t, image_concepts[prev_align_idx]))
+          prev_align_idx = align_idx
+          start = t
+        elif t == len(alignment) - 1:
+          if not include_null and prev_align_idx == 0:
+            continue
+          word_units.append('%s %d %d %s\n' % (pair_id, start, t + 1, image_concepts[prev_align_idx]))
+      
+    with open(word_unit_file, 'w') as f:
+      f.write(''.join(word_units))
+    
+    with open(phone_unit_file, 'w') as f:
+      f.write(''.join(phn_units))      
+  
+  def alignment_to_word_classes(self, alignment_file, phone_corpus,
+                                     word_class_file='words.class',
+                                     include_null = False):
+    f = open(phone_corpus, 'r')
+    a_corpus = []
+    for line in f: 
+      a_corpus.append(line.strip().split())
+    f.close()
+    
+    with open(alignment_file, 'r') as f:
+      alignments = json.load(f)
+    
+    word_units = {}
+    for align_info, a_sent in zip(alignments, a_corpus):
+      image_concepts = align_info['image_concepts']
+      alignment = align_info['alignment']
+      pair_id = 'pair_' + str(align_info['index'])
+      print(pair_id) 
+      prev_align_idx = -1
+      start = 0
+      for t, align_idx in enumerate(alignment):
+        if t == 0:
+          prev_align_idx = align_idx
+        
+        if prev_align_idx != align_idx:
+          if not include_null and prev_align_idx == 0:
+            prev_align_idx = align_idx
+            start = t
+            continue
+          if image_concepts[prev_align_idx] not in word_units:
+            word_units[image_concepts[prev_align_idx]] = ['%s %d %d\n' % (pair_id, start, t)]
+          else:
+            word_units[image_concepts[prev_align_idx]].append('%s %d %d\n' % (pair_id, start, t))
+          prev_align_idx = align_idx
+          start = t
+        elif t == len(alignment) - 1:
+          if not include_null and prev_align_idx == 0:
+            continue
+          if image_concepts[prev_align_idx] not in word_units:
+            word_units[image_concepts[prev_align_idx]] = ['%s %d %d\n' % (pair_id, start, t + 1)]
+          else:
+            word_units[image_concepts[prev_align_idx]].append('%s %d %d\n' % (pair_id, start, t + 1))
+      
+    with open(word_class_file, 'w') as f:
+      for i_c, c in enumerate(word_units):
+        #print(i_c, c)
+        f.write('Class %d:\n' % i_c)
+        f.write(''.join(word_units[c]))
+        f.write('\n')
+
+  def create_concept_id_file(self, concept_info_file, concept2idx_file = '../data/mscoco/concept2idx.json'):
+    with open(concept_info_file, 'r') as f:
+      concept_counts = json.load(f)
+      concept_names = sorted(concept_counts)
+      concept2idx = {c: i for i, c in enumerate(concept_names)}
+    with open(concept2idx_file, 'w') as f:
+      json.dump(concept2idx, f, indent=4, sort_keys=True)
+ 
+  def create_gold_phone_landmarks(self, data_info_file, frame_ms=10, output_file='mscoco_phone_landmarks'):
+    with open(data_info_file, 'r') as f:
+      data_info = json.load(data_info_file)
+    landmarks = {}
+    for i, datum_info in enumerate(data_info):
+      index = 'arr_' + str(i)
+      data_ids = datum_info['data_ids']
+      landmark_i = []
+      start_sent = 0
+      for data_id in data_ids:
+        for phn_info in data_id[2]:
+          start_ms, end_ms = phn_info[1], phn_info[2]
+          start_global = int(start_ms * frame_ms / 1000.)
+          end_global = int(end_ms * frame_ms / 1000.)
+          dur = end_global - start_global
+          landmark_i.append(start_sent + dur)
+          start_sent += dur    
+      landmarks[index] = landmark_i
+    np.savez(output_file, **landmarks)
+
+  def create_gold_word_segmentation(self, data_info_file, frame_ms=10, output_file='mscoco_gold_segmentations', level='frame'):
+    with open(data_info_file, 'r') as f:
+      data_info = json.load(data_info_file)
+    segmentations = {}
+    for i, datum_info in enumerate(data_info):
+      index = 'arr_' + str(i)
+      data_ids = datum_info['data_ids']
+      segmentation_i = []
+      start_sent = 0
+      for data_id in data_ids:
+        dur = 0
+        for phn_info in data_id[2]:
+          if level == 'frame':
+            start_ms, end_ms = phn_info[1], phn_info[2]
+            start_global = int(start_ms * frame_ms / 1000.)
+            end_global = int(end_ms * frame_ms / 1000.)
+            dur += end_global - start_global
+          elif level == 'phone':
+            dur += 1
+        segmentation_i.append([start_sent, start_sent + dur])
+        start_sent += dur    
+      segmentations[index] = segmentation_i
+    np.savez(output_file, **segmentations)
+
   def json_to_text_gclda(self, json_file, text_file_prefix, allow_repeated_concepts=False):
     json_pairs = None
     text_pairs = []
@@ -732,7 +881,7 @@ def is_nonspeech(phn):
   return 0
 
 if __name__ == '__main__':
-  tasks = [0]
+  tasks = [2]
   instance_file = 'annotations/instances_train2014.json'
   #'annotations/instances_val2014.json'
   caption_file = 'annotations/captions_train2014.json' 
@@ -749,14 +898,14 @@ if __name__ == '__main__':
     file_prefix = 'mscoco_subset_%dk' % (int((max_num_per_class * 65) / 1000)) 
 
     preproc.extract_info(json_file)
-    #preproc.extract_image_audio_subset(json_file, image_base_path=image_base_path)
-    #preproc.extract_image_audio_subset_power_law()
-    #preproc.extract_image_audio_curriculum_power_law()
-    #preproc.extract_image_audio_phone_level_subset('../data/mscoco/mscoco_subset_concept_info_syllabus_0.json', out_file_prefix='mscoco_subset_phone_syllabus_0')
-    #preproc.extract_image_audio_phone_level_subset('../data/mscoco/mscoco_subset_concept_info_syllabus_1.json', out_file_prefix='mscoco_subset_phone_syllabus_1') 
-    #preproc.extract_image_audio_subset(json_file, image_base_path=image_base_path, max_num_per_class=max_num_per_class, file_prefix=file_prefix)
-    #preproc.extract_image_audio_subset_power_law(file_prefix=file_prefix, subset_size=subset_size)
-    #preproc.extract_image_audio_phone_level_subset('../data/mscoco/%s_concept_info_power_law.json' % file_prefix, out_file_prefix='%s_phone_power_law' % file_prefix)
+    preproc.extract_image_audio_subset(json_file, image_base_path=image_base_path)
+    preproc.extract_image_audio_subset_power_law()
+    preproc.extract_image_audio_curriculum_power_law()
+    preproc.extract_image_audio_phone_level_subset('../data/mscoco/mscoco_subset_concept_info_syllabus_0.json', out_file_prefix='mscoco_subset_phone_syllabus_0')
+    preproc.extract_image_audio_phone_level_subset('../data/mscoco/mscoco_subset_concept_info_syllabus_1.json', out_file_prefix='mscoco_subset_phone_syllabus_1') 
+    preproc.extract_image_audio_subset(json_file, image_base_path=image_base_path, max_num_per_class=max_num_per_class, file_prefix=file_prefix)
+    preproc.extract_image_audio_subset_power_law(file_prefix=file_prefix, subset_size=subset_size)
+    preproc.extract_image_audio_phone_level_subset('../data/mscoco/%s_concept_info_power_law.json' % file_prefix, out_file_prefix='%s_phone_power_law' % file_prefix)
   if 1 in tasks:
     max_num_per_class = 2000 
     subset_size = int(max_num_per_class * 65 / 5)
@@ -765,22 +914,17 @@ if __name__ == '__main__':
     json_file = '../data/mscoco/%s_phone_power_law_info.json' % file_prefix
     preproc.extract_phone_info(json_file, '%s_subword_level_power_law' % file_prefix)
   if 2 in tasks:
-    '''
+    
     data_info_file = '../data/mscoco/mscoco_subset_phone_power_law_info.json'
     concept_info_file = '../data/mscoco/mscoco_subset_concept_counts_power_law.json'
-    concept2idx_file = '../data/mscoco/concept2idx.json'
-    with open(concept_info_file, 'r') as f:
-      concept_counts = json.load(f)
-      concept_names = sorted(concept_counts)
-      concept2idx = {c: i for i, c in enumerate(concept_names)}
-    with open(concept2idx_file, 'w') as f:
-      json.dump(concept2idx, f, indent=4, sort_keys=True)
-
-    preproc.create_gold_alignment(data_info_file, concept2idx_file, out_file='../data/mscoco/mscoco_gold_alignment_power_law.json')
-    '''
+    # preproc.create_gold_alignment(data_info_file, concept2idx_file, out_file='../data/mscoco/mscoco_gold_alignment_power_law.json')
+    
     data_info_file = '../data/mscoco/mscoco_subset_130k_phone_power_law_info.json'
     concept2idx_file = '../data/mscoco/concept2idx.json'
-    preproc.create_gold_alignment(data_info_file, concept2idx_file, out_file='../data/mscoco/mscoco_gold_alignment_130k_power_law.json') 
+    # preproc.create_gold_alignment(data_info_file, concept2idx_file, out_file='../data/mscoco/mscoco_gold_alignment_130k_power_law.json') 
+    preproc.create_gold_word_segmentation(data_info_file, level='frame', output_file='mscoco_gold_word_segmentations')
+    preproc.create_gold_word_segmentation(data_info_file, level='phone', output_file='mscoco_gold_word_segmentations_phone_level')
+    preproc.create_gold_phone_landmark(data_info_file)
   if 3 in tasks:
     preproc.to_xnmt_text('../data/mscoco/mscoco_subset_subword_level_power_law.txt', 'mscoco_subset_subword_level_power_law.txt')
   if 4 in tasks:
