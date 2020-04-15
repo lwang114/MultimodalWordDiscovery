@@ -254,9 +254,9 @@ class MSCOCOAudioFeaturePreprocessor:
               mfcc = np.concatenate([mfcc, mfcc_delta2], axis=0)
 
             n_frames_mfcc = mfcc.shape[1]
-            # print(n_frames_mfcc)
-            self.mfccs[index].append(mfcc.T)
-          
+            # Mean and variance normalization
+            # mfcc = (mfcc - mfcc.mean()) / max(np.std(mfcc), EPS)
+            self.mfccs[index].append(mfcc.T)          
         else:
           sr, y = io.wavfile.read(self.audio_dir + 'wav/' + audio_id+'.wav') 
           start_ms, end_ms = data_id[2], data_id[3]
@@ -275,7 +275,7 @@ class MSCOCOAudioFeaturePreprocessor:
             mfcc = np.concatenate([mfcc, mfcc_delta2], axis=0)
 
           n_frames_mfcc = mfcc.shape[1]
-          
+          # mfcc = (mfcc - mfcc.mean()) / np.std(mfcc)
           self.mfccs[index].append(mfcc.T)
         
         if spk in self.spk_counts:
@@ -398,7 +398,7 @@ def embed(y, embed_dim, frame_dim=None, technique="resample"):
   return y_new
  
 if __name__ == "__main__":
-  tasks = [1]
+  tasks = [3]
   
   if 0 in tasks:
     data_dir = "../data/flickr30k/audio_level/"
@@ -414,10 +414,15 @@ if __name__ == "__main__":
     out_dir = '.'
     feat_extractor.convertMatToNpz(feat_mat_file, feat_npz_file, utterance_ids_file)
   if 1 in tasks:
-    audio_info_file = '../data/mscoco/mscoco_subset_130k_phone_power_law_info.json' 
+    audio_info_file = '../data/mscoco/mscoco20k_phone_info.json' 
     audio_dir = '/home/lwang114/data/mscoco/audio/val2014/'
     feat_extractor = MSCOCOAudioFeaturePreprocessor(audio_info_file, audio_dir)
     feat_extractor.extractMFCC(feat_configs={'is_subword':True}, out_dir='./mscoco20k_')
     feat_extractor.extract_kamper_embeddings('mscoco20k_mscoco_mfcc.npz', embed_dim=140, file_prefix='mscoco20k_kamper_embeddings')
   if 2 in tasks:
     feat_extractor.extract_kamper_embeddings('../data/TIMIT/TIMIT_subset_mfcc.npz', embed_dim=140, file_prefix='TIMIT_subset_kamper_embeddings', subword=False)
+  if 3 in tasks:
+    audio_info_file = '../data/mscoco/mscoco2k_phone_info.json' 
+    audio_dir = '/home/lwang114/data/mscoco/audio/val2014/'
+    feat_extractor = MSCOCOAudioFeaturePreprocessor(audio_info_file, audio_dir)
+    feat_extractor.extractMFCC(feat_configs={'is_subword':True}, out_dir='./mscoco2k_')

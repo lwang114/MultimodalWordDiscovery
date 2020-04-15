@@ -19,18 +19,19 @@ import argparse
 random.seed(2)
 np.random.seed(2)
 
-logger = logging.getLogger(__name__)
 logging.basicConfig(filename="train.log", format="%(asctime)s %(message)s)", level=logging.DEBUG)
+logger = logging.getLogger(__name__)
+print(__name__)
 i_debug_monitor = 0  # 466  # the index of an utterance which is to be monitored
 segment_debug_only = False  # only sample the debug utterance
 DEBUG = False
 NULL = "NULL"
 
-def downsample(y, n, args):
+def embed(y, n, args):
   if y.shape[1] < n:
     if DEBUG:
       print("y.shape: ", y.shape)
-    args.technique = "interpolate"
+    args.technique = "resample"
 
   y = y[:, :args.mfcc_dim]
   # Downsample
@@ -56,7 +57,7 @@ parser.add_argument("--embed_dim", type=int, default=560, help="Dimension of the
 parser.add_argument("--n_slices_min", type=int, default=0, help="Minimum slices between landmarks per segments")
 parser.add_argument("--n_slices_max", type=int, default=6, help="Maximum slices between landmarks per segments")
 parser.add_argument("--min_duration", type=int, default=0, help="Minimum slices of a segment")
-parser.add_argument("--technique", choices={"resample", "interpolate", "rasanen"}, default="resample", help="Downsampling technique")
+parser.add_argument("--technique", choices={"resample", "interpolate", "rasanen"}, default="resample", help="Embedding technique")
 parser.add_argument("--am_class", choices={"fbgmm", "kmeans", "multimodal-fbgmm", "multimodal-kmeans"}, help="Class of acoustic model")
 parser.add_argument("--am_K", type=int, default=65, help="Number of clusters")
 parser.add_argument("--exp_dir", type=str, default='./', help="Experimental directory")
@@ -67,6 +68,9 @@ parser.add_argument('--dataset', choices={'flickr', 'mscoco2k', 'mscoco20k'})
 parser.add_argument('--use_null', action='store_true')
 args = parser.parse_args()
 print(args)
+
+if not os.path.isdir(args.exp_dir):
+  os.mkdir(args.exp_dir)
 
 if args.dataset == 'flickr':
   args.use_null = True
@@ -87,7 +91,8 @@ if args.dataset == 'flickr':
   pred_alignment_file = "%sflickr30k_pred_alignment.json" % args.exp_dir
   gold_alignment_file = "../data/flickr30k/audio_level/flickr30k_gold_alignment.json"
 elif args.dataset == 'mscoco2k':
-  datapath = '../data/mscoco/mscoco2k_kamper_embeddings.npz'
+  datapath = '../data/mscoco/mscoco2k_mfcc.npz'
+  # datapath = '../data/mscoco/mscoco2k_kamper_embeddings.npz' 
   image_concept_file = '../data/mscoco/mscoco2k_image_captions.txt'
   concept2idx_file = '../data/mscoco/concept2idx.json'
   pred_boundary_file = os.path.join(args.exp_dir, "pred_boundaries.npy")
@@ -97,8 +102,9 @@ elif args.dataset == 'mscoco2k':
   pred_alignment_file = os.path.join(args.exp_dir, 'mscoco2k_pred_alignment.json')
   gold_alignment_file = '../data/mscoco/mscoco2k_gold_alignment.json'
 elif args.dataset == 'mscoco20k':
-  datapath = '../data/mscoco/mscoco20k_kamper_embeddings.npz'
-  image_concept_file = datapath + 'mscoco20k_image_captions.txt'
+  datapath = '../data/mscoco/mscoco20k_mfcc.npz'
+  # datapath = '../data/mscoco/mscoco20k_kamper_embeddings.npz'
+  image_concept_file = '../data/mscoco/mscoco20k_image_captions.txt'
   concept2idx_file = '../data/mscoco/concept2idx.json'
   pred_boundary_file = os.path.join(args.exp_dir, "pred_boundaries.npy")
   pred_segmentation_file = os.path.join(args.exp_dir, "mscoco20k_pred_segmentation.npy")
@@ -129,17 +135,19 @@ if args.landmarks_file:
 else:
   landmark_ids = []
 
-start_step = 4
+start_step = 1
 if start_step == 0:
   print("Start extracting acoustic embeddings")
   begin_time = time.time()
-  
+
   for i_ex, feat_id in enumerate(sorted(audio_feats.keys(), key=lambda x:int(x.split('_')[-1]))):
     # XXX
-    if i_ex > 5:
-      break
-    print (feat_id)
+    # if i_ex > 5:
+    #   break
     feat_mat = audio_feats[feat_id]
+    if args.dataset == 'mscoco2k' or args.dataset == 'mscoco20k':
+      feat_mat = np.concatenate(feat_mat, axis=0)
+
     if feat_mat.shape[0] > 1000:
       feat_mat = feat_mat[:1000, :args.mfcc_dim]
     else:
@@ -171,14 +179,9 @@ if start_step == 0:
             vec_ids[i + cur_start] = i_embed
             n_down_slices = args.embed_dim / feat_dim
             start_frame, end_frame = landmarks_dict[landmark_ids[i_ex]][cur_start], landmarks_dict[landmark_ids[i_ex]][cur_end-1]
-            if end_frame - start_frame == 1:
-              embed_mat[i_embed] = np.repeat(feat_mat[start_frame:end_frame], n_down_slices)
-            else:
-              embed_mat[i_embed] = downsample(feat_mat[start_frame:end_frame].T, n_down_slices, args) 
-            #embed_mat.append(downsample(feat_mat[cur_start:cur_end].T, n_down_slices, args))
+            embed_mat[i_embed] = embed(feat_mat[start_frame:end_frame+1].T, n_down_slices, args) 
             if args.am_class.split("-")[0] == "multimodal":
               concept_ids_i[i_embed] = [concept2idx[NULL]] + [concept2idx[c] for c in image_concepts[i_ex]]
-              #concept_ids_i.append([concept2idx[NULL]] + [concept2idx[c] for c in image_concepts[i_ex]])
            
             durations[i + cur_start] = end_frame - start_frame
             i_embed += 1 
@@ -238,6 +241,7 @@ if start_step <= 1:
     segmenter = UnigramAcousticWordseg(
       am_class, am_alpha, am_K, am_param_prior, embedding_mats, vec_ids_dict, 
       durations_dict, landmarks_dict, p_boundary_init=0.1, beta_sent_boundary=-1, 
+      init_am_assignments='one-by-one',
       n_slices_min=args.n_slices_min, n_slices_max=args.n_slices_max
       ) 
   # TODO Fix inputs
@@ -274,7 +278,7 @@ if start_step <= 1:
     record = segmenter.gibbs_sample(30, 3, anneal_schedule="linear", anneal_gibbs_am=True)
     #sum_neg_len_sqrd_norm = record["sum_neg_len_sqrd_norm"] 
   else:
-    record = segmenter.segment(30, 3)
+    record = segmenter.segment(1, 3)
     sum_neg_len_sqrd_norm = record["sum_neg_len_sqrd_norm"] 
   
   print("Take %0.5f s to finish training !" % (time.time() - begin_time))
