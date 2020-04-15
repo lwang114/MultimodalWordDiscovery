@@ -716,11 +716,10 @@ class MSCOCO_Preprocessor():
   def create_gold_word_segmentation(self, data_info_file, frame_ms=10, output_file='mscoco_gold_segmentations', level='frame'):
     with open(data_info_file, 'r') as f:
       data_info = json.load(f)
-    segmentations = {}
+    segmentations = []
     for i, k in enumerate(sorted(data_info, key=lambda x:int(x.split('_')[-1]))):
       print(k)
       datum_info = data_info[k]
-      index = 'arr_' + str(i)
       data_ids = datum_info['data_ids']
       segmentation_i = []
       start_sent = 0
@@ -736,8 +735,8 @@ class MSCOCO_Preprocessor():
             dur += 1
         segmentation_i.append([start_sent, start_sent + dur])
         start_sent += dur    
-      segmentations[index] = segmentation_i
-    np.savez(output_file, **segmentations)
+      segmentations.append(np.asarray(segmentation_i))
+    np.save(output_file, segmentations)
 
   def json_to_text_gclda(self, json_file, text_file_prefix, allow_repeated_concepts=False):
     json_pairs = None

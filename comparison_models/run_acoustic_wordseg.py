@@ -4,32 +4,28 @@ import numpy as np
 import json
 from segmentalist.segmentalist.unigram_acoustic_wordseg import *
 from segmentalist.segmentalist.kmeans_acoustic_wordseg import * 
-from segmentalist.segmentalist.multimodal_kmeans_acoustic_wordseg import * 
-from segmentalist.segmentalist.multimodal_unigram_acoustic_wordseg import *
+# from segmentalist.segmentalist.multimodal_kmeans_acoustic_wordseg import * 
+# from segmentalist.segmentalist.multimodal_unigram_acoustic_wordseg import *
 from bucktsong_segmentalist.downsample.downsample import *   
 import segmentalist.segmentalist.fbgmm as fbgmm
-import segmentalist.segmentalist.mfbgmm as mfbgmm 
+# import segmentalist.segmentalist.mfbgmm as mfbgmm 
 import segmentalist.segmentalist.gaussian_components_fixedvar as gaussian_components_fixedvar
 import segmentalist.segmentalist.kmeans as kmeans
-import segmentalist.segmentalist.mkmeans as mkmeans
-# XXX: Copy from utils folder, move this file outside later
-from plot import *
+# import segmentalist.segmentalist.mkmeans as mkmeans
 from clusteval import *
+from postprocess import *
+import argparse
 
-#import argparse
-#import time
-#import logging
-#from scipy import signal
 random.seed(2)
 np.random.seed(2)
 
 logger = logging.getLogger(__name__)
+logging.basicConfig(filename="train.log", format="%(asctime)s %(message)s)", level=logging.DEBUG)
 i_debug_monitor = 0  # 466  # the index of an utterance which is to be monitored
 segment_debug_only = False  # only sample the debug utterance
 DEBUG = False
 NULL = "NULL"
 
-# TODO: Make a wrapper class
 def downsample(y, n, args):
   if y.shape[1] < n:
     if DEBUG:
@@ -64,31 +60,53 @@ parser.add_argument("--technique", choices={"resample", "interpolate", "rasanen"
 parser.add_argument("--am_class", choices={"fbgmm", "kmeans", "multimodal-fbgmm", "multimodal-kmeans"}, help="Class of acoustic model")
 parser.add_argument("--am_K", type=int, default=65, help="Number of clusters")
 parser.add_argument("--exp_dir", type=str, default='./', help="Experimental directory")
-parser.add_argument("--feat_type", type=str, choices={"mfcc", "bn"}, help="Acoustic feature type")
+parser.add_argument("--feat_type", type=str, choices={"mfcc", "bn", 'kamper'}, help="Acoustic feature type")
 parser.add_argument("--mfcc_dim", type=int, default=12, help="Number of the MFCC/delta feature")
-parser.add_argument("--landmarks_file", default="../data/flickr30k/audio_level/flickr_landmarks_combined.npz", type=str, help="Npz file with landmark locations")
+parser.add_argument("--landmarks_file", default=None, type=str, help="Npz file with landmark locations")
 parser.add_argument('--dataset', choices={'flickr', 'mscoco2k', 'mscoco20k'})
+parser.add_argument('--use_null', action='store_true')
 args = parser.parse_args()
 print(args)
 
-if args.feat_type == "bn":
-  datapath = "../data/flickr30k/audio_level/flickr_bnf_all_src.npz"
-elif args.feat_type == "mfcc":
-  datapath = "../data/flickr30k/audio_level/flickr_mfcc_cmvn_htk.npz"
-else:
-  raise ValueError("Please specify the feature type")
+if args.dataset == 'flickr':
+  args.use_null = True
+  args.landmarks_file = "../data/flickr30k/audio_level/flickr_landmarks_combined.npz"
+  if args.feat_type == "bn":
+    datapath = "../data/flickr30k/audio_level/flickr_bnf_all_src.npz"
+  elif args.feat_type == "mfcc":
+    datapath = "../data/flickr30k/audio_level/flickr_mfcc_cmvn_htk.npz"
+  else:
+    raise ValueError("Please specify the feature type")
 
-
-image_concept_file = "../data/flickr30k/audio_level/flickr_bnf_all_trg.txt"
-concept2idx_file = "../data/flickr30k/concept2idx.json"
-pred_boundary_file = "%spred_boundaries.npy" % args.exp_dir
-pred_landmark_segmentation_file = "%sflickr30k_pred_landmark_segmentation.npy" % args.exp_dir
-pred_segmentation_file = "%sflickr30k_pred_segmentation.npy" % args.exp_dir
-gold_segmentation_file = "../data/flickr30k/audio_level/flickr30k_gold_segmentation.json"
-pred_alignment_file = "%sflickr30k_pred_alignment.json" % args.exp_dir
-gold_alignment_file = "../data/flickr30k/audio_level/flickr30k_gold_alignment.json"
-# XXX: Repetitive; move this part to the top later
-
+  image_concept_file = "../data/flickr30k/audio_level/flickr_bnf_all_trg.txt"
+  concept2idx_file = "../data/flickr30k/concept2idx.json"
+  pred_boundary_file = "%spred_boundaries.npy" % args.exp_dir
+  pred_landmark_segmentation_file = "%sflickr30k_pred_landmark_segmentation.npy" % args.exp_dir
+  pred_segmentation_file = "%sflickr30k_pred_segmentation.npy" % args.exp_dir
+  gold_segmentation_file = "../data/flickr30k/audio_level/flickr30k_gold_segmentation.json"
+  pred_alignment_file = "%sflickr30k_pred_alignment.json" % args.exp_dir
+  gold_alignment_file = "../data/flickr30k/audio_level/flickr30k_gold_alignment.json"
+elif args.dataset == 'mscoco2k':
+  datapath = '../data/mscoco/mscoco2k_kamper_embeddings.npz'
+  image_concept_file = '../data/mscoco/mscoco2k_image_captions.txt'
+  concept2idx_file = '../data/mscoco/concept2idx.json'
+  pred_boundary_file = os.path.join(args.exp_dir, "pred_boundaries.npy")
+  pred_segmentation_file = os.path.join(args.exp_dir, "mscoco2k_pred_segmentation.npy")
+  pred_landmark_segmentation_file = "%smscoco2k_pred_landmark_segmentation.npy" % args.exp_dir
+  gold_segmentation_file = "../data/mscoco/mscoco2k_gold_word_segmentation.npy"
+  pred_alignment_file = os.path.join(args.exp_dir, 'mscoco2k_pred_alignment.json')
+  gold_alignment_file = '../data/mscoco/mscoco2k_gold_alignment.json'
+elif args.dataset == 'mscoco20k':
+  datapath = '../data/mscoco/mscoco20k_kamper_embeddings.npz'
+  image_concept_file = datapath + 'mscoco20k_image_captions.txt'
+  concept2idx_file = '../data/mscoco/concept2idx.json'
+  pred_boundary_file = os.path.join(args.exp_dir, "pred_boundaries.npy")
+  pred_segmentation_file = os.path.join(args.exp_dir, "mscoco20k_pred_segmentation.npy")
+  pred_landmark_segmentation_file = "%smscoco20k_pred_landmark_segmentation.npy" % args.exp_dir
+  gold_segmentation_file = "../data/mscoco/mscoco20k_gold_word_segmentation.npy"
+  pred_alignment_file = os.path.join(args.exp_dir, 'mscoco20k_pred_alignment.json')
+  gold_alignment_file = '../data/mscoco/mscoco20k_gold_alignment.json'
+ 
 # Generate acoustic embeddings, vec_ids_dict and durations_dict 
 audio_feats = np.load(datapath)
 f = open(image_concept_file, "r")
@@ -111,14 +129,18 @@ if args.landmarks_file:
 else:
   landmark_ids = []
 
-start_step = 5
+start_step = 4
 if start_step == 0:
   print("Start extracting acoustic embeddings")
   begin_time = time.time()
+  
   for i_ex, feat_id in enumerate(sorted(audio_feats.keys(), key=lambda x:int(x.split('_')[-1]))):
+    # XXX
+    if i_ex > 5:
+      break
     print (feat_id)
     feat_mat = audio_feats[feat_id]
-    if feat_id.split("_")[0] == "3652859271":
+    if feat_mat.shape[0] > 1000:
       feat_mat = feat_mat[:1000, :args.mfcc_dim]
     else:
       feat_mat = feat_mat[:, :args.mfcc_dim]
@@ -149,14 +171,6 @@ if start_step == 0:
             vec_ids[i + cur_start] = i_embed
             n_down_slices = args.embed_dim / feat_dim
             start_frame, end_frame = landmarks_dict[landmark_ids[i_ex]][cur_start], landmarks_dict[landmark_ids[i_ex]][cur_end-1]
-            #print cur_start, cur_end, start_frame, end_frame, i + cur_start, i_embed
-            #print ("feat_mat.shape: ", feat_mat.shape)
-            #print landmarks_dict[feat_id]
-            #if end_frame > feat_mat.shape[0]:
-            #  continue
-            #if start_frame == end_frame:
-            #  print("overlap boundaries", start_frame, end_frame)
-            #  continue
             if end_frame - start_frame == 1:
               embed_mat[i_embed] = np.repeat(feat_mat[start_frame:end_frame], n_down_slices)
             else:
@@ -172,22 +186,13 @@ if start_step == 0:
     vec_ids_dict[feat_id] = vec_ids
     embedding_mats[feat_id] = embed_mat
     durations_dict[feat_id] = durations 
-    
-    if args.am_class.split("-")[0] == "multimodal":
-      print("# of embeds, # of concepts: ", len(concept_ids_i), concept_ids_i[0])
-    
-    if args.am_class.split("-")[0] == "multimodal":
-      concept_ids += concept_ids_i         
-    
-    if DEBUG:
-      print("len(embed_mat)", len(embed_mat))
-      print("len(concept_ids): ", len(concept_ids))
-  
-  print("Take %0.5f s to finish extracting embedding vectors !" % (time.time()-begin_time))
+
   np.savez(args.exp_dir+"embedding_mats.npz", **embedding_mats)
   np.savez(args.exp_dir+"vec_ids_dict.npz", **vec_ids_dict)
   np.savez(args.exp_dir+"durations_dict.npz", **durations_dict)
   np.savez(args.exp_dir+"landmarks_dict.npz", **landmarks_dict)  
+      
+  print("Take %0.5f s to finish extracting embedding vectors !" % (time.time()-begin_time))
   if args.am_class.split("-")[0] == "multimodal":
     with open(args.exp_dir+"image_concepts.json", "w") as f:
       json.dump(concept_ids, f, indent=4, sort_keys=True)
@@ -197,75 +202,15 @@ if start_step == 0:
       json.dump(concept_names, f, indent=4, sort_keys=True)
 
 if start_step <= 1:
-  print("Start cleaning up dataset ...")
   begin_time = time.time()
-  '''embedding_mats = dict(np.load(args.exp_dir+"embedding_mats.npz"))
-  vec_ids_dict = dict(np.load(args.exp_dir+"vec_ids_dict.npz"))
-  durations_dict = dict(np.load(args.exp_dir+"durations_dict.npz"))
-  landmarks_dict = dict(np.load(args.exp_dir+"landmarks_dict.npz"))
-
-  for embed_id in embedding_mats:
-    if embedding_mats[embed_id].shape[0] > 500500:
-      logging.debug("sentence with id %s is exceedingly long" % embed_id)
-    
-    if embed_id.split("_")[0] == "3652859271":
-      embedding_mats[embed_id] = embedding_mats[embed_id][:1000*(args.n_slices_max-args.n_slices_min)]
-      vec_ids_dict[embed_id] = vec_ids_dict[embed_id][:500500]
-      durations_dict[embed_id] = durations_dict[embed_id][:500500]
-      landmarks_dict[embed_id] = landmarks_dict[embed_id][:1000]
-    
-  np.savez(args.exp_dir+"embedding_mats.npz", **embedding_mats)
-  np.savez(args.exp_dir+"vec_ids_dict.npz", **vec_ids_dict)
-  np.savez(args.exp_dir+"durations_dict.npz", **durations_dict)
-  np.savez(args.exp_dir+"landmarks_dict.npz", **landmarks_dict)  
-  '''
-  print("takes %0.5f s to finish cleaning up dataset" % (time.time() - begin_time))
-
-if start_step <= 2:
-  print("Start processing embeddings ...")
-  begin_time = time.time()
-  embedding_mats = np.load(args.exp_dir+"embedding_mats.npz")
-  vec_ids_dict = np.load(args.exp_dir+"vec_ids_dict.npz")
-  durations_dict = np.load(args.exp_dir+"durations_dict.npz")
-  landmarks_dict = np.load(args.exp_dir+"landmarks_dict.npz")
-
-  embeddings, vec_ids, ids_to_utterance_labels = process_embeddings(embedding_mats, vec_ids_dict)
-  np.save(args.exp_dir+"embeddings.npy", embeddings)
-   
-  with open(args.exp_dir+"vec_ids.json", "w") as f:
-    vec_ids_list = [vec_id.tolist() for vec_id in vec_ids]
-    json.dump(vec_ids_list, f)
-
-  with open(args.exp_dir+"ids_to_utterance_labels.json", "w") as f:
-    json.dump(ids_to_utterance_labels, f)
-  print("takes %0.5f s to finish processing embeddings" % (time.time() - begin_time))
-
-if start_step <= 3:
-  begin_time = time.time()
-  embeddings = np.load(args.exp_dir+"embeddings.npy")
-  if DEBUG:
-    print("embeddings.shape", embeddings.shape)
-  #embeddings = np.load("../data/flickr30k/audio_level/embeddings.npy")
   if args.am_class.split("-")[0] == "multimodal":
     with open(args.exp_dir+"image_concepts.json", "r") as f:
       concepts = json.load(f) 
     with open(args.exp_dir+"concept_names.json", "r") as f:
       concept_names = json.load(f)
-    
-    #concepts = [[0, 1, 2] for i in range(embeddings.shape[0])]
-    #concept_names = ['1', '2', '3']
-
-  with open(args.exp_dir+"vec_ids.json", "r") as f:
-    #with open("../data/flickr30k/audio_level/vec_ids.json", "r") as f:
-    vec_ids = json.load(f)  
-    vec_ids = [np.asarray(vec_id) for vec_id in vec_ids]
-
-  with open(args.exp_dir+"ids_to_utterance_labels.json", "r") as f:
-    #with open("../data/flickr30k/audio_level/ids_to_utterance_labels.json", "r") as f:
-    ids_to_utterance_labels = json.load(f)
-
-  #durations_dict = np.load("../data/flickr30k/audio_level/durations_dict.npz")
-  #landmarks_dict = np.load("../data/flickr30k/audio_level/landmarks_dict.npz")
+        
+  embedding_mats = np.load(args.exp_dir+'embedding_mats.npz')
+  vec_ids_dict = np.load(args.exp_dir+'vec_ids_dict.npz')
   durations_dict = np.load(args.exp_dir+"durations_dict.npz")
   landmarks_dict = np.load(args.exp_dir+"landmarks_dict.npz")
   # Ensure the landmark ids and utterance ids are the same
@@ -276,11 +221,6 @@ if start_step <= 3:
       new_landmarks_dict[uid] = landmarks_dict[lid]
     np.savez(args.exp_dir+"new_landmarks_dict.npz", **new_landmarks_dict)
     landmarks_dict = np.load(args.exp_dir+"new_landmarks_dict.npz") 
-
-  if DEBUG:
-    print(ids_to_utterance_labels)
-    print(landmarks_dict.keys())
-    print(landmarks_dict[ids_to_utterance_labels[0]])
 
   print("Start training segmentation models")
   # Acoustic model parameters
@@ -296,11 +236,11 @@ if start_step <= 3:
     S_0 = 0.002*np.ones(D)
     am_param_prior = gaussian_components_fixedvar.FixedVarPrior(S_0, m_0, S_0/k_0)
     segmenter = UnigramAcousticWordseg(
-      am_class, am_alpha, am_K, am_param_prior, embeddings, vec_ids, 
-      ids_to_utterance_labels, 
+      am_class, am_alpha, am_K, am_param_prior, embedding_mats, vec_ids_dict, 
       durations_dict, landmarks_dict, p_boundary_init=0.1, beta_sent_boundary=-1, 
       n_slices_min=args.n_slices_min, n_slices_max=args.n_slices_max
       ) 
+  # TODO Fix inputs
   elif args.am_class == "multimodal-fbgmm":
     D = args.embed_dim
     am_class = mfbgmm.MultimodalFBGMM
@@ -316,6 +256,7 @@ if start_step <= 3:
       durations_dict, landmarks_dict, p_boundary_init=0.1, beta_sent_boundary=-1, 
       n_slices_min=args.n_slices_min, n_slices_max=args.n_slices_max
       ) 
+  # TODO Fix inputs
   elif args.am_class == "kmeans":
     am_K = args.am_K 
     segmenter = SegmentalKMeansWordseg(am_K, embeddings, vec_ids, ids_to_utterance_labels,
@@ -356,72 +297,22 @@ if start_step <= 3:
 
 if start_step <= 4:
   convert_boundary_to_segmentation(pred_boundary_file, pred_landmark_segmentation_file)
-  convert_landmark_to_10ms_segmentation(pred_landmark_segmentation_file, args.landmarks_file, pred_segmentation_file)
-  pred_segs = np.load(pred_segmentation_file, encoding="latin1")
-  gold_segs = np.load(gold_segmentation_file, encoding="latin1")
+  if args.landmarks_file:
+    convert_landmark_segment_to_10ms_segmentation(pred_landmark_segmentation_file, args.landmarks_file, pred_segmentation_file)
+  else:
+    convert_landmark_segment_to_10ms_segmentation(pred_landmark_segmentation_file, os.path.join(args.exp_dir, "landmarks_dict.npz"), pred_segmentation_file)  
+  pred_segs = np.load(pred_segmentation_file, encoding="latin1", allow_pickle=True)
+  gold_segs = np.load(gold_segmentation_file, encoding="latin1", allow_pickle=True)
   segmentation_retrieval_metrics(pred_segs, gold_segs)    
   
   # TODO: Make the word IoU work later
-  with open(pred_alignment_file, "w") as f:
-    pred_aligns = json.load(f)
-  with open(gold_alignment_file, "w") as f:
-    gold_aligns = json.load(f)
-  print('Accuracy: ', accuracy(pred_aligns, gold_aligns))
-  boundary_retrieval_metrics(pred_aligns, gold_aligns)
-  #retrieval_metrics(pred_clsts, gold_clsts)
-  print('Word IoU: ', word_IoU(pred_aligns, gold_aligns))
-  print('Finish evaluation after %f s !' % (time.time() - start_time))
-
-if start_step <= 5:
-  embeddings = np.load(args.exp_dir+"embeddings.npy")
-  with open(args.exp_dir+"image_concepts.json", "r") as f:
-    concepts = json.load(f) 
-  with open(args.exp_dir+"concept_names.json", "r") as f:
-    concept_names = json.load(f)
-  
-  durations_dict = np.load(args.exp_dir+"durations_dict.npz")
-  landmarks_dict = np.load(args.exp_dir+"landmarks_dict.npz")
-  # Ensure the landmark ids and utterance ids are the same
-  if args.feat_type == "bn":
-    landmarks_ids = sorted(landmarks_dict, key=lambda x:int(x.split('_')[-1]))
-    new_landmarks_dict = {}
-    for lid, uid in zip(landmarks_ids, ids_to_utterance_labels):
-      new_landmarks_dict[uid] = landmarks_dict[lid]
-    np.savez(args.exp_dir+"new_landmarks_dict.npz", **new_landmarks_dict)
-    landmarks_dict = np.load(args.exp_dir+"new_landmarks_dict.npz") 
-
-  with open(args.exp_dir+"vec_ids.json", "r") as f:
-    #with open("../data/flickr30k/audio_level/vec_ids.json", "r") as f:
-    #vec_ids = json.load(f)[:3]
-    vec_ids = json.load(f) 
-    vec_ids = [np.asarray(vec_id) for vec_id in vec_ids]
-
-  with open(args.exp_dir+"ids_to_utterance_labels.json", "r") as f:
-    #with open("../data/flickr30k/audio_level/ids_to_utterance_labels.json", "r") as f:
-    ids_to_utterance_labels = json.load(f)
-
-  mean_numerator_file = "%smean_numerators.npy" % args.exp_dir
-  count_file = "%scounts.npy" % args.exp_dir 
-  print("Compute alignment matrix ...")
-  start_time = time.time()
-  segmenter = MultimodalSegmentalKMeansWordseg(concepts, concept_names, embeddings, vec_ids, ids_to_utterance_labels,
-      durations_dict, landmarks_dict=landmarks_dict, p_boundary_init=0, n_slices_min=args.n_slices_min, n_slices_max=args.n_slices_max, init_am_assignments="spread"
-      )
-  segmenter.get_alignment_matrix(args.landmarks_file, pred_landmark_segmentation_file, pred_alignment_file, mean_numerator_file, count_file)
-  print("Finish computing alignment matrix after %f s !" % (time.time() - start_time))
-
-'''
-if start_step <= 6:
-  print("Generating plots ...")
-  start_time = time.time()
-  top_classes, top_freqs = plot_word_len_distribution(pred_alignment_file, args.exp_dir+"length_distribution", draw_plot=False, phone_level=False)
-  print("Finishing drawing length distribution plots after %f s !" % (time.time() - start_time))
-   
-  start_time = time.time() 
-  plot_avg_roc(pred_alignment_file, gold_alignment_file, concept2idx="../data/flickr30k/concept2idx.json", out_file=args.exp_dir + "roc")
-  print("Finishing drawing roc plots after %f s !" % (time.time() - start_time))
-  
-  # Generate the attention plots
-  rand_ids = np.arange(10)
-  generate_smt_alignprob_plots(pred_alignment_file, indices=rand_ids, out_dir=args.exp_dir + "align_prob_plot_")
-  print("Finishing drawing attention plots after %f s !" % (time.time() - start_time))'''
+  if args.am_class.split('-')[0] == 'multimodal':
+    with open(pred_alignment_file, "w") as f:
+      pred_aligns = json.load(f)
+    with open(gold_alignment_file, "w") as f:
+      gold_aligns = json.load(f)
+    print('Accuracy: ', accuracy(pred_aligns, gold_aligns))
+    boundary_retrieval_metrics(pred_aligns, gold_aligns)
+    #retrieval_metrics(pred_clsts, gold_clsts)
+    print('Word IoU: ', word_IoU(pred_aligns, gold_aligns))
+    print('Finish evaluation after %f s !' % (time.time() - start_time))
