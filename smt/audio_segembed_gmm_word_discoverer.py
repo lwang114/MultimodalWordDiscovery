@@ -67,16 +67,16 @@ class SegEmbedGMMWordDiscoverer:
     # Tokenize the corpus 
     def parseCorpus(self, sourceFile, targetFile, maxLen=2000):
       fp = open(targetFile, 'r')
-      tCorpus = fp.read().split('\n')
+      tCorpus = fp.read().strip().split('\n')
       # XXX XXX
       if self.useNULL:
-        self.tCorpus = [[NULL] + sorted(tSen.split()) for tSen in tCorpus[-10:]]
+        self.tCorpus = [[NULL] + sorted(tSen.split()) for tSen in tCorpus]
       else:
-        self.tCorpus = [sorted(tSen.split()) for tSen in tCorpus[-10:]]
+        self.tCorpus = [sorted(tSen.split()) for tSen in tCorpus]
          
       fCorpus = np.load(sourceFile)
       # XXX XXX
-      self.fCorpus = [fCorpus[fKey] for fKey in sorted(fCorpus.keys(), key=lambda x:int(x.split('_')[-1]))[:10]]
+      self.fCorpus = [fCorpus[fKey] for fKey in sorted(fCorpus.keys(), key=lambda x:int(x.split('_')[-1]))]
       self.fCorpus = [fSen[:maxLen] for fSen in self.fCorpus] 
       self.data_ids = [fKey for fKey in sorted(fCorpus.keys(), key=lambda x:int(x.split('_')[-1]))]
 
@@ -121,7 +121,6 @@ class SegEmbedGMMWordDiscoverer:
         
         # TODO: Use embed table instead of raw feature to compute this
         self.embeddings.append(self.getSentEmbeds(fSen, segmentation))
-
       self.acoustic_model = self.acoustic_model(
                         fCorpus=self.embeddings, tCorpus=self.tCorpus,
                         numMixtures=self.numMixturesMax, 
@@ -166,7 +165,7 @@ class SegEmbedGMMWordDiscoverer:
         self.segmentations.append(segmentation)
         self.embeddings.append(self.getSentEmbeds(fSen, segmentation))
 
-    def segment(self, embedTable, tSen, minWordLen, maxWordLen, reassign=False, sent_id=None):
+    def segment(self, embedTable, tSen, minWordLen=1, maxWordLen=np.inf, reassign=False, sent_id=None):
       fLen = embedTable.shape[1]
       tLen = len(tSen)
       tSen = sorted(tSen)
@@ -179,10 +178,10 @@ class SegEmbedGMMWordDiscoverer:
       transVars = np.concatenate([self.acoustic_model.transVars[tw] for tw in tSen], axis=0)
          
       for t in range(1, fLen):
-        scores = forwardProbs[:t]
-        scores += (t - np.arange(t)) * gmmProb(embedTable[:t, t], mixturePriors, transMeans, transVars, log_prob=True)  
-        forwardProbs[t+1] = np.max(scores)
-        segmentAssigns[t+1] = np.argmax(scores)
+        scores = forwardProbs[max(t-maxWordLen, 0):max(t-minWordLen, 0)+1]
+        scores += np.arange(min(maxWordLen, t), min(minWordLen, t)-1) * gmmProb(embedTable[max(t-maxWordLen, 0):max(t-minWordLen, 0)+1, t], mixturePriors, transMeans, transVars, log_prob=True)  
+        forwardProbs[t] = np.max(scores)
+        segmentAssigns[t] = t - (maxWordLen - np.argmax(scores))
 
       end = fLen
       segmentation = [fLen]

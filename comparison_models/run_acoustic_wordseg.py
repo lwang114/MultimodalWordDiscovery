@@ -275,7 +275,7 @@ if start_step <= 1:
 
   # Perform sampling
   if args.am_class.split("-")[-1] == "fbgmm":
-    record = segmenter.gibbs_sample(30, 3, anneal_schedule="linear", anneal_gibbs_am=True)
+    record = segmenter.gibbs_sample(300, 3, anneal_schedule="linear", anneal_gibbs_am=True)
     #sum_neg_len_sqrd_norm = record["sum_neg_len_sqrd_norm"] 
   else:
     record = segmenter.segment(1, 3)
@@ -299,7 +299,7 @@ if start_step <= 1:
   if args.am_class.split("-")[0] == "multimodal":
     segmenter.get_alignments(out_file_prefix=args.exp_dir+"flickr30k_pred_alignment")
 
-if start_step <= 4:
+if start_step <= 2:
   convert_boundary_to_segmentation(pred_boundary_file, pred_landmark_segmentation_file)
   if args.landmarks_file:
     convert_landmark_segment_to_10ms_segmentation(pred_landmark_segmentation_file, args.landmarks_file, pred_segmentation_file)
