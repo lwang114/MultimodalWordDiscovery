@@ -22,7 +22,7 @@ np.random.seed(2)
 logging.basicConfig(filename="train.log", format="%(asctime)s %(message)s)", level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 print(__name__)
-i_debug_monitor = 0  # 466  # the index of an utterance which is to be monitored
+i_debug_monitor = -1  # 466  # the index of an utterance which is to be monitored
 segment_debug_only = False  # only sample the debug utterance
 DEBUG = False
 NULL = "NULL"
@@ -135,14 +135,14 @@ if args.landmarks_file:
 else:
   landmark_ids = []
 
-start_step = 1
+start_step = 0
 if start_step == 0:
   print("Start extracting acoustic embeddings")
   begin_time = time.time()
 
   for i_ex, feat_id in enumerate(sorted(audio_feats.keys(), key=lambda x:int(x.split('_')[-1]))):
     # XXX
-    # if i_ex > 5:
+    # if i_ex > 10:
     #   break
     feat_mat = audio_feats[feat_id]
     if args.dataset == 'mscoco2k' or args.dataset == 'mscoco20k':
