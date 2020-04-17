@@ -45,6 +45,7 @@ class SegEmbedGMMWordDiscoverer:
       self.segmentations = []
       self.embeddings = []
       self.embeddingTable = []
+      self.landmarks = []
       self.numMembers = {}
       self.numMixturesMax = numMixtures
       self.numMixtures = {}
@@ -72,11 +73,11 @@ class SegEmbedGMMWordDiscoverer:
       if self.useNULL:
         self.tCorpus = [[NULL] + sorted(tSen.split()) for tSen in tCorpus]
       else:
-        self.tCorpus = [sorted(tSen.split()) for tSen in tCorpus]
+        self.tCorpus = [sorted(tSen.split()) for tSen in tCorpus[:10]]
          
       fCorpus = np.load(sourceFile)
       # XXX XXX
-      self.fCorpus = [fCorpus[fKey] for fKey in sorted(fCorpus.keys(), key=lambda x:int(x.split('_')[-1]))]
+      self.fCorpus = [fCorpus[fKey] for fKey in sorted(fCorpus.keys(), key=lambda x:int(x.split('_')[-1]))[:10]]
       self.fCorpus = [fSen[:maxLen] for fSen in self.fCorpus] 
       self.data_ids = [fKey for fKey in sorted(fCorpus.keys(), key=lambda x:int(x.split('_')[-1]))]
 
@@ -105,18 +106,20 @@ class SegEmbedGMMWordDiscoverer:
           for b in landmarks[lm_id]:
             segmentation.append(b)
           self.segmentations.append(segmentation)
+          self.landmarks.append(np.insert(landmarks[lm_id], 0, 0))
       else:
         # Initialize every frame as a segment
         self.segmentations = []
         for i, (tSen, fSen) in enumerate(zip(self.tCorpus, self.fCorpus)):
           fLen = fSen.shape[0]
           self.segmentations.append(list(range(fLen)))
-      
-      for i, (fSen, segmentation) in enumerate(zip(self.fCorpus, self.segmentations)):      
-        embedTable = np.nan * np.ones((len(fSen)-1, len(fSen), self.embedDim))
-        for t in range(1, len(fSen)):
-          for s in range(t):
-            embedTable[s, t] = self.embed(fSen[s:t])
+          self.landmarks.append(list(range(fLen)))
+     
+      for i, (fSen, landmark) in enumerate(zip(self.fCorpus, self.landmarks)): 
+        embedTable = np.nan * np.ones((len(landmark)-1, len(landmark), self.embedDim))
+        for t_seg, t in enumerate(landmark[1:]):
+          for s_seg, s in enumerate(landmark[:t_seg]):
+            embedTable[s_seg, t_seg-1] = self.embed(fSen[s:t])
         self.embeddingTable.append(embedTable)
         
         # TODO: Use embed table instead of raw feature to compute this
@@ -135,7 +138,6 @@ class SegEmbedGMMWordDiscoverer:
 
       self.prev_segmentations = deepcopy(self.segmentations)
       
-      n_iter = 0
       for n_iter in range(numIterations): 
         print("Starting training iteration "+str(n_iter))       
 
@@ -160,34 +162,38 @@ class SegEmbedGMMWordDiscoverer:
       # sent_order = list(range(numSent))
       # random.shuffle(sent_order)
 
-      for fSen, tSen, embedTable in zip(self.fCorpus, self.tCorpus, self.embeddingTable): 
-        segmentation, segmentProb = self.segment(embedTable, tSen, self.minWordLen, self.maxWordLen, reassign=True)        
+      for fSen, tSen, embedTable, landmark in zip(self.fCorpus, self.tCorpus, self.embeddingTable, self.landmarks): 
+        segmentation, segmentProb = self.segment(embedTable, landmark, tSen, self.minWordLen, self.maxWordLen, reassign=True)        
         self.segmentations.append(segmentation)
         self.embeddings.append(self.getSentEmbeds(fSen, segmentation))
 
-    def segment(self, embedTable, tSen, minWordLen=1, maxWordLen=np.inf, reassign=False, sent_id=None):
-      fLen = embedTable.shape[1]
+    def segment(self, embedTable, landmark, tSen, minWordLen=1, maxWordLen=np.inf, reassign=False, sent_id=None):
+      fLen = landmark[-1]
       tLen = len(tSen)
       tSen = sorted(tSen)
-      forwardProbs = -np.inf * np.ones((fLen+1,))
+      forwardProbs = -np.inf * np.ones((len(landmark)+1,))
       forwardProbs[0] = 0.
-      segmentAssigns = np.nan * np.ones((fLen+1,)) 
-      segmentation = [0]*(fLen+1)
+      segmentAssigns = np.nan * np.ones((fLen,)) 
       mixturePriors = np.concatenate([self.acoustic_model.mixturePriors[tw] / len(tSen) for tw in tSen], axis=0)
       transMeans = np.concatenate([self.acoustic_model.transMeans[tw] for tw in tSen], axis=0)
       transVars = np.concatenate([self.acoustic_model.transVars[tw] for tw in tSen], axis=0)
-         
-      for t in range(1, fLen):
-        scores = forwardProbs[max(t-maxWordLen, 0):max(t-minWordLen, 0)+1]
-        scores += np.arange(min(maxWordLen, t), min(minWordLen, t)-1) * gmmProb(embedTable[max(t-maxWordLen, 0):max(t-minWordLen, 0)+1, t], mixturePriors, transMeans, transVars, log_prob=True)  
-        forwardProbs[t] = np.max(scores)
-        segmentAssigns[t] = t - (maxWordLen - np.argmax(scores))
+      
+      # Here t starts at 1
+      for i_lm in range(1, len(landmark)):
+        if i_lm < minWordLen:
+          continue
+        scores = forwardProbs[max(i_lm-maxWordLen, 0):i_lm-minWordLen+1]
+        ss = np.asarray([landmark[i] for i in range(max(i_lm-maxWordLen, 0), i_lm-minWordLen+1)])
+        t = landmark[i_lm]
+        scores += (t - ss + 1) * gmmProb(embedTable[max(i_lm-maxWordLen, 0):i_lm-minWordLen+1, i_lm], mixturePriors, transMeans, transVars, log_prob=True)  
+        forwardProbs[i_lm] = np.max(scores)
+        segmentAssigns[t-1] = ss[np.argmax(scores)]
 
       end = fLen
       segmentation = [fLen]
       while end != 0:
-        segmentation.append(int(segmentAssigns[end])) 
-        end = int(segmentAssigns[end])
+        segmentation.append(int(segmentAssigns[end-1])) 
+        end = int(segmentAssigns[end-1])
 
       return segmentation[::-1], forwardProbs
    

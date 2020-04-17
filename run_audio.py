@@ -20,7 +20,7 @@ parser.add_argument('--nmt', help='Use neural encoder-decoder model', action='st
 parser.add_argument('--exp_dir', type=str, default=None, help='Experiment directory with / at the end')
 # parser.add_argument('--data_path', type=str, default='data/flickr30k/', help='Data directory with / at the end')
 parser.add_argument('--dataset', choices=['mscoco2k', 'mscoco20k', 'flickr'])
-parser.add_argument('--num_mixtures', type=int, default=5, help='Number of mixtures for GMM')
+parser.add_argument('--num_mixtures', type=int, default=1, help='Number of mixtures for GMM')
 parser.add_argument('--model_dir', type=str, default='', help='SMT model directory with / at the end')
 parser.add_argument('--smt_model', choices=['gmm', 'kmeans', 'segembed-kmeans', 'segembed-gmm', 'segembed-hmm'], default='gmm', help='Type of SMT model')
 parser.add_argument('--embed_dim', type=int, default=120, help='Acoustic embedding dimension; used only in segmental embedded models')
@@ -108,7 +108,10 @@ elif args.dataset == 'mscoco20k':
   if args.feat_type == 'kamper':
     src_file = datapath + 'mscoco20k_kamper_embeddings.npz'
     trg_file = datapath + 'mscoco20k_image_captions.txt'
-  else:
+  elif args.feat_type == 'mfcc':
+    # TODO Generate this
+    src_file = datapath + 'mscoco20k_mfcc_unsegmented.npz'
+    trg_file = datapath + 'mscoco20k_image_captions.txt'
     raise ValueError("feature type does not exist")
 elif args.dataset == 'mscoco2k':
   # XXX
@@ -122,6 +125,9 @@ elif args.dataset == 'mscoco2k':
 
   if args.feat_type == 'kamper':
     src_file = datapath + 'mscoco2k_kamper_embeddings.npz'
+    trg_file = datapath + 'mscoco2k_image_captions.txt'
+  elif args.feat_type == 'mfcc':
+    src_file = datapath + 'mscoco2k_mfcc_unsegmented.npz'
     trg_file = datapath + 'mscoco2k_image_captions.txt'
   else:
     raise ValueError("feature type does not exist")
@@ -223,7 +229,7 @@ if start < 3 and end >= 3:
     with open(pred_alignment_smt_prefix+".json" , "r") as f:   
       pred_aligns = json.load(f)
   
-    if args.feat_type == "mfcc":
+    if args.dataset == 'flickr' and args.feat_type == "mfcc":
       resample_alignment(pred_alignment_smt_prefix+".json", src_feat2wavs_file, trg_feat2wavs_file, pred_alignment_smt_prefix+"_resample.json")
       with open(pred_alignment_smt_prefix+'_resample.json' , 'r') as f:   
         pred_aligns = json.load(f)
