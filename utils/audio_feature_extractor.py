@@ -346,7 +346,7 @@ class MSCOCOAudioFeaturePreprocessor:
           #   print(i, start_ms, end_ms)
           # XXX Add at least one frame to the previous frame
           start_sent += max(end - start, hop_length)
-          landmark_i.append(int(start_sent / hop_length) + 1)
+          landmark_i.append(int(start_sent / hop_length))
       landmarks[index] = landmark_i
 
     np.savez(output_file, **landmarks)
@@ -379,7 +379,7 @@ class MSCOCOAudioFeaturePreprocessor:
 
             # start_ms, end_ms = phn_info[1], phn_info[2]
             end_sent = start_sent + max(end - start, hop_length)
-            segmentation_i.append([int(start_sent / hop_length), int(end_sent / hop_length) + 1])
+            segmentation_i.append([int(start_sent / hop_length), int(end_sent / hop_length)])
             start_sent = end_sent
           elif level == 'phone':
             segmentation_i.append([start_sent, start_sent+1]) 

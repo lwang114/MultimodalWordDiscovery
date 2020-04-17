@@ -126,7 +126,10 @@ class SegEmbedGMMWordDiscoverer:
         self.embeddingTable.append(embedTable)
         
         # TODO: Use embed table instead of raw feature to compute this
+        
+        print(i, self.segmentations[i], len(fSen)) 
         self.embeddings.append(self.getSentEmbeds(fSen, self.segmentations[i]))
+      
       self.acoustic_model = self.acoustic_model(
                         fCorpus=self.embeddings, tCorpus=self.tCorpus,
                         numMixtures=self.numMixturesMax, 
