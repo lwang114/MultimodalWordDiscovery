@@ -690,59 +690,6 @@ class MSCOCO_Preprocessor():
     with open(concept2idx_file, 'w') as f:
       json.dump(concept2idx, f, indent=4, sort_keys=True)
  
-  def create_gold_phone_landmarks(self, data_info_file, frame_ms=10, output_file='mscoco_phone_landmarks'):
-    with open(data_info_file, 'r') as f:
-      data_info = json.load(f)
-
-    landmarks = {}
-    for i, k in enumerate(sorted(data_info, key=lambda x:int(x.split('_')[-1]))):
-      datum_info = data_info[k]
-      index = 'arr_' + str(i)
-      data_ids = datum_info['data_ids']
-      if len(data_ids) == 0:
-        continue 
-
-      print(k)
-      landmark_i = []
-      start_sent = 0
-      for data_id in data_ids:
-        for phn_info in data_id[2]:
-          start_ms, end_ms = phn_info[1], phn_info[2]
-          start_global = int(start_ms / frame_ms)
-          end_global = int(end_ms / frame_ms)
-          dur = end_global - start_global
-          landmark_i.append(start_sent + dur)
-          start_sent += dur    
-      landmarks[index] = landmark_i
-    np.savez(output_file, **landmarks)
-
-  def create_gold_word_segmentation(self, data_info_file, frame_ms=10, output_file='mscoco_gold_segmentations', level='frame'):
-    with open(data_info_file, 'r') as f:
-      data_info = json.load(f)
-    segmentations = []
-    for i, k in enumerate(sorted(data_info, key=lambda x:int(x.split('_')[-1]))): 
-      datum_info = data_info[k]
-      data_ids = datum_info['data_ids']
-      segmentation_i = []
-      start_sent = 0
-      if len(data_ids) == 0:
-        continue 
-      print(k)
-      for data_id in data_ids:
-        dur = 0
-        for phn_info in data_id[2]:
-          if level == 'frame':
-            start_ms, end_ms = phn_info[1], phn_info[2]
-            start_global = int(start_ms / frame_ms)
-            end_global = int(end_ms / frame_ms)
-            dur += end_global - start_global
-          elif level == 'phone':
-            dur += 1
-        segmentation_i.append([start_sent, start_sent + dur])
-        start_sent += dur    
-      segmentations.append(np.asarray(segmentation_i))
-    np.save(output_file, segmentations)
-
   def json_to_text_gclda(self, json_file, text_file_prefix, allow_repeated_concepts=False):
     json_pairs = None
     text_pairs = []
@@ -929,17 +876,7 @@ if __name__ == '__main__':
     # preproc.create_gold_alignment(data_info_file, concept2idx_file, out_file='../data/mscoco/mscoco_gold_alignment_power_law.json')
     
     # data_info_file = '../data/mscoco/mscoco_subset_130k_phone_power_law_info.json'
-    concept2idx_file = '../data/mscoco/concept2idx.json'
-    # preproc.create_gold_alignment(data_info_file, concept2idx_file, out_file='../data/mscoco/mscoco_gold_alignment_130k_power_law.json') 
-    preproc.create_gold_word_segmentation(data_info_file, level='frame', output_file='mscoco2k_gold_word_segmentation')
-    # preproc.create_gold_word_segmentation(data_info_file, level='phone', output_file='mscoco2k_gold_word_segmentations_phone_level')
-    preproc.create_gold_phone_landmarks(data_info_file, output_file='mscoco2k_gold_phone_landmarks')
-  
-    data_info_file = '../data/mscoco/mscoco20k_phone_info.json'
-    preproc.create_gold_word_segmentation(data_info_file, level='frame', output_file='mscoco20k_gold_word_segmentation')
-    # preproc.create_gold_word_segmentation(data_info_file, level='phone', output_file='mscoco20k_gold_word_segmentations_phone_level')
-    preproc.create_gold_phone_landmarks(data_info_file, output_file='mscoco20k_gold_phone_landmarks')
-  
+    concept2idx_file = '../data/mscoco/concept2idx.json' 
   if 3 in tasks:
     preproc.to_xnmt_text('../data/mscoco/mscoco_subset_subword_level_power_law.txt', 'mscoco_subset_subword_level_power_law.txt')
   if 4 in tasks:

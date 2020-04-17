@@ -52,6 +52,7 @@ class SegEmbedGMMWordDiscoverer:
       
       self.embedDim = embedDim
       self.featDim = self.fCorpus[0].shape[1]
+
       self.minWordLen = minWordLen
       self.maxWordLen = maxWordLen
       self.logProbX = -np.inf  
@@ -73,11 +74,11 @@ class SegEmbedGMMWordDiscoverer:
       if self.useNULL:
         self.tCorpus = [[NULL] + sorted(tSen.split()) for tSen in tCorpus]
       else:
-        self.tCorpus = [sorted(tSen.split()) for tSen in tCorpus[:10]]
+        self.tCorpus = [sorted(tSen.split()) for tSen in tCorpus]
          
       fCorpus = np.load(sourceFile)
       # XXX XXX
-      self.fCorpus = [fCorpus[fKey] for fKey in sorted(fCorpus.keys(), key=lambda x:int(x.split('_')[-1]))[:10]]
+      self.fCorpus = [fCorpus[fKey] for fKey in sorted(fCorpus.keys(), key=lambda x:int(x.split('_')[-1]))]
       self.fCorpus = [fSen[:maxLen] for fSen in self.fCorpus] 
       self.data_ids = [fKey for fKey in sorted(fCorpus.keys(), key=lambda x:int(x.split('_')[-1]))]
 
@@ -102,11 +103,13 @@ class SegEmbedGMMWordDiscoverer:
         landmarks = np.load(landmarkFile)
         #XXX XXX
         for lm_id in sorted(landmarks, key=lambda x:int(x.split('_')[-1])):
+          lm = np.insert(landmarks[lm_id], 0, 0)
+          self.landmarks.append(lm)
           segmentation = []
-          for b in landmarks[lm_id]:
+          for b in lm:
             segmentation.append(b)
           self.segmentations.append(segmentation)
-          self.landmarks.append(np.insert(landmarks[lm_id], 0, 0))
+
       else:
         # Initialize every frame as a segment
         self.segmentations = []
@@ -114,7 +117,7 @@ class SegEmbedGMMWordDiscoverer:
           fLen = fSen.shape[0]
           self.segmentations.append(list(range(fLen)))
           self.landmarks.append(list(range(fLen)))
-     
+
       for i, (fSen, landmark) in enumerate(zip(self.fCorpus, self.landmarks)): 
         embedTable = np.nan * np.ones((len(landmark)-1, len(landmark), self.embedDim))
         for t_seg, t in enumerate(landmark[1:]):
@@ -123,7 +126,7 @@ class SegEmbedGMMWordDiscoverer:
         self.embeddingTable.append(embedTable)
         
         # TODO: Use embed table instead of raw feature to compute this
-        self.embeddings.append(self.getSentEmbeds(fSen, segmentation))
+        self.embeddings.append(self.getSentEmbeds(fSen, self.segmentations[i]))
       self.acoustic_model = self.acoustic_model(
                         fCorpus=self.embeddings, tCorpus=self.tCorpus,
                         numMixtures=self.numMixturesMax, 
@@ -163,7 +166,7 @@ class SegEmbedGMMWordDiscoverer:
       # random.shuffle(sent_order)
 
       for fSen, tSen, embedTable, landmark in zip(self.fCorpus, self.tCorpus, self.embeddingTable, self.landmarks): 
-        segmentation, segmentProb = self.segment(embedTable, landmark, tSen, self.minWordLen, self.maxWordLen, reassign=True)        
+        segmentation, _ = self.segment(embedTable, landmark, tSen, self.minWordLen, self.maxWordLen, reassign=True)        
         self.segmentations.append(segmentation)
         self.embeddings.append(self.getSentEmbeds(fSen, segmentation))
 
@@ -192,7 +195,12 @@ class SegEmbedGMMWordDiscoverer:
       end = fLen
       segmentation = [fLen]
       while end != 0:
-        segmentation.append(int(segmentAssigns[end-1])) 
+        # Return the entire sentence as a segment if segmentation is not possible 
+        if np.isnan(segmentAssigns[end-1]):
+          segmentation = [fLen, 0]
+          break
+
+        segmentation.append(int(segmentAssigns[end-1]))
         end = int(segmentAssigns[end-1])
 
       return segmentation[::-1], forwardProbs
