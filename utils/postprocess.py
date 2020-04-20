@@ -149,7 +149,105 @@ def alignment_to_cluster(ali_file, out_file='cluster.json'):
 
   with open(out_file, 'w') as fp:
     json.dump(clusters, fp, indent=4, sort_keys=True)
- 
+
+def alignment_to_word_units(alignment_file, phone_corpus,
+                                     landmark_file = None,
+                                     word_unit_file='word_units.wrd',
+                                     phone_unit_file='phone_units.phn',
+                                     include_null = False):
+  f = open(phone_corpus, 'r')
+  a_corpus = []
+  for line in f: 
+    a_corpus.append(line.strip().split())
+  f.close()
+  
+  with open(alignment_file, 'r') as f:
+    alignments = json.load(f)
+  
+  word_units = []
+  phn_units = []
+  # XXX
+  for align_info, a_sent in zip(alignments, a_corpus):
+    image_concepts = align_info['image_concepts']
+    alignment = align_info['alignment']
+    pair_id = 'pair_' + str(align_info['index'])
+    print(pair_id) 
+    prev_align_idx = -1
+    start = 0
+    for t, align_idx in enumerate(alignment):
+      if t == 0:
+        prev_align_idx = align_idx
+      
+      phn_units.append('%s %d %d %s\n' % (pair_id, t, t + 1, a_sent[t]))
+      if prev_align_idx != align_idx:
+        if not include_null and prev_align_idx == 0:
+          prev_align_idx = align_idx
+          start = t
+          continue
+        word_units.append('%s %d %d %s\n' % (pair_id, start, t, image_concepts[prev_align_idx]))
+        prev_align_idx = align_idx
+        start = t
+      elif t == len(alignment) - 1:
+        if not include_null and prev_align_idx == 0:
+          continue
+        word_units.append('%s %d %d %s\n' % (pair_id, start, t + 1, image_concepts[prev_align_idx]))
+    
+  with open(word_unit_file, 'w') as f:
+    f.write(''.join(word_units))
+  
+  with open(phone_unit_file, 'w') as f:
+    f.write(''.join(phn_units))      
+
+def alignment_to_word_classes(alignment_file, phone_corpus,
+                                   landmark_file=None, word_class_file='words.class',
+                                   include_null = False):
+  f = open(phone_corpus, 'r')
+  a_corpus = []
+  for line in f: 
+    a_corpus.append(line.strip().split())
+  f.close()
+  
+  with open(alignment_file, 'r') as f:
+    alignments = json.load(f)
+  
+  word_units = {}
+  for align_info, a_sent in zip(alignments, a_corpus):
+    image_concepts = align_info['image_concepts']
+    alignment = align_info['alignment']
+    pair_id = 'pair_' + str(align_info['index'])
+    print(pair_id) 
+    prev_align_idx = -1
+    start = 0
+    for t, align_idx in enumerate(alignment):
+      if t == 0:
+        prev_align_idx = align_idx
+      
+      if prev_align_idx != align_idx:
+        if not include_null and prev_align_idx == 0:
+          prev_align_idx = align_idx
+          start = t
+          continue
+        if image_concepts[prev_align_idx] not in word_units:
+          word_units[image_concepts[prev_align_idx]] = ['%s %d %d\n' % (pair_id, start, t)]
+        else:
+          word_units[image_concepts[prev_align_idx]].append('%s %d %d\n' % (pair_id, start, t))
+        prev_align_idx = align_idx
+        start = t
+      elif t == len(alignment) - 1:
+        if not include_null and prev_align_idx == 0:
+          continue
+        if image_concepts[prev_align_idx] not in word_units:
+          word_units[image_concepts[prev_align_idx]] = ['%s %d %d\n' % (pair_id, start, t + 1)]
+        else:
+          word_units[image_concepts[prev_align_idx]].append('%s %d %d\n' % (pair_id, start, t + 1))
+    
+  with open(word_class_file, 'w') as f:
+    for i_c, c in enumerate(word_units):
+      #print(i_c, c)
+      f.write('Class %d:\n' % i_c)
+      f.write(''.join(word_units[c]))
+      f.write('\n')
+
 def _findPhraseFromPhoneme(sent, alignment):
   if not hasattr(sent, '__len__') or not hasattr(alignment, '__len__'):
     raise TypeError('sent and alignment should be list')
@@ -233,31 +331,36 @@ def convert_boundary_to_segmentation(binary_boundary_file, frame_boundary_file):
   binary_boundaries = np.load(binary_boundary_file)
   frame_boundaries = []
   for i, b_vec in enumerate(binary_boundaries):
-    print("segmentation %d" % i)
+    # print("segmentation %d" % i)
     end_frames = np.nonzero(b_vec)[0]
-    
     frame_boundary = [[0, end_frames[0]]]
     for st, end in zip(end_frames[:-1], end_frames[1:]):
-      frame_boundary.append([st, end])
+      frame_boundary.append([st, end+1])
     
-    if DEBUG:
-      print("end_frames: ", end_frames)
-      print("frame_boundary: ", frame_boundary) 
-    
+    # if i < 5: 
+    #   print("end_frames: ", end_frames)
+    # print("frame_boundary: ", frame_boundary) 
     frame_boundaries.append(np.asarray(frame_boundary))
 
   np.save(frame_boundary_file, frame_boundaries) 
 
 def convert_landmark_segment_to_10ms_segmentation(landmark_segment_file, landmarks_file, frame_segment_file):
   lm_segments = np.load(landmark_segment_file)
+  
   lms = np.load(landmarks_file)
   utt_ids = sorted(lms.keys(), key=lambda x:int(x.split('_')[-1]))
   frame_segments = []
   for i, utt_id in enumerate(utt_ids):
+    # print(i, utt_id)
+    # print('lm_segment: ', lm_segments[i])
+    # print('lms: ', lms['arr_'+str(i)])
+    # print('len(lm_segment), len(lms): ', len(lm_segments[i]), len(lms['arr_'+str(i)]))
     lm_segment = lm_segments[i]
+    lm = np.insert(lms, 0, 0)
     f_seg = []
-    for i_lm_seg in lm_segment:
-      f_seg.append(lms[utt_id][i_lm_seg])
+    for lm_seg in lm_segment:  
+      lm = np.insert(lms[utt_id], 0, 0)
+      f_seg.append(lm[lm_seg])
     frame_segments.append(np.asarray(f_seg))
   np.save(frame_segment_file, frame_segments)
 

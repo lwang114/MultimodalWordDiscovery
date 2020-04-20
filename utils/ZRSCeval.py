@@ -28,16 +28,16 @@ if 0 in tasks:
     pred_alignment_files = ['%s_pred_alignment.json' % model_name for model_name in model_names]
   elif args.dataset == 'flickr':
     datapath = '../data/flickr30k/'
-    # TODO Make this more general 
     phone_corpus = datapath + 'phoneme_level/src_flickr30k.txt'
     gold_alignment_file = data_path + 'phoneme_level/%s_gold_alignments.json' % args.dataset
+    # TODO Make this more general 
     model_names = ['mixture', 'hmm', 'nmt-novt', 'nmt-novc']
     pred_alignment_files = ['../smt/exp/ibm1_phoneme_level_clustering/flickr30k_pred_alignment.json', '../hmm/exp/aug_31_flickr/flickr30k_pred_alignment.json', '../nmt/exp/feb26_normalize_over_time/output/alignment.json', '../nmt/exp/feb28_phoneme_level_clustering/output/alignment.json']
     
+  alignment_to_word_units(gold_alignment_file, phone_corpus, word_unit_file='tdev2/WDE/share/%s_word_units.wrd' % args.dataset, phone_unit_file='tdev2/WDE/share/%s_phone_units.phn' % args.dataset, include_null=True)
   for i, (model_name, pred_alignment_file) in enumerate(zip(model_names, pred_alignment_files)):
     discovered_word_file = 'tdev2/WDE/share/discovered_words_%s.class' % model_name
-    alignment_to_word_classes(pred_alignment_file, phone_corpus, discovered_word_file)
-    alignment_to_word_unit
+    alignment_to_word_classes(pred_alignment_file, phone_corpus, discovered_word_file, include_null=True)
 
 #------------------------#
 # Phone-level Evaluation #
