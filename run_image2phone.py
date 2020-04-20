@@ -3,6 +3,7 @@ from hmm_dnn.image_phone_hmm_dnn_word_discoverer import *
 from hmm_dnn.image_phone_gaussian_hmm_word_discoverer import *
 from clda.image_phone_word_discoverer import *
 from utils.clusteval import *
+from utils.postprocess import *
 from utils.plot import *
 import argparse
 import shutil
@@ -26,6 +27,7 @@ args = parser.parse_args()
 
 if args.dataset == 'mscoco2k':
   dataDir = 'data/mscoco/'
+  phoneCaptionFile = dataDir + 'mscoco2k_phone_captions.txt' 
   speechFeatureFile = 'tdnn/exp/blstm2_mscoco_train_sgd_lr_0.00010_feb28/phone_features_discrete.txt' # XXX dataDir + 'src_mscoco_subset_subword_level_power_law.txt'
   imageConceptFile = dataDir + 'trg_mscoco_subset_subword_level_power_law.txt'
   if args.feat_type == 'synthetic':
@@ -34,12 +36,13 @@ if args.dataset == 'mscoco2k':
     imageFeatureFile = dataDir + 'mscoco_vgg_penult.npz'
   elif args.feat_type == 'res34':
     imageFeatureFile = dataDir + 'mscoco_subset_2k_res34_embed512dim.npz'
-
+  
   conceptIdxFile = dataDir + 'concept2idx.json'
   goldAlignmentFile = dataDir + 'mscoco_gold_alignment_power_law.json'
   nWords = 65
 elif args.dataset == 'mscoco20k':
   dataDir = 'data/mscoco/'
+  phoneCaptionFile = dataDir + 'mscoco20k_phone_captions.txt' 
   speechFeatureFile = dataDir + 'src_mscoco_subset_130k_power_law_phone_captions.txt'
   imageConceptFile = dataDir + 'trg_mscoco_subset_130k_power_law_phone_captions.txt'
   if args.feat_type == 'synthetic':
@@ -104,7 +107,7 @@ print('Experiment directory: ', expDir)
 nReps = 5
 SNRs = [40] #[40, 30, 20, 10, 5] 
 
-tasks = [1, 2]
+tasks = [3]
 #-------------------------------#
 # Feature extraction for MSCOCO #
 #-------------------------------#
@@ -245,12 +248,17 @@ if 2 in tasks:
     print('Alignment accuracy: ', accuracy(pred_info, gold_info))
     boundary_retrieval_metrics(pred_info, gold_info)
 
+if 3 in tasks:
+  start_time = time.time()
+  filePrefix = expDir + '_'.join(['image2phone', args.dataset, args.model_type, args.feat_type])
+  alignment_to_word_classes(goldAlignmentFile, phoneCaptionFile, word_class_file='_'.join([filePrefix, 'words.class']), include_null=True)
+  alignment_to_word_units(predAlignmentFile, phoneCaptionFile, word_unit_file='_'.join([filePrefix, 'word_units.wrd']), phone_unit_file='_'.join([filePrefix, 'phone_units.phn']), include_null=True) 
+  print('Finish converting files for ZSRC evaluations after %.5f s' % (time.time() - start_time))
+
 #---------------#
 # Visualization #
 #---------------#
-if 3 in tasks:
-  if args.dataset == 'mscoco2k' or args.dataset == 'mscoco20k':
-    with open(dataDir + 'concept2idx.json', 'w') as f:
-      json.dump({i:i for i in range(65)}, f, indent=4, sort_keys=True)
-    
-  f1_scores = plot_F1_score_histogram(predAlignmentFile, goldAlignmentFile, concept2idx_file=conceptIdxFile, draw_plot=True, out_file=modelName+'_f1_histogram') 
+# if args.dataset == 'mscoco2k' or args.dataset == 'mscoco20k':
+#   with open(dataDir + 'concept2idx.json', 'w') as f:
+#     json.dump({i:i for i in range(65)}, f, indent=4, sort_keys=True) 
+# f1_scores = plot_F1_score_histogram(predAlignmentFile, goldAlignmentFile, concept2idx_file=conceptIdxFile, draw_plot=True, out_file=modelName+'_f1_histogram') 

@@ -12,6 +12,7 @@ from hmm_dnn.image_phone_gaussian_hmm_word_discoverer import *
 from hmm_dnn.image_phone_hmm_word_discoverer import *
 from hmm_dnn.image_phone_hmm_dnn_word_discoverer import *
 from utils.clusteval import * 
+from utils.postprocess import *
 
 parser = argparse.ArgumentParser()
 parser = argparse.ArgumentParser()
@@ -35,9 +36,11 @@ args = parser.parse_args()
 if args.dataset == 'mscoco2k' or args.dataset == 'mscoco20k':
   dataDir = 'data/mscoco/'
   if args.dataset == 'mscoco2k':
-    goldAlignmentFile = dataDir + 'mscoco_gold_alignment_power_law.json'
+    phoneCaptionFile = 'data/mscoco/mscoco2k_phone_captions.txt'
+    goldAlignmentFile = dataDir + 'mscoco2k_gold_alignment.json'
   else:
-    goldAlignmentFile = dataDir + 'mscoco_gold_alignment_130k_power_law.json'
+    phoneCaptionFile = 'data/mscoco/mscoco20k_phone_captions.txt'
+    goldAlignmentFile = dataDir + 'mscoco20k_gold_alignment.json'
   conceptIdxFile = dataDir + 'concept2idx.json'
 
   if args.audio_feat_type == 'synthetic':
@@ -144,15 +147,14 @@ print('Experiment directory: ', expDir)
 nReps = 5
 SNRs = [40] 
 
-tasks = [1, 2]
+tasks = [3]
 if 0 in tasks:
   if args.dataset == 'mscoco2k':
-    phoneCaptionFile = 'data/mscoco/src_mscoco_subset_subword_level_power_law.txt'
     speechFeatureFile = 'data/mscoco/mscoco_subset_subword_level_phone_gaussian_vectors.npz'
     imageConceptFile = 'data/mscoco/trg_mscoco_subset_subword_level_power_law.txt'
     imageFeatureFile = 'data/mscoco/mscoco_subset_subword_level_concept_gaussian_vectors.npz'
   elif args.dataset == 'mscoco20k':
-    phoneCaptionFile = 'data/mscoco/src_mscoco_subset_130k_power_law_phone_captions.txt'
+    phoneCaptionFile = 'data/mscoco/mscoco20k_phone_captions.txt'
     speechFeatureFile = 'data/mscoco/mscoco20k_phone_gaussian_vectors.npz'
     imageConceptFile = 'data/mscoco/trg_mscoco_subset_130k_power_law_phone_captions.txt'
     imageFeatureFile = 'data/mscoco/mscoco20k_concept_gaussian_vectors.npz'
@@ -330,7 +332,10 @@ if 2 in tasks:
     print('Alignment accuracy: ', accuracy(pred_info, gold_info))
     boundary_retrieval_metrics(pred_info, gold_info)
 
-# TODO: visualizations
 if 3 in tasks:
   start_time = time.time()
-  print("Generating plots ...")
+  filePrefix = expDir + '_'.join(['image2audio', args.dataset, args.model_type, args.audio_feat_type, args.image_feat_type])
+  alignment_to_word_classes(predAlignmentFile, phoneCaptionFile, word_class_file='_'.join([filePrefix, 'words.class']))
+  alignment_to_word_units(predAlignmentFile, phoneCaptionFile, word_unit_file='_'.join([filePrefix, 'word_units.wrd']), phone_unit_file='_'.join([filePrefix, 'phone_units.phn']), include_null=True) 
+# TODO: visualizations
+# print("Generating plots ...")
