@@ -338,22 +338,24 @@ if start_step <= 3:
     align_idx = 0
     for i, feat_id in enumerate(sorted(audio_feats, key=lambda x:int(x.split('_')[-1]))):
       # XXX 
-      # if i > 10:
-      #   break
+      if i > 10:
+        break
       print(feat_id)
       alignment = []
       embed_mat = embeds_dict[feat_id]
       vec_ids = vec_ids_dict[feat_id]
-      lm_segments = np.nonzero(lm_boundaries[i])  
+      lm_segments = np.nonzero(lm_boundaries[i])[0] 
       lm_segments = np.append([0], lm_segments)
       for cur_start, cur_end in zip(lm_segments[:-1], lm_segments[1:]): 
         t = cur_end
+        # print(cur_start, cur_end)
         i = t*(t - 1)/2
         i_embed = vec_ids[i + cur_start]
         embedding = embed_mat[i_embed]
         # TODO
         alignment.extend([align_idx]*(cur_end - cur_start))
         align_idx += 1
+        print(np.argmin(np.mean((embedding - centroids)**2, axis=1)))
         image_concepts.append(np.argmin(np.mean((embedding - centroids)**2, axis=1)))
       alignments.append({'alignment': alignment,
                          'image_concepts': image_concepts,
