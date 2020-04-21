@@ -320,3 +320,42 @@ if start_step <= 2:
     #retrieval_metrics(pred_clsts, gold_clsts)
     print('Word IoU: ', word_IoU(pred_aligns, gold_aligns))
     print('Finish evaluation after %f s !' % (time.time() - start_time))
+
+if start_step <= 3:
+  # TODO Work for MSCOCO only
+  if args.am_class.split('-')[0] != 'multimodal':
+    landmark_segments = np.load(pred_landmark_segmentation_file)
+    landmarks = np.load(args.landmarks_file)
+    embeds = np.load(args.exp_dir+"embedding_mats.npz")
+    vec_ids = np.load(args.exp_dir+"vec_ids_dict.npz") 
+    mean_numerators = np.load(args.exp_dir + 'mean_numerators.npy')
+    counts = np.load(args.exp_dir + 'counts.npy', counts)
+    print(mean_numerators.shape, counts.shape)
+    centroids = mean_numerators / counts 
+    alignments = []
+    for i, feat_id in enumerate(sorted(audio_feats, key=lambda x:int(x.split('_')[-1]))):
+      alignment = []
+      embed_mat = embeds[feat_id]
+      lm = landmarks[feat_id]  
+      lm_seg_i = landmark_segments[i]
+      for seg in lm_seg_i:  
+        cur_start = seg[0]
+        cur_end = seg[1]
+        t = cur_end
+        i = t*(t - 1)/2
+        i_embed = vec_ids[i + cur_start]
+        embed_mat = embeds[i_embed]
+        # TODO
+        alignment.extend([np.argmax(np.mean((embed_mat - centroids)**2, axis=1))]*(cur_end - cur_start))
+      alignments.append({'alignment': alignment,
+                         'index': i})
+    with open(args.exp_dir + pred_alignment_file, 'w') as f:
+      json.dump(alignments, f, indent=4, sort_keys=True)
+
+    # TODO
+    filePrefix = expDir + '_'.join(['image2phone', args.dataset, args.model_type, args.image_feat_type])
+    # XXX include_null is set to true to include align_idx = 0
+    alignment_to_word_classes(pred_alignment_file, phone_caption_file, word_class_file='_'.join([filePrefix, 'words.class']), include_null=True)
+    alignment_to_word_units(pred_alignment_file, phone_caption_file, word_unit_file='_'.join([filePrefix, 'word_units.wrd']), phone_unit_file='_'.join([filePrefix, 'phone_units.phn']), include_null=True) 
+    print('Finish converting files for ZSRC evaluations after %.5f s' % (time.time() - start_time))
+ 
