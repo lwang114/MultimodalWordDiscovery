@@ -14,8 +14,6 @@ NULL = 'NULL'
 if os.path.exists("*.log"):
   os.system("rm *.log")
 
-logging.basicConfig(filename="postprocess.log", format="%(asctime)s %(message)s)", level=logging.DEBUG)
-
 class XNMTPostprocessor():
   def __init__(self, input_dir, is_phoneme=True):
     self.input_dir = input_dir
@@ -151,15 +149,26 @@ def alignment_to_cluster(ali_file, out_file='cluster.json'):
     json.dump(clusters, fp, indent=4, sort_keys=True)
 
 def alignment_to_word_units(alignment_file, phone_corpus,
+                                     concept_corpus,
                                      landmark_file = None,
                                      word_unit_file='word_units.wrd',
                                      phone_unit_file='phone_units.phn',
+                                     concept2id_file=None, 
                                      include_null = False):
-  f = open(phone_corpus, 'r')
-  a_corpus = []
-  for line in f: 
-    a_corpus.append(line.strip().split())
-  f.close()
+  with open(phone_corpus, 'r') as f_p,\
+       open(concept_corpus, 'r') as f_c:
+    a_corpus, v_corpus = [], []
+    for line in f_p: 
+      a_corpus.append(line.strip().split())
+    
+    for line in f_c:
+      v_corpus.append(line.strip().split())
+  
+  if concept2id_file:
+    with open(concept2id_file, 'r') as f:
+      concept2id = json.load(f)
+  else:
+    concept2id = {}
   
   with open(alignment_file, 'r') as f:
     alignments = json.load(f)
@@ -167,8 +176,12 @@ def alignment_to_word_units(alignment_file, phone_corpus,
   word_units = []
   phn_units = []
   # XXX
-  for align_info, a_sent in zip(alignments, a_corpus):
-    image_concepts = align_info['image_concepts']
+  for align_info, a_sent, v_sent in zip(alignments, a_corpus, v_corpus):
+    if len(concept2id) > 0:
+      image_concepts = [concept2id[c] for c in v_sent]
+      print(image_concepts)
+    else:
+      image_concepts = align_info['image_concepts']
     alignment = align_info['alignment']
     pair_id = 'pair_' + str(align_info['index'])
     print(pair_id) 
@@ -199,14 +212,14 @@ def alignment_to_word_units(alignment_file, phone_corpus,
     f.write(''.join(phn_units))      
 
 def alignment_to_word_classes(alignment_file, phone_corpus,
-                                   landmark_file=None, word_class_file='words.class',
+                                   word_class_file='words.class',
+                                   landmark_file=None, 
                                    include_null = False):
   f = open(phone_corpus, 'r')
   a_corpus = []
   for line in f: 
     a_corpus.append(line.strip().split())
   f.close()
-  
   with open(alignment_file, 'r') as f:
     alignments = json.load(f)
   
@@ -218,7 +231,15 @@ def alignment_to_word_classes(alignment_file, phone_corpus,
     print(pair_id) 
     prev_align_idx = -1
     start = 0
-    for t, align_idx in enumerate(alignment):
+    if len(alignment) != len(a_sent):
+      print('Warning: length of the alignment not equal to the length of sentence: %d != %d' % (len(alignment), len(a_sent)))
+      gap = len(a_sent) - len(alignment)
+      if gap > 0:
+        print('Extend the alignment by %d ...' % gap)
+        last_align_idx = alignment[-1]
+        alignment.extend([last_align_idx]*gap)
+        print(len(a_sent), len(alignment))
+    for t, (align_idx, phn) in enumerate(zip(alignment, a_sent)):
       if t == 0:
         prev_align_idx = align_idx
       

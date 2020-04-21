@@ -45,12 +45,12 @@ if args.dataset == 'mscoco2k' or args.dataset == 'mscoco20k':
 
   if args.audio_feat_type == 'synthetic':
     if args.dataset == 'mscoco2k':
-      speechFeatureFile = dataDir + 'mscoco2k_subset_subword_level_phone_gaussian_vectors.npz'
+      speechFeatureFile = dataDir + 'mscoco2k_phone_gaussian_vectors.npz'
     else:
       speechFeatureFile = dataDir + 'mscoco20k_phone_gaussian_vectors.npz'
   elif args.audio_feat_type == 'kamper': 
     if args.dataset == 'mscoco2k':
-      speechFeatureFile = dataDir + 'mscoco_kamper_embeddings_phone_power_law.npz'
+      speechFeatureFile = dataDir + 'mscoco2k_kamper_embeddings.npz'
     else:
       speechFeatureFile = dataDir + 'mscoco20k_kamper_embeddings.npz'
   elif args.audio_feat_type == 'force_align':
@@ -61,33 +61,33 @@ if args.dataset == 'mscoco2k' or args.dataset == 'mscoco20k':
 
   elif args.audio_feat_type == 'blstm_mean': 
     if args.dataset == 'mscoco2k':
-      speechFeatureFile = dataDir + 'mscoco_subset_2k_blstm_mean.npz'
+      speechFeatureFile = dataDir + 'mscoco2k_blstm_mean.npz'
     elif args.dataset == 'mscoco20k':
       speechFeatureFile = dataDir + 'mscoco20k_blstm_mean.npz'
 
   elif args.audio_feat_type == 'blstm_last':
     if args.dataset == 'mscoco2k': 
-      speechFeatureFile = dataDir + 'mscoco_subset_2k_blstm_last.npz'
+      speechFeatureFile = dataDir + 'mscoco2k_blstm_last.npz'
     elif args.dataset == 'mscoco20k':
       speechFeatureFile = dataDir + 'mscoco20k_blstm_last.npz'
 
   if args.image_feat_type == 'synthetic':
     if args.dataset == 'mscoco2k':
-      imageFeatureFile = dataDir + 'mscoco2k_subset_subword_level_concept_gaussian_vectors.npz'
+      imageFeatureFile = dataDir + 'mscoco2k_concept_gaussian_vectors.npz'
     else:
       imageFeatureFile = dataDir + 'mscoco20k_concept_gaussian_vectors.npz'
 
   elif args.image_feat_type == 'vgg16_penult':
     if args.dataset == 'mscoco2k':
-      imageFeatureFile = dataDir + 'mscoco_vgg_penult.npz'
+      imageFeatureFile = dataDir + 'mscoco2k_vgg16_penult.npz'
     else:
-      imageFeatureFile = dataDir + 'mscoco_subset_130k_vgg16_penult.npz'
+      imageFeatureFile = dataDir + 'mscoco20k_vgg16_penult.npz'
 
   elif args.image_feat_type == 'res34':
     if args.dataset == 'mscoco2k':
-      imageFeatureFile = dataDir + 'mscoco_subset_2k_res34_embed512dim.npz'
+      imageFeatureFile = dataDir + 'mscoco2k_res34_embed512dim.npz'
     else:
-      imageFeatureFile = dataDir + 'mscoco_subset_130k_res34_embed512dim.npz'
+      imageFeatureFile = dataDir + 'mscoco20k_res34_embed512dim.npz'
 
   imageConceptFile = dataDir + 'trg_mscoco_subset_subword_level_power_law.txt'
   nWords = 65
@@ -147,7 +147,7 @@ print('Experiment directory: ', expDir)
 nReps = 5
 SNRs = [40] 
 
-tasks = [3]
+tasks = [1, 2]
 if 0 in tasks:
   if args.dataset == 'mscoco2k':
     speechFeatureFile = 'data/mscoco/mscoco_subset_subword_level_phone_gaussian_vectors.npz'
