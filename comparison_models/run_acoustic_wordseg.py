@@ -135,7 +135,7 @@ if args.landmarks_file:
 else:
   landmark_ids = []
 
-start_step = 0
+start_step = 3
 if start_step == 0:
   print("Start extracting acoustic embeddings")
   begin_time = time.time()
@@ -324,38 +324,50 @@ if start_step <= 2:
 if start_step <= 3:
   # TODO Work for MSCOCO only
   if args.am_class.split('-')[0] != 'multimodal':
-    landmark_segments = np.load(pred_landmark_segmentation_file)
+    # landmark_segments = np.load(pred_landmark_segmentation_file)
+    lm_boundaries = np.load(pred_boundary_file)
     landmarks = np.load(args.landmarks_file)
-    embeds = np.load(args.exp_dir+"embedding_mats.npz")
-    vec_ids = np.load(args.exp_dir+"vec_ids_dict.npz") 
-    mean_numerators = np.load(args.exp_dir + 'mean_numerators.npy')
-    counts = np.load(args.exp_dir + 'counts.npy', counts)
-    print(mean_numerators.shape, counts.shape)
-    centroids = mean_numerators / counts 
+    embeds_dict = np.load(args.exp_dir+"embedding_mats.npz")
+    vec_ids_dict = np.load(args.exp_dir+"vec_ids_dict.npz") 
+    # mean_numerators = np.load(args.exp_dir + 'mean_numerators.npy')
+    # counts = np.load(args.exp_dir + 'counts.npy', counts)
+    # print(mean_numerators.shape, counts.shape)
+    centroids = np.load(args.exp_dir + '%s_means.npy' % args.am_class)
     alignments = []
+    image_concepts = []
+    align_idx = 0
     for i, feat_id in enumerate(sorted(audio_feats, key=lambda x:int(x.split('_')[-1]))):
+      # XXX 
+      # if i > 10:
+      #   break
+      print(feat_id)
       alignment = []
-      embed_mat = embeds[feat_id]
-      lm = landmarks[feat_id]  
-      lm_seg_i = landmark_segments[i]
-      for seg in lm_seg_i:  
-        cur_start = seg[0]
-        cur_end = seg[1]
+      embed_mat = embeds_dict[feat_id]
+      vec_ids = vec_ids_dict[feat_id]
+      lm_segments = np.nonzero(lm_boundaries[i])  
+      lm_segments = np.append([0], lm_segments)
+      for cur_start, cur_end in zip(lm_segments[:-1], lm_segments[1:]): 
         t = cur_end
         i = t*(t - 1)/2
         i_embed = vec_ids[i + cur_start]
-        embed_mat = embeds[i_embed]
+        embedding = embed_mat[i_embed]
         # TODO
-        alignment.extend([np.argmax(np.mean((embed_mat - centroids)**2, axis=1))]*(cur_end - cur_start))
+        alignment.extend([align_idx]*(cur_end - cur_start))
+        align_idx += 1
+        image_concepts.append(np.argmin(np.mean((embedding - centroids)**2, axis=1)))
       alignments.append({'alignment': alignment,
+                         'image_concepts': image_concepts,
                          'index': i})
-    with open(args.exp_dir + pred_alignment_file, 'w') as f:
+    print(len(alignments))
+    with open(pred_alignment_file, 'w') as f:
       json.dump(alignments, f, indent=4, sort_keys=True)
 
+if start_step <= 4:
     # TODO
-    filePrefix = expDir + '_'.join(['image2phone', args.dataset, args.model_type, args.image_feat_type])
-    # XXX include_null is set to true to include align_idx = 0
-    alignment_to_word_classes(pred_alignment_file, phone_caption_file, word_class_file='_'.join([filePrefix, 'words.class']), include_null=True)
-    alignment_to_word_units(pred_alignment_file, phone_caption_file, word_unit_file='_'.join([filePrefix, 'word_units.wrd']), phone_unit_file='_'.join([filePrefix, 'phone_units.phn']), include_null=True) 
-    print('Finish converting files for ZSRC evaluations after %.5f s' % (time.time() - start_time))
- 
+    start_time = time.time()
+    file_prefix = args.exp_dir + '_'.join([args.dataset, args.am_class])
+    if args.dataset == 'mscoco2k' or args.dataset == 'mscoco20k':
+      phone_caption_file = '../data/mscoco/%s_phone_captions.txt' % args.dataset 
+      # XXX include_null is set to true to include align_idx = 0
+      alignment_to_word_classes(pred_alignment_file, phone_caption_file, word_class_file='_'.join([file_prefix, 'words.class']), include_null=True)
+    print('Finish converting files for ZSRC evaluations after %.5f s' % (time.time() - start_time)) 
