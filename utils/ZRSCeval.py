@@ -14,7 +14,7 @@ parser.add_argument('--exp_dir', type=str, default='./', help='Experimental dire
 parser.add_argument('--dataset', choices=['mscoco2k', 'mscoco20k', 'flickr'])
 args = parser.parse_args()
 
-tasks = [1]
+tasks = [0, 1]
 #--------------------------#
 # Extract Discovered Words #
 #--------------------------#
@@ -40,13 +40,14 @@ if 0 in tasks:
     
   alignment_to_word_units(gold_alignment_file, phone_corpus, concept_corpus, word_unit_file='tdev2/WDE/share/%s_word_units.wrd' % args.dataset, phone_unit_file='tdev2/WDE/share/%s_phone_units.phn' % args.dataset, include_null=True, concept2id_file=concept2id_file)
   for i, (model_name, pred_alignment_file) in enumerate(zip(model_names, pred_alignment_files)):
-    discovered_word_file = 'tdev2/WDE/share/discovered_words_%s.class' % model_name
+    discovered_word_file = 'tdev2/WDE/share/discovered_words_%s_%s.class' % (args.dataset, model_name)
     alignment_to_word_classes(pred_alignment_file, phone_corpus, word_class_file=discovered_word_file, include_null=True)
 
 #------------------------#
 # Phone-level Evaluation #
 #------------------------#
 if 1 in tasks:
+  os.system('cd tdev2/ && python setup.py build && python setup.py install')
   wrd_path = pkg_resources.resource_filename(
               pkg_resources.Requirement.parse('WDE'),
                           'WDE/share/%s_word_units.wrd' % args.dataset)
@@ -62,7 +63,7 @@ if 1 in tasks:
       model_names = f.read().strip().split()
   else:
     model_names = ['enriched'] #['nmt-novt', 'nmt-novc']
-  disc_clsfiles = ['tdev2/WDE/share/discovered_words_%s.class' % model_name for model_name in model_names]
+  disc_clsfiles = ['tdev2/WDE/share/discovered_words_%s_%s.class' % (args.dataset, model_name) for model_name in model_names]
 
   for model_name, disc_clsfile in zip(model_names, disc_clsfiles):
     discovered = Disc(disc_clsfile, gold) 

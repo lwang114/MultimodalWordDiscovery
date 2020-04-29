@@ -229,6 +229,7 @@ def alignment_to_word_classes(alignment_file, phone_corpus,
     alignment = align_info['alignment']
     pair_id = 'pair_' + str(align_info['index'])
     print(pair_id) 
+    # print(image_concepts)
     prev_align_idx = -1
     start = 0
     if len(alignment) != len(a_sent):
@@ -242,7 +243,7 @@ def alignment_to_word_classes(alignment_file, phone_corpus,
     for t, (align_idx, phn) in enumerate(zip(alignment, a_sent)):
       if t == 0:
         prev_align_idx = align_idx
-      
+       
       if prev_align_idx != align_idx:
         if not include_null and prev_align_idx == 0:
           prev_align_idx = align_idx

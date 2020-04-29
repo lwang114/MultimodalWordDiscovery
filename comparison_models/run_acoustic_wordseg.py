@@ -334,18 +334,19 @@ if start_step <= 3:
     # print(mean_numerators.shape, counts.shape)
     centroids = np.load(args.exp_dir + '%s_means.npy' % args.am_class)
     alignments = []
-    image_concepts = []
-    align_idx = 0
-    for i, feat_id in enumerate(sorted(audio_feats, key=lambda x:int(x.split('_')[-1]))):
+    for i_feat, feat_id in enumerate(sorted(audio_feats, key=lambda x:int(x.split('_')[-1]))):
       # XXX 
-      if i > 10:
-        break
+      # if i_feat > 10:
+      #   break
       print(feat_id)
       alignment = []
       embed_mat = embeds_dict[feat_id]
       vec_ids = vec_ids_dict[feat_id]
-      lm_segments = np.nonzero(lm_boundaries[i])[0] 
+      lm_segments = np.nonzero(lm_boundaries[i_feat])[0] 
       lm_segments = np.append([0], lm_segments)
+      print(lm_segments[-1])
+      image_concepts = []
+      align_idx = 0
       for cur_start, cur_end in zip(lm_segments[:-1], lm_segments[1:]): 
         t = cur_end
         # print(cur_start, cur_end)
@@ -355,12 +356,11 @@ if start_step <= 3:
         # TODO
         alignment.extend([align_idx]*(cur_end - cur_start))
         align_idx += 1
-        print(np.argmin(np.mean((embedding - centroids)**2, axis=1)))
         image_concepts.append(np.argmin(np.mean((embedding - centroids)**2, axis=1)))
+      print(len(alignment))
       alignments.append({'alignment': alignment,
                          'image_concepts': image_concepts,
-                         'index': i})
-    print(len(alignments))
+                         'index': i_feat})
     with open(pred_alignment_file, 'w') as f:
       json.dump(alignments, f, indent=4, sort_keys=True)
 

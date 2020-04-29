@@ -152,7 +152,7 @@ def validate(audio_model, test_loader, args):
       total += torch.sum(nphones)
 
       if args.save_features:
-        if args.audio_model == 'blstm2':
+        if args.audio_model == 'blstm2' or args.audio_model == 'blstm3':
           for i_b in range(embeds1.size()[0]):
             feat_id = 'arr_'+str(i * args.batch_size + i_b)
             embed1_all[feat_id] = embeds1[i_b].data.cpu().numpy()     

@@ -6,7 +6,8 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from sklearn.metrics import roc_curve 
 from collections import defaultdict
-from scipy.misc import logsumexp
+from scipy.special import logsumexp
+#from scipy.misc import logsumexp
 #from librosa.display import specshow
 try:
   from postprocess import _findPhraseFromPhoneme 
