@@ -497,30 +497,38 @@ def plot_likelihood_curve(exp_dir):
 
 if __name__ == '__main__': 
   tasks = [1]
+  parser = argparse.ArgumentParser()
+  parser.add_argument('--exp_dir', '-e', type=str, default='./', help='Experiment Directory')
+  parser.add_argument('--dataset', '-d', choices=['flickr', 'mscoco2k', 'mscoco20k'], help='Dataset')
+  
+  if args.dataset == 'flickr':
+    gold_json = '../data/flickr30k/phoneme_level/flickr30k_gold_alignment.json'
+    concept2idx_file = '../data/flickr30k/concept2idx.json'
+  elif args.dataset == 'mscoco2k' or args.dataset == 'mscoco20k':
+    gold_json = '../data/mscoco/%s_gold_alignment.json' % args.dataset
+    with open('../data/mscoco/concept2idx_integer.json', 'w') as f:
+      json.dump({i:i for i in range(65)}, f, indent=4, sort_keys=True)
+
+    concept2idx_file = '../data/mscoco/concept2idx_integer.json'
+
+  with open(args.exp_dir+'model_names.txt', 'r') as f:
+    model_names = f.read().strip().split()
+
   #--------------------------------------#
   # Phone-level Word Length Distribution #
   #--------------------------------------#
   if 0 in tasks:
     fig, ax = plt.subplots(figsize=(15, 10))
-    top_classes, top_freqs = plot_word_len_distribution('../data/flickr30k/phoneme_level/flickr30k_gold_alignment.json', draw_plot=False, phone_level=True)
+    top_classes, top_freqs = plot_word_len_distribution(gold_json, draw_plot=False, phone_level=True)
     plt.plot(top_classes[:50], top_freqs[:50])
     print(np.sum(top_freqs))
     labels.append('Groundtruth')
 
-    top_classes, top_freqs = plot_word_len_distribution('../smt/exp/ibm1_phoneme_level_clustering/flickr30k_pred_alignment.json', draw_plot=False)
-    plt.plot(top_classes[:50], top_freqs[:50])
-    print(np.sum(top_freqs))
-    labels.append('SMT')
-
-    top_classes, top_freqs = plot_word_len_distribution('../nmt/exp/feb28_phoneme_level_clustering/output/alignment.json', draw_plot=False)
-    plt.plot(top_classes[:50], top_freqs[:50])
-    print(np.sum(top_freqs))
-    labels.append('NMT (Norm over concepts)')
-
-    top_classes, top_freqs = plot_word_len_distribution('../nmt/exp/feb26_normalize_over_time/output/alignment.json', draw_plot=False)
-    plt.plot(top_classes[:50], top_freqs[:50])
-    print(np.sum(top_freqs))
-    labels.append('NMT (Norm over time)')
+    for model_name in model_names:
+      pred_json = '%s_%s_pred_alignment.json' % (args.exp_dir + args.dataset, model_name) 
+      top_classes, top_freqs = plot_word_len_distribution(pred_json, draw_plot=False)
+      plt.plot(top_classes[:50], top_freqs[:50])
+      print(np.sum(top_freqs))
 
     ax.set_xticks(np.arange(0, max(top_classes[:50]), 5))
     for tick in ax.get_xticklabels():
@@ -530,155 +538,53 @@ if __name__ == '__main__':
     
     plt.xlabel('Word Length', fontsize=30) 
     plt.ylabel('Normalized Frequency', fontsize=30)
-    plt.legend(labels, fontsize=30)  
+    plt.legend(model_names, fontsize=30)  
     plt.savefig('word_len_compare.png')
     plt.close()
   #-----------------------------#
   # Phone-level Attention Plots #
   #-----------------------------#
   if 1 in tasks:
-    '''
-    exp_dir = '../../status_report_mar8th/outputs/samples/'
-    trg_idx = 1090
-    filenames_ov_time = [exp_dir+'nmt_samples_norm_ov_time/'+fn for fn in os.listdir(exp_dir+'nmt_samples_norm_ov_time/') if fn.split('.')[-2] == str(trg_idx)]
-    filenames_ov_concept = [exp_dir+'nmt_samples_norm_ov_concept/'+fn for fn in os.listdir(exp_dir+'nmt_samples_norm_ov_concept/') if fn.split('.')[-2] == str(trg_idx)]
-    
-    indices = [trg_idx]
-    
-    for fn in filenames_ov_time:
-      indices.append(fn.split('.')[-2])
-    
-    generate_nmt_attention_plots(filenames_ov_concept, 'nmt_ov_concept_')
-    generate_nmt_attention_plots(filenames_ov_time, 'nmt_ov_time_', normalize=True)
-    '''
-    # XXX
-    gold_json = '../data/mscoco/mscoco_gold_alignment_130k_power_law.json' #'../data/mscoco/mscoco_gold_alignment_power_law.json'
-    indices = [90, 190, 290, 390, 1090]
-    exp_dir = 'exp/feb_5_clusteval_20k/'
-    for pred_json in os.listdir(exp_dir):     
-      if pred_json.split('.')[-1] != 'json':
-        continue
-      
-      print(pred_json)
-      '''
+    generate_gold_alignment_plots(gold_json, indices, exp_dir + 'gold_')  
+    for model_name in model_names:
+      pred_json = '%s_%s_pred_alignment.json' % (args.exp_dir + args.dataset, model_name) 
       with open(exp_dir + pred_json, 'r') as f:
         pred_dict = json.load(f)
-      
-      with open(gold_json, 'r') as f:
-        gold_dict = json.load(f)
-
-      assert len(pred_dict) == len(gold_dict)
-      new_pred_dict = []
-      for pred, gold in zip(pred_dict, gold_dict):
-        pred['caption'] = gold['caption']
-        pred['image_concept_names'] = gold['image_concept_names']
-        new_pred_dict.append(pred)
-    
-      with open(exp_dir + pred_json, 'w') as f:
-        json.dump(new_pred_dict, f, indent=4, sort_keys=True)
-
-      print(pred_json)
-      '''
-      model_name = pred_json.split('.')[0].split('_')[-1]
-      if model_name == 'clda': 
+     
+      if model_name.split('_')[0] == 'clda': 
         log_prob = True
       else:
         log_prob = False
       generate_smt_alignprob_plots(exp_dir + pred_json, indices, exp_dir + model_name, log_prob = log_prob, T=0.1)
-    
-    generate_gold_alignment_plots(gold_json, indices, exp_dir + 'gold_')
-  #-----------------------#
-  # Phone-level ROC Plots #
-  #-----------------------#
+      
   if 2 in tasks:
-    pred_json = '../smt/exp/ibm1_phoneme_level_clustering/flickr30k_pred_alignment.json'
-    ''''../nmt/exp/feb26_normalize_over_time/output/alignment.json'
-    '../nmt/exp/feb28_phoneme_level_clustering/output/alignment.json' 
-    '''
-    gold_json = '../data/flickr30k/phoneme_level/flickr30k_gold_alignment.json'
-    concept2idx_file = '../data/flickr30k/concept2idx.json'
-    plot_avg_roc(pred_json, gold_json, concept2idx=concept2idx_file, out_file='nmt_roc')
-  #--------------------------#
-  # Phone-level F1 Histogram #
-  #--------------------------#
-  if 3 in tasks:
-    draw_plot = False
+    
     width = 0.08
-    colors = 'rcgb'
-    pred_jsons = [
-      '../smt/exp/ibm1_phoneme_level_clustering/flickr30k_pred_alignment.json',
-      '../hmm/exp/aug_31_flickr/flickr30k_pred_alignment.json', 
-      '../nmt/exp/feb26_normalize_over_time/output/alignment.json',
-      '../nmt/exp/feb28_phoneme_level_clustering/output/alignment.json'
-      ] 
-    gold_json = '../data/flickr30k/phoneme_level/flickr30k_gold_alignment.json'
-    concept2idx_file = '../data/flickr30k/concept2idx.json'
-    
-    out_files = ['smt_f1_histogram', 'hmm_f1_histogram', 'nmt_novt_histogram', 'nmt_novc_histogram']
-    # XXX
-    if not draw_plot:
-      fig, ax = plt.subplots()
-    
-    for i, (pred_json, out_file) in enumerate(zip(pred_jsons, out_files)):
-      if draw_plot:
-        plot_F1_score_histogram(pred_json, gold_json, concept2idx_file=concept2idx_file, draw_plot=draw_plot, out_file=out_file)
-      else:
-        f1_scores = plot_F1_score_histogram(pred_json, gold_json, concept2idx_file=concept2idx_file, draw_plot=draw_plot, out_file=out_file)    
-        hist, bins = np.histogram(f1_scores, bins=np.linspace(0., 1., 11), density=False)  
-        ax.bar(bins[:-1] + width * (1. / len(pred_jsons) * i - 1. / 2), hist, width / len(pred_jsons), color=colors[i])
-
-    if not draw_plot:
-      ax.set_xlabel('F1 score')
-      ax.set_ylabel('Number of concepts')
-      ax.set_title('Histogram of concept-level F1 scores')
-      ax.set_xticks(bins[:-1])
-      plt.legend(['Mixture SMT', 'HMM SMT', 'NMT (Time-normalized)', 'NMT (Concept-normalized)'], loc='best')
-      plt.savefig('f1_histogram_combined')
-      plt.close() 
-  #-----------------------------#
-  # Image-to-phone F1 Histogram #
-  #-----------------------------#
-  if 4 in tasks:
-    width = 0.08
-    # Synthetic features
-    pred_json_path = 'exp/feb_4_clusteval/' 
-    gold_json_file = '../data/mscoco/mscoco_gold_alignment_power_law.json' #'../data/mscoco/mscoco_gold_alignment_130k_power_law.json'
     draw_plot = False
-
-    #out_files = ['gaussian_hmm_vgg_f1_histogram', 'hmm_dnn_vgg16_f1_histogram', 'linear_hmm_vgg16_f1_histogram'] 
-    #gold_json = '../data/mscoco/mscoco_gold_alignment_130k_power_law.json'
-    concept2idx_file = '../data/mscoco/concept2idx_integer.json'
-    with open('../data/mscoco/concept2idx_integer.json', 'w') as f:
-      json.dump({i:i for i in range(65)}, f, indent=4, sort_keys=True)
-
-    # XXX
-    #out_files = ['gaussian_hmm_synthetic_f1_histogram', 'hmm_dnn_synthetic_f1_histogram', 'linear_hmm_synthetic_f1_histogram']
     colors = 'rcgb'
-    fig, ax = plt.subplots()
-    
-    # TODO
-    model_names = []
     hists = []
-    for pred_json_file in os.listdir(pred_json_path):
 
+    fig, ax = plt.subplots() 
+    for model_name in model_names:
+      pred_json_file = '%s_%s_pred_alignment.json' % (args.exp_dir + args.dataset, model_name) 
       if pred_json_file.split('.')[-1] != 'json':
         continue
       print(pred_json_file)
-      model_name = pred_json_file.split('_')[-1].split('.')[0] 
-      if model_name == 'gaussian':
+       
+      if model_name.split()[0] == 'gaussian':
         print(model_name)
         model_name = 'Gaussian'
-      elif model_name == 'linear' or model_name == 'two-layer':
+      elif model_name.split()[0] == 'linear' or model_name.split()[0] == 'two-layer':
         print(model_name)
         model_name = 'Neural Net'
-      elif model_name == 'clda':
+      elif model_name.split()[0] == 'clda':
         print(model_name)
         model_name = 'CorrLDA' 
       feat_name = pred_json_file.split('_')[-2]
-      if feat_name == 'vgg16':
+      if len(model_name.split('_')) > 1 and model_name.split('_')[1] == 'vgg16':
         print(feat_name)
         feat_name = 'VGG 16'
-      elif feat_name == 'res34':
+      elif len(model_name.split('_')) > 1 and model_name.split('_')[1] == 'res34':
         print(feat_name)
         feat_name = 'Res 34'
       dataset_name = pred_json_file.split('_')[-3]
@@ -705,124 +611,8 @@ if __name__ == '__main__':
       ax.legend(model_names, loc='best')
       plt.savefig(pred_json_path + 'f1_histogram_combined')
       plt.close()
-
-    # VGG 16 Features
-    '''[ 
-    '../hmm_dnn/exp/jan_15_mscoco_gaussian_momentum0.00_lr1.00000_stepscale5_gaussiansoftmax/image_phone_alignment.json',
-    '../hmm_dnn/exp/jan_18_mscoco_gaussian_momentum0.0_lr0.01_stepscale1_twolayer/image_phone_alignment.json',
-    '../hmm_dnn/exp/jan_18_mscoco_gaussian_momentum0.0_lr0.1_stepscale5_linear/image_phone_alignment.json' 
-    ]
-    pred_jsons = [
-    '../hmm_dnn/exp/jan_18_mscoco_vgg16_momentum0.00_lr0.10000_stepscale5_gaussiansoftmax/image_phone_alignment.json',
-    '../hmm_dnn/exp/jan_18_mscoco_vgg16_momentum0.0_lr0.01_stepscale1_twolayer/image_phone_iter=1_alignment.json',
-    '../hmm_dnn/exp/jan_18_mscoco_vgg16_momentum0.0_lr0.0_stepscale5_linear/image_phone_iter=1_alignment.json'
-    ]
-    colors = 'rcgb'
-    out_files = ['gaussian_hmm_vgg_f1_histogram', 'hmm_dnn_vgg16_f1_histogram', 'linear_hmm_vgg16_f1_histogram'] 
-    gold_json = '../data/mscoco/mscoco_gold_alignment_power_law.json'
-    concept2idx_file = '../data/mscoco/concept2idx.json'
-    with open('../data/mscoco/concept2idx.json', 'w') as f:
-      json.dump({i:i for i in range(65)}, f, indent=4, sort_keys=True)
-    
-    if not draw_plot:
-      fig, ax = plt.subplots()
-
-    for i, (pred_json, out_file) in enumerate(zip(pred_jsons, out_files)):
-      if draw_plot:
-        plot_F1_score_histogram(pred_json, gold_json, concept2idx_file=concept2idx_file, draw_plot=True, out_file=out_file)
-      else:
-        f1_scores = plot_F1_score_histogram(pred_json, gold_json, concept2idx_file=concept2idx_file, draw_plot=draw_plot, out_file=out_file)    
-        hist, bins = np.histogram(f1_scores, bins=np.linspace(0, 1., 11), density=False)  
-        ax.bar(bins[:-1] + width * (1. / len(pred_jsons) * i - 1. / 2), hist, width / len(pred_jsons), color=colors[i])
-    
-    if not draw_plot:
-      ax.set_xlabel('F1 score')
-      ax.set_ylabel('Number of concepts')
-      ax.set_title('Histogram of concept-level F1 scores')
-      ax.set_xticks(bins[:-1])
-      ax.set_xticklabels([str('%.1f' % v) for v in bins[:-1].tolist()]) 
-      # XXX
-      plt.legend(['Gaussian VGG', 'NN VGG', 'Linear VGG'], loc='best')
-      plt.savefig('image_phone_mscoco_vgg16_f1_histogram_combined')
-      plt.close()
-    '''
-  if 5 in tasks:
-    audio_dir = "/home/lwang114/data/flickr_audio/wavs/"
-    feat_dir = "../data/flickr30k/audio_level/"
-    utterance_idx = 0
-    plot_acoustic_features(utterance_idx, audio_dir, feat_dir, "%d_features" % utterance_idx)  
-  #--------------------------#
-  # Audio-level F1 Histogram #
-  #--------------------------#
-  if 6 in tasks:
-    draw_plot = False
-    width = 0.08
-    concept2idx_file = '../data/flickr30k/concept2idx.json'
-    gold_json = '../data/flickr30k/audio_level/flickr30k_gold_alignment.json'
-    colors = 'rcgb'
-    # MFCC features
-    pred_jsons = [
-      '../smt/exp/aug_11_segembed_gmm/flickr30k_pred_alignment_resample.json', 
-      '../hmm/exp/aug_14_flickr_mfcc/flickr30k_pred_alignment_resample.json', 
-      '../smt/exp/aug_16_gmm_mixture_5_mfcc/flickr30k_pred_alignment_resample.json',
-      '../smt/exp/aug_19_kmeans_mixture_5_mfcc/flickr30k_pred_alignment_resample.json'
-    ]
-    out_files = ['seg_gmm_mfcc_f1_histogram', 'seg_kmeans_mfcc_f1_histogram', 'gmm_mfcc_f1_histogram', 'kmeans_mfcc_f1_histogram', 'seg_hmm_mfcc_f1_histogram']
-    
-    # XXX
-    if not draw_plot:
-      fig, ax = plt.subplots()
-    
-    for i, (pred_json, out_file) in enumerate(zip(pred_jsons, out_files)):
-      if draw_plot:
-        plot_F1_score_histogram(pred_json, gold_json, concept2idx_file=concept2idx_file, draw_plot=draw_plot, out_file=out_file)
-      else:
-        f1_scores = plot_F1_score_histogram(pred_json, gold_json, concept2idx_file=concept2idx_file, draw_plot=draw_plot, out_file=out_file)    
-        hist, bins = np.histogram(f1_scores, bins=np.linspace(0., 1., 11), density=False)  
-        ax.bar(bins[:-1] + width * (1. / len(pred_jsons) * i - 1. / 2), hist, width / len(pred_jsons), color=colors[i])
-    
-    if not draw_plot:
-      ax.set_xlabel('F1 score')
-      ax.set_ylabel('Number of concepts')
-      ax.set_title('Histogram of concept-level F1 scores')
-      ax.set_xticks(bins[:-1])
-      ax.set_xticklabels([str('%.1f' % v) for v in bins[:-1].tolist()]) 
-      plt.legend(['Segmental GMM', 'Segmental HMM', 'GMM', 'KMeans'], loc='best')
-      plt.savefig('audio_f1_histogram_mfcc_combined')
-      plt.close() 
-    # Bottleneck features
-    pred_jsons = ['../smt/exp/aug_13_segembed_gmm_bn/flickr30k_pred_alignment.json',
-      '../hmm/exp/aug_15_flickr_bn/flickr30k_pred_alignment.json',
-      '../smt/exp/aug_16_gmm_mixture_5_bn/flickr30k_pred_alignment.json',
-      '../smt/exp/aug_19_kmeans_mixture_5_bn/flickr30k_pred_alignment.json'
-    ]
-    out_files = ['seg_gmm_bn_f1_histogram', 'seg_hmm_bn_f1_histogram', 'gmm_bn_f1_histogram', 'kmeans_bn_f1_histogram']
-    
-    # XXX
-    if not draw_plot:
-      fig, ax = plt.subplots()
-    
-    for i, (pred_json, out_file) in enumerate(zip(pred_jsons, out_files)):
-      if draw_plot:
-        plot_F1_score_histogram(pred_json, gold_json, concept2idx_file=concept2idx_file, draw_plot=draw_plot, out_file=out_file)
-      else:
-        f1_scores = plot_F1_score_histogram(pred_json, gold_json, concept2idx_file=concept2idx_file, draw_plot=draw_plot, out_file=out_file)    
-        hist, bins = np.histogram(f1_scores, bins=np.linspace(0., 1., 11), density=False)  
-        ax.bar(bins[:-1] + width * (1. / len(pred_jsons) * i - 1. / 2), hist, width / len(pred_jsons), color=colors[i])
-     
-    if not draw_plot:
-      ax.set_xlabel('F1 score')
-      ax.set_ylabel('Percent of concepts')
-      ax.set_title('Histogram of concept-level F1 scores')
-      ax.set_xticks(bins[:-1])
-      ax.set_xticklabels([str('%.1f' % v) for v in bins[:-1].tolist()]) 
-      plt.legend(['Segmental GMM', 'Segmental HMM', 'GMM', 'KMeans'], loc='best')
-      plt.savefig('audio_f1_histogram_bn_combined')
-      plt.close()
-  if 7 in tasks:
+  if 3 in tasks:
     k = 500
-    top_classes, _ = plot_img_concept_distribution('../data/flickr30k/phoneme_level/flickr30k_gold_alignment.json', '../data/flickr30k/concept2idx.json', cutoff=k)
+    top_classes, _ = plot_img_concept_distribution(gold_json, concept2idx_file, cutoff=k)
     with open('top_%d_concept_names.txt' % k, 'w') as f:
       f.write('\n'.join(top_classes))
-  if 8 in tasks:
-    plot_likelihood_curve('exp/feb_5_likelihoods/')
