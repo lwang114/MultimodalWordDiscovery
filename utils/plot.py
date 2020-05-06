@@ -7,8 +7,8 @@ import matplotlib.pyplot as plt
 from sklearn.metrics import roc_curve 
 from collections import defaultdict
 from scipy.special import logsumexp
-#from scipy.misc import logsumexp
-#from librosa.display import specshow
+import argparse
+
 try:
   from postprocess import _findPhraseFromPhoneme 
   from clusteval import _findWords, boundary_retrieval_metrics  
@@ -139,7 +139,11 @@ def plot_word_len_distribution(json_file, out_file='word_len_distribution', cuto
     concepts = sorted(p['image_concepts'])
       
     if phone_level:
-      sent = p['caption']
+      if 'caption' in p:
+        sent = p['caption']
+      else:
+        sent = [str(i) for i in p['alignment']]
+
       phrases, concept_indices = _findPhraseFromPhoneme(sent, ali)
       for i, ph in enumerate(phrases):
         if concepts[concept_indices[i]] == NULL or concepts[concept_indices[i]] == END:
@@ -280,7 +284,7 @@ def generate_gold_alignment_plots(in_file, indices=None, out_dir=''):
     for j, a_j in enumerate(alignment):
       alignment_matrix[j, a_j] = 1
     
-    plot_attention(sent, concepts, alignment_matrix, '%s%s.png' % (out_dir, str(index)))
+    plot_attention(sent, concepts, alignment_matrix, '%s_%s.png' % (out_dir, str(index)))
 
 def plot_roc(pred_file, gold_file, class_name, out_file=None, draw_plot=True):
   fp = open(pred_file, 'r')
@@ -496,11 +500,12 @@ def plot_likelihood_curve(exp_dir):
   plt.savefig(exp_dir + 'likelihood_curves', loc='best')
 
 if __name__ == '__main__': 
-  tasks = [1]
+  tasks = [2]
   parser = argparse.ArgumentParser()
   parser.add_argument('--exp_dir', '-e', type=str, default='./', help='Experiment Directory')
   parser.add_argument('--dataset', '-d', choices=['flickr', 'mscoco2k', 'mscoco20k'], help='Dataset')
-  
+  args = parser.parse_args()
+
   if args.dataset == 'flickr':
     gold_json = '../data/flickr30k/phoneme_level/flickr30k_gold_alignment.json'
     concept2idx_file = '../data/flickr30k/concept2idx.json'
@@ -508,8 +513,9 @@ if __name__ == '__main__':
     gold_json = '../data/mscoco/%s_gold_alignment.json' % args.dataset
     with open('../data/mscoco/concept2idx_integer.json', 'w') as f:
       json.dump({i:i for i in range(65)}, f, indent=4, sort_keys=True)
-
     concept2idx_file = '../data/mscoco/concept2idx_integer.json'
+  else:
+    raise ValueError('Dataset not specified or not valid')
 
   with open(args.exp_dir+'model_names.txt', 'r') as f:
     model_names = f.read().strip().split()
@@ -519,16 +525,15 @@ if __name__ == '__main__':
   #--------------------------------------#
   if 0 in tasks:
     fig, ax = plt.subplots(figsize=(15, 10))
+    print('Ground Truth')
     top_classes, top_freqs = plot_word_len_distribution(gold_json, draw_plot=False, phone_level=True)
     plt.plot(top_classes[:50], top_freqs[:50])
-    print(np.sum(top_freqs))
-    labels.append('Groundtruth')
 
     for model_name in model_names:
       pred_json = '%s_%s_pred_alignment.json' % (args.exp_dir + args.dataset, model_name) 
+      print(model_name)
       top_classes, top_freqs = plot_word_len_distribution(pred_json, draw_plot=False)
-      plt.plot(top_classes[:50], top_freqs[:50])
-      print(np.sum(top_freqs))
+      plt.plot(top_classes[:50], top_freqs[:50])      
 
     ax.set_xticks(np.arange(0, max(top_classes[:50]), 5))
     for tick in ax.get_xticklabels():
@@ -538,25 +543,31 @@ if __name__ == '__main__':
     
     plt.xlabel('Word Length', fontsize=30) 
     plt.ylabel('Normalized Frequency', fontsize=30)
-    plt.legend(model_names, fontsize=30)  
+    plt.legend(['Ground Truth'] + model_names, fontsize=30)  
     plt.savefig('word_len_compare.png')
     plt.close()
   #-----------------------------#
   # Phone-level Attention Plots #
   #-----------------------------#
   if 1 in tasks:
-    generate_gold_alignment_plots(gold_json, indices, exp_dir + 'gold_')  
+    
+    T = 0.1
+    indices = list(range(100))[::10]
+
+    generate_gold_alignment_plots(gold_json, indices, args.exp_dir + 'gold')  
     for model_name in model_names:
       pred_json = '%s_%s_pred_alignment.json' % (args.exp_dir + args.dataset, model_name) 
-      with open(exp_dir + pred_json, 'r') as f:
+      with open(pred_json, 'r') as f:
         pred_dict = json.load(f)
      
       if model_name.split('_')[0] == 'clda': 
         log_prob = True
       else:
         log_prob = False
-      generate_smt_alignprob_plots(exp_dir + pred_json, indices, exp_dir + model_name, log_prob = log_prob, T=0.1)
-      
+      generate_smt_alignprob_plots(pred_json, indices, args.exp_dir + model_name, log_prob = log_prob, T=T)
+  #--------------------#
+  # F1-score Histogram #
+  #--------------------#
   if 2 in tasks:
     
     width = 0.08
@@ -566,10 +577,8 @@ if __name__ == '__main__':
 
     fig, ax = plt.subplots() 
     for model_name in model_names:
-      pred_json_file = '%s_%s_pred_alignment.json' % (args.exp_dir + args.dataset, model_name) 
-      if pred_json_file.split('.')[-1] != 'json':
-        continue
-      print(pred_json_file)
+      pred_json = '%s_%s_pred_alignment.json' % (args.exp_dir + args.dataset, model_name) 
+      print(pred_json)
        
       if model_name.split()[0] == 'gaussian':
         print(model_name)
@@ -580,22 +589,22 @@ if __name__ == '__main__':
       elif model_name.split()[0] == 'clda':
         print(model_name)
         model_name = 'CorrLDA' 
-      feat_name = pred_json_file.split('_')[-2]
+      feat_name = pred_json.split('_')[-2]
       if len(model_name.split('_')) > 1 and model_name.split('_')[1] == 'vgg16':
         print(feat_name)
         feat_name = 'VGG 16'
       elif len(model_name.split('_')) > 1 and model_name.split('_')[1] == 'res34':
         print(feat_name)
         feat_name = 'Res 34'
-      dataset_name = pred_json_file.split('_')[-3]
+      dataset_name = pred_json.split('_')[-3]
       model_names.append(' '.join([model_name, feat_name]))
 
       if draw_plot:
-        out_file = pred_json_file.split('.')[0] + '_f1_score_histogram'
-        plot_F1_score_histogram(pred_json_path + pred_json_file, gold_json_file, concept2idx_file=concept2idx_file, draw_plot=True, out_file=out_file)
+        out_file = pred_json.split('.')[0] + '_f1_score_histogram'
+        plot_F1_score_histogram(pred_json, gold_json, concept2idx_file=concept2idx_file, draw_plot=True, out_file=out_file)
       else:
-        out_file = pred_json_file.split('.')[0] + '_f1_score_histogram'
-        f1_scores = plot_F1_score_histogram(pred_json_path + pred_json_file, gold_json_file, concept2idx_file=concept2idx_file, draw_plot=draw_plot, out_file=out_file)    
+        out_file = pred_json.split('.')[0] + '_f1_score_histogram'
+        f1_scores = plot_F1_score_histogram(pred_json, gold_json, concept2idx_file=concept2idx_file, draw_plot=draw_plot, out_file=out_file)    
         hist, bins = np.histogram(f1_scores, bins=np.linspace(0, 1., 11), density=False)  
         hists.append(hist)
       
@@ -609,7 +618,7 @@ if __name__ == '__main__':
       ax.set_xticks(bins[:-1])
       ax.set_xticklabels([str('%.1f' % v) for v in bins[:-1].tolist()])
       ax.legend(model_names, loc='best')
-      plt.savefig(pred_json_path + 'f1_histogram_combined')
+      plt.savefig(args.exp_dir + 'f1_histogram_combined')
       plt.close()
   if 3 in tasks:
     k = 500
