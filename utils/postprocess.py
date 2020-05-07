@@ -177,16 +177,16 @@ def alignment_to_word_units(alignment_file, phone_corpus,
   phn_units = []
   # XXX
   for align_info, a_sent, v_sent in zip(alignments, a_corpus, v_corpus):
-    if len(concept2id) > 0:
-      image_concepts = [concept2id[c] for c in v_sent]
-      print(image_concepts)
-    elif 'concept_alignment' in align_info:
+    if 'concept_alignment' in align_info:
       concept_alignment = align_info['concept_alignment']
       image_concepts = []
       for i in concept_alignment:
         if i != i_prev:
           image_concepts.append(concept_alignment[i])
           i_prev = i
+    elif len(concept2id) > 0:
+      image_concepts = [concept2id[c] for c in v_sent]
+      print(image_concepts)
     else:
       image_concepts = align_info['image_concepts']
     alignment = align_info['alignment']
