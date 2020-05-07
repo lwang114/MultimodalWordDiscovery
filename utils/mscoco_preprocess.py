@@ -811,6 +811,47 @@ class MSCOCO_Preprocessor():
         for i in test_indices:
           f.write(labels[i]) 
 
+  def to_dpseg_text(self, phone_corpus_file, gold_align_file, single_letter_phones, out_file_prefix='mscoco_deseg'):
+    with open(gold_align_file, 'r') as f:
+      gold_aligns = json.load(f)
+    f = open(phone_corpus_file, 'r')
+    a_corpus = []
+    phone_map = {}
+    n_phn = 0
+    for line in f:
+      a_sent = line.strip().split()
+      for phn in a_sent:
+        if phn[-1] >= '0' and phn[-1] <= '9':
+          phn = phn[:-1]
+        
+        if phn not in phone_map:
+          phone_map[phn] = single_letter_phones[n_phn]
+          n_phn += 1
+          if n_phn >= len(single_letter_phones):
+            raise ValueError('Number of phone categories exceed limit; try reduce the phone set')
+      a_corpus.append(a_sent)
+      
+    f.close()
+
+    a_corpus_segmented = []
+    for i_ex, (a_sent, align_info) in enumerate(zip(a_corpus, gold_aligns)):
+      alignment = align_info['alignment']
+      cur_idx = alignment[0]
+      a_sent_segmented = ''
+      for phn, align_idx in zip(a_sent, alignment):
+        if phn[-1] >= '0' and phn[-1] <= '9':
+          phn = phn[:-1]
+        if align_idx != cur_idx:
+          a_sent_segmented += ' ' + phone_map[phn]
+          cur_idx = align_idx
+        else:
+          a_sent_segmented += phone_map[phn]
+      a_corpus_segmented.append(a_sent_segmented)
+    
+    with open(out_file_prefix+'.txt', 'w') as f:
+      f.write('\n'.join(a_corpus_segmented)) 
+ 
+
 def random_draw(p):
   x = random.random()
   n_c = len(p)

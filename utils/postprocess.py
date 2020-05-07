@@ -177,21 +177,14 @@ def alignment_to_word_units(alignment_file, phone_corpus,
   phn_units = []
   # XXX
   for align_info, a_sent, v_sent in zip(alignments, a_corpus, v_corpus):
-    if 'concept_alignment' in align_info:
-      concept_alignment = align_info['concept_alignment']
-      image_concepts = []
-      for i in concept_alignment:
-        if i != i_prev:
-          image_concepts.append(concept_alignment[i])
-          i_prev = i
-    elif len(concept2id) > 0:
+    if len(concept2id) > 0:
       image_concepts = [concept2id[c] for c in v_sent]
-      print(image_concepts)
+      # print(image_concepts)
     else:
       image_concepts = align_info['image_concepts']
     alignment = align_info['alignment']
     pair_id = 'pair_' + str(align_info['index'])
-    print(pair_id) 
+    # print(pair_id) 
     prev_align_idx = -1
     start = 0
     for t, align_idx in enumerate(alignment):
@@ -232,10 +225,28 @@ def alignment_to_word_classes(alignment_file, phone_corpus,
   
   word_units = {}
   for align_info, a_sent in zip(alignments, a_corpus):
-    image_concepts = align_info['image_concepts']
-    alignment = align_info['alignment']
     pair_id = 'pair_' + str(align_info['index'])
-    print(pair_id) 
+    alignment = align_info['alignment']
+    
+    # Cases: 
+    # If the concept labels are not available to the system, use the concept alignment
+    # Else use the concept labels
+    if 'concept_alignment' in align_info:
+      n_concepts = max(alignment) + 1
+      concept_alignment = align_info['concept_alignment']
+      
+      print(concept_alignment)
+      image_concepts = [-1]*n_concepts 
+      i_prev = -1
+      for c, i in zip(concept_alignment, alignment):
+        if i != i_prev:
+          image_concepts[i] = c
+          i_prev = i
+      print(image_concepts)
+    else:
+      image_concepts = align_info['image_concepts']
+    
+    # print(pair_id) 
     prev_align_idx = -1
     start = 0
     if len(alignment) != len(a_sent):
@@ -245,7 +256,7 @@ def alignment_to_word_classes(alignment_file, phone_corpus,
         print('Extend the alignment by %d ...' % gap)
         last_align_idx = alignment[-1]
         alignment.extend([last_align_idx]*gap)
-        print(len(a_sent), len(alignment))
+        # print(len(a_sent), len(alignment))
     for t, (align_idx, phn) in enumerate(zip(alignment, a_sent)):
       if t == 0:
         prev_align_idx = align_idx
