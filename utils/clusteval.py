@@ -231,7 +231,7 @@ def word_IoU(pred, gold):
   return iou / n
 
 # Boundary retrieval metrics for word segmentation
-def segmentation_retrieval_metrics(pred, gold, tolerance=4):
+def segmentation_retrieval_metrics(pred, gold, tolerance=1):
   assert len(pred) == len(gold)
   n = len(pred)
   prec = 0.
@@ -293,141 +293,45 @@ def _findWords(alignment):
   return boundaries
 
 if __name__ == '__main__':
-  tasks = [3]
-  #------------------------#
-  # Cluster Purity Metrics #
-  #------------------------#
-  if 0 in tasks:
-    data_dir = '../data/'
-    exp_dir = '../smt/exp/ibm1_phoneme_level_clustering/' 
-    #'../nmt/exp/feb28_phoneme_level_clustering/output/'
-    pred_align_file = exp_dir + 'flickr30k_pred_alignment.json' 
-    'alignment.json' 
-    #'mscoco/mscoco_val_pred_alignment.json'
-    gold_align_file = data_dir + 'flickr30k/phoneme_level/flickr30k_gold_alignment.json'
-    #'mscoco/mscoco_val_gold_alignment.json'
-    
-    clsts = []
-    classes = []
-    with open(pred_align_file, 'r') as f:   
-      clsts_info = json.load(f)
-    for c in clsts_info:
-      clsts.append(c['alignment'])
+  tasks = [2]
+  parser = argparse.ArgumentParser()
+  parser.add_argument('--exp_dir', '-e', type=str, default='./', help='Experiment Directory')
+  parser.add_argument('--dataset', '-d', choices=['flickr', 'mscoco2k', 'mscoco20k'], help='Dataset')
+  args = parser.parse_args()
 
-    with open(gold_align_file, 'r') as f:
-      classes_info = json.load(f) 
-    for c in classes_info:
-      classes.append(c['alignment'])
+  if args.dataset == 'flickr':
+    gold_json = '../data/flickr30k/phoneme_level/flickr30k_gold_alignment.json'
+    concept2idx_file = '../data/flickr30k/concept2idx.json'
+  elif args.dataset == 'mscoco2k' or args.dataset == 'mscoco20k':
+    gold_json = '../data/mscoco/%s_gold_alignment.json' % args.dataset
+    with open('../data/mscoco/concept2idx_integer.json', 'w') as f:
+      json.dump({i:i for i in range(65)}, f, indent=4, sort_keys=True)
+    concept2idx_file = '../data/mscoco/concept2idx_integer.json'
+  else:
+    raise ValueError('Dataset not specified or not valid')
 
-    gold_clst_file = data_dir + 'flickr30k/phoneme_level/flickr30k_gold_clusters.json'
-    pred_clst_file = exp_dir + 'flickr30k_pred_clusters.json'
+  with open(args.exp_dir+'model_names.txt', 'r') as f:
+    model_names = f.read().strip().split()
 
-    #'cluster.json' 
-    
-    pred_clsts = []
-    gold_clsts = []
-    with open(pred_clst_file, 'r') as f:
-      pred_clsts = json.load(f)
-      
-    with open(gold_clst_file, 'r') as f:
-      gold_clsts = json.load(f)
-     
-    print(local_cluster_purity(clsts, classes))
-    print(cluster_purity(clsts_info, classes_info))
-    retrieval_metrics(pred_clsts, gold_clsts)
-  #-------------------#
-  # Retrieval Metrics #
-  #-------------------#
-  if 1 in tasks:
-    pred_seg_file = "../data/flickr30k/audio_level/flickr_landmarks_env.npz" 
-    gold_seg_file = "../data/flickr30k/audio_level/flickr30k_gold_segmentation_mfcc_htk.npy"
-    pred_seg = np.load(pred_seg_file)
-    gold_seg = np.load(gold_seg_file, encoding="latin1")
-    seg_keys = sorted(pred_seg, key=lambda x:int(x.split('_')[-1]))
-    new_pred_seg = [pred_seg[k] for k in seg_keys]
-    pred_seg = []
-    for seg in new_pred_seg:
-      seg_ = []
-      for start, end in zip(seg[:-1].tolist(), seg[1:].tolist()):
-        seg_.append([start, end])
-      pred_seg.append(np.array(seg_))
-    np.save("flickr_pred_syllable_segmentation.npy", pred_seg)
-    segmentation_retrieval_metrics(pred_seg, gold_seg)
-  if 2 in tasks:
-    pred_align_file = "../comparison_models/exp/aug1_mkmeans/flickr30k_pred_alignment.json"
-    gold_align_file = "../data/flickr30k/audio_level/flickr30k_gold_alignment.json"
-    concept2idx_file = "../data/flickr30k/concept2idx.json"
-    with open(concept2idx_file, "r") as f:
-      concept2idx = json.load(f)
-    with open(pred_align_file, "r") as f:
-      pred_aligns = json.load(f)
-    with open(gold_align_file, "r") as f:
-      gold_aligns = json.load(f)
-    
-    retrieval_metrics(pred_aligns, gold_aligns, concept2idx)
   #----------------------------------#
   # Clustering and Alignment Metrics #
   #----------------------------------#
-  if 3 in tasks:
-    '''
-    pred_alignment_files = [
-    '../hmm_dnn/exp/jan_18_mscoco_vgg16_momentum0.00_lr0.10000_stepscale5_gaussiansoftmax/image_phone_alignment.json', 
-    '../hmm_dnn/exp/jan_20_mscoco_gaussian_momentum0.0_lr0.01_stepscale0.001_twolayer/image_phone_iter=10_alignment.json',
-    '../hmm_dnn/exp/jan_18_mscoco_vgg16_momentum0.0_lr0.01_stepscale1_twolayer/image_phone_iter=1_alignment.json',
-    '../hmm_dnn/exp/jan_18_mscoco_gaussian_momentum0.0_lr0.1_stepscale5_linear/image_phone_alignment.json',
-    '../hmm_dnn/exp/jan_18_mscoco_vgg16_momentum0.0_lr0.0_stepscale5_linear/image_phone_iter=1_alignment.json'
-    ]
+  if 0 in tasks:
+    for model_name in model_names:
+      pred_json = '%s_%s_pred_alignment.json' % (args.exp_dir + args.dataset, model_name) 
+      clsts = []
+      classes = []
+      with open(pred_json, 'r') as f:   
+        pred_dict = json.load(f)
+
+      with open(gold_json, 'r') as f:
+        gold_dict = json.load(f)
     
-    data_dir = '../data/mscoco/'
-    data_info_file = data_dir + 'mscoco_subset_concept_info_power_law.json'
-    concept_info_file = data_dir + 'mscoco_subset_concept_counts_power_law.json'
-    gold_alignment_with_names_file = data_dir + 'mscoco_gold_alignment_power_law.json'
-    gold_alignment_file = data_dir + 'mscoco_gold_alignment_power_law.json'    
-    for i, pred_alignment_file in enumerate(pred_alignment_files):
-      print(pred_alignment_file)
-      with open(pred_alignment_file, 'r') as f:
-        pred_info = json.load(f)
-        
-      with open(gold_alignment_file, 'r') as f:
-        gold_info = json.load(f)
-
-      pred, gold = [], []
-      for p, g in zip(pred_info, gold_info):
-        pred.append(p['image_concepts'])
-        gold.append(g['image_concepts'])
-
-      
-      cluster_confusion_matrix(gold, pred, file_prefix='image_confusion_matrix')
-      cluster_confusion_matrix(gold, pred, alignment=gold_info, file_prefix='audio_confusion_matrix')
-
-      boundary_retrieval_metrics(pred_info, gold_info, debug=False)
-    '''     
-    # TODO
-    pred_alignment_files = [
-    '../hmm_dnn/exp/jan_20_flickr_vgg16_top100_momentum0.00_lr0.10000_stepscale1_gaussiansoftmax/image_phone_alignment.json',
-    '../hmm_dnn/exp/jan_21_flickr_vgg16_top100_momentum0.00_lr0.01000_stepscale1_linear/image_phone_alignment.json',
-    '../hmm_dnn/exp/jan_21_flickr_vgg16_top100_momentum0.00_lr0.01000_stepscale1_two_layers/image_phone_alignment.json' 
-    ]
-    data_dir = '../data/flickr30k/phoneme_level/'    
-    gold_alignment_file = '../data/flickr30k/phoneme_level/flickr30k_no_NULL_top_100_gold_alignment.json'
-    concept2idx_file = '../data/flickr30k/concept2idx.json' 
-
-    for i, pred_alignment_file in enumerate(pred_alignment_files):
-      print(pred_alignment_file)
-      with open(pred_alignment_file, 'r') as f:
-        pred_info = json.load(f)
-        
-      with open(gold_alignment_file, 'r') as f:
-        gold_info = json.load(f)
-
-      with open(concept2idx_file, 'r') as f:
-        concept2idx = json.load(f)
-       
-      pred, gold = [], []
-      for p, g in zip(pred_info, gold_info):
+      for p, g in zip(pred_dict, gold_dict):
         pred.append(p['image_concepts'])
         gold.append([concept2idx[c] for c in g['image_concepts']])
  
-      cluster_confusion_matrix(gold, pred, file_prefix='image_confusion_matrix')
-      cluster_confusion_matrix(gold, pred, alignment=gold_info, file_prefix='audio_confusion_matrix')
-      boundary_retrieval_metrics(pred_info, gold_info, debug=False)
+      cluster_confusion_matrix(gold, pred, file_prefix='%s_%s_image_confusion_matrix' % (args.exp_dir + args.dataset, model_name))
+      cluster_confusion_matrix(gold, pred, alignment=gold_dict, file_prefix='%s_%s_audio_confusion_matrix' % (args.exp_dir + args.dataset, model_name))
+
+      boundary_retrieval_metrics(pred_dict, gold_dict, debug=False)
