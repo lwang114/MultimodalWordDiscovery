@@ -8,6 +8,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import os
+import argparse
 
 DEBUG = False
 NULL = 'NULL'
@@ -293,7 +294,7 @@ def _findWords(alignment):
   return boundaries
 
 if __name__ == '__main__':
-  tasks = [2]
+  tasks = [0]
   parser = argparse.ArgumentParser()
   parser.add_argument('--exp_dir', '-e', type=str, default='./', help='Experiment Directory')
   parser.add_argument('--dataset', '-d', choices=['flickr', 'mscoco2k', 'mscoco20k'], help='Dataset')
@@ -319,17 +320,20 @@ if __name__ == '__main__':
   if 0 in tasks:
     for model_name in model_names:
       pred_json = '%s_%s_pred_alignment.json' % (args.exp_dir + args.dataset, model_name) 
-      clsts = []
-      classes = []
       with open(pred_json, 'r') as f:   
         pred_dict = json.load(f)
 
       with open(gold_json, 'r') as f:
         gold_dict = json.load(f)
-    
+      
+      with open(concept2idx_file, 'r') as f:
+        concept2idx = json.load(f)
+
+      pred = []
+      gold = []
       for p, g in zip(pred_dict, gold_dict):
         pred.append(p['image_concepts'])
-        gold.append([concept2idx[c] for c in g['image_concepts']])
+        gold.append([concept2idx[str(c)] for c in g['image_concepts']])
  
       cluster_confusion_matrix(gold, pred, file_prefix='%s_%s_image_confusion_matrix' % (args.exp_dir + args.dataset, model_name))
       cluster_confusion_matrix(gold, pred, alignment=gold_dict, file_prefix='%s_%s_audio_confusion_matrix' % (args.exp_dir + args.dataset, model_name))
