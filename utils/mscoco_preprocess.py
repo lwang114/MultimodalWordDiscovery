@@ -851,7 +851,6 @@ class MSCOCO_Preprocessor():
     with open(out_file_prefix+'.txt', 'w') as f:
       f.write('\n'.join(a_corpus_segmented)) 
  
-
 def random_draw(p):
   x = random.random()
   n_c = len(p)
@@ -878,7 +877,7 @@ def is_nonspeech(phn):
   return 0
 
 if __name__ == '__main__':
-  tasks = [2]
+  tasks = [5]
   instance_file = 'annotations/instances_train2014.json'
   #'annotations/instances_val2014.json'
   caption_file = 'annotations/captions_train2014.json' 
@@ -910,16 +909,21 @@ if __name__ == '__main__':
     file_prefix = 'mscoco_subset_%dk' % (int((max_num_per_class * 65) / 1000)) 
     json_file = '../data/mscoco/%s_phone_power_law_info.json' % file_prefix
     preproc.extract_phone_info(json_file, '%s_subword_level_power_law' % file_prefix)
-  if 2 in tasks:
-    
+  if 2 in tasks: 
     data_info_file = '../data/mscoco/mscoco2k_phone_info.json'
     concept_info_file = '../data/mscoco/mscoco_subset_concept_counts_power_law.json'
     # preproc.create_gold_alignment(data_info_file, concept2idx_file, out_file='../data/mscoco/mscoco_gold_alignment_power_law.json')
-    
     # data_info_file = '../data/mscoco/mscoco_subset_130k_phone_power_law_info.json'
     concept2idx_file = '../data/mscoco/concept2idx.json' 
   if 3 in tasks:
     preproc.to_xnmt_text('../data/mscoco/mscoco_subset_subword_level_power_law.txt', 'mscoco_subset_subword_level_power_law.txt')
   if 4 in tasks:
     data_info_file = '../data/mscoco/mscoco_subset_130k_phone_power_law_info.json'
-    preproc.json_to_text_gclda(data_info_file, text_file_prefix='../data/mscoco/gclda_20k') 
+    preproc.json_to_text_gclda(data_info_file, text_file_prefix='../data/mscoco/gclda_20k')
+  if 5 in tasks:
+    data_dir = '../data/mscoco/'
+    speech_feat_file = data_dir + 'mscoco2k_force_align.txt'
+    gold_alignment_file = data_dir + 'mscoco2k_gold_alignment.json'
+    out_file_prefix = data_dir + 'mscoco2k_force_align_segmented'
+    phones = '1234567890!@#$%^&*()_+qwertyuiop[]\{}|asdfghjkl;:zxcvbnm,./<>?' 
+    preproc.to_dpseg_text(speech_feat_file, gold_alignment_file, phones, out_file_prefix)
