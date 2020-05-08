@@ -468,7 +468,7 @@ def plot_F1_score_histogram(pred_file, gold_file, concept2idx_file, draw_plot=Fa
   print('Top.5 discovered concepts:')
   n_top = 0
   for c in concept_order.tolist():
-    if count_concepts[concept2idx[c]] < 10:
+    if count_concepts[c] < 10:
       continue
     n_top += 1
     print(concept_names[c], f1_scores[c])
@@ -477,8 +477,8 @@ def plot_F1_score_histogram(pred_file, gold_file, concept2idx_file, draw_plot=Fa
 
   print('Top.5 difficult concepts:')
   n_top = 0
-  for c in concept_order.tolist()[-5:]:
-    if count_concepts[concept2idx[c]] < 10:
+  for c in concept_order.tolist()[::-1]:
+    if count_concepts[c] < 10:
       continue
     n_top += 1
     print(concept_names[c], f1_scores[c])
@@ -611,7 +611,6 @@ if __name__ == '__main__':
         print(feat_name)
         feat_name = 'Res 34'
       dataset_name = pred_json.split('_')[-3]
-      model_names.append(' '.join([model_name, feat_name]))
 
       if draw_plot:
         out_file = pred_json.split('.')[0] + '_f1_score_histogram'
