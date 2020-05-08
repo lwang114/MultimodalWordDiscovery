@@ -422,6 +422,7 @@ def plot_F1_score_histogram(pred_file, gold_file, concept2idx_file, draw_plot=Fa
 
   # For each concept, compute a concept F1 score by converting the alignment to a binary vector
   f1_scores = np.zeros((n_c,))
+  count_concepts = np.zeros((n_c,))
   # XXX
   for i_c, c in enumerate(concept_names):
     pred_c = []
@@ -433,7 +434,8 @@ def plot_F1_score_histogram(pred_file, gold_file, concept2idx_file, draw_plot=Fa
       # Skip if the concept is not in the current image-caption pair
       if str(c) not in concepts:
         continue
-
+      
+      count_concepts[i_c] += 1  
       p_ali = p['alignment']
       g_ali = g['alignment'] 
       p_ali_c = []
@@ -463,13 +465,25 @@ def plot_F1_score_histogram(pred_file, gold_file, concept2idx_file, draw_plot=Fa
  
   concept_order = np.argsort(-f1_scores)
   print(out_file)
-  print('Top.5 discovered concepts:', )
-  for c in concept_order.tolist()[:5]:
+  print('Top.5 discovered concepts:')
+  n_top = 0
+  for c in concept_order.tolist():
+    if count_concepts[concept2idx[c]] < 10:
+      continue
+    n_top += 1
     print(concept_names[c], f1_scores[c])
+    if n_top >= 5:
+      break
 
-  print('Top.5 difficult concepts:', )
+  print('Top.5 difficult concepts:')
+  n_top = 0
   for c in concept_order.tolist()[-5:]:
+    if count_concepts[concept2idx[c]] < 10:
+      continue
+    n_top += 1
     print(concept_names[c], f1_scores[c])
+    if n_top >= 5:
+      break
 
   # Compute the F1 histogram
   if draw_plot:
