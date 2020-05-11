@@ -25,20 +25,20 @@ if 0 in tasks:
     concept_corpus = datapath + '%s_image_captions.txt' % args.dataset
     concept2id_file = datapath + 'concept2idx.json'
     gold_alignment_file = datapath + '%s_gold_alignment.json' % args.dataset
-    with open(args.exp_dir+'model_names.txt', 'r') as f:
-      model_names = f.read().strip().split()
-    pred_alignment_files = ['%s/%s_%s_pred_alignment.json' % (args.exp_dir, args.dataset, model_name) for model_name in model_names]
   elif args.dataset == 'flickr':
     datapath = '../data/flickr30k/'
     phone_corpus = datapath + 'phoneme_level/src_flickr30k.txt'
     concept_corpus = datapath + 'phoneme_level/trg_flickr30k.txt'
     concept2id_file = None
-    gold_alignment_file = datapath + 'phoneme_level/%s_gold_alignment.json' % args.dataset
-    # TODO Make this more general 
-    model_names = ['mixture', 'hmm', 'nmt-novt', 'nmt-novc']
-    pred_alignment_files = ['../smt/exp/ibm1_phoneme_level_clustering/flickr30k_pred_alignment.json', '../hmm/exp/aug_31_flickr/flickr30k_pred_alignment.json', '../nmt/exp/feb26_normalize_over_time/output/alignment.json', '../nmt/exp/feb28_phoneme_level_clustering/output/alignment.json']
+    gold_alignment_file = datapath + 'phoneme_level/%s30k_gold_alignment.json' % args.dataset
+    # model_names = ['mixture', 'hmm', 'nmt-novt', 'nmt-novc']
+    # pred_alignment_files = ['../smt/exp/ibm1_phoneme_level_clustering/flickr30k_pred_alignment.json', '../hmm/exp/aug_31_flickr/flickr30k_pred_alignment.json', '../nmt/exp/feb26_normalize_over_time/output/alignment.json', '../nmt/exp/feb28_phoneme_level_clustering/output/alignment.json']
     
+  with open(args.exp_dir+'model_names.txt', 'r') as f:
+    model_names = f.read().strip().split()
+  pred_alignment_files = ['%s/%s_%s_pred_alignment.json' % (args.exp_dir, args.dataset, model_name) for model_name in model_names]
   alignment_to_word_units(gold_alignment_file, phone_corpus, concept_corpus, word_unit_file='tdev2/WDE/share/%s_word_units.wrd' % args.dataset, phone_unit_file='tdev2/WDE/share/%s_phone_units.phn' % args.dataset, include_null=True, concept2id_file=concept2id_file)
+  
   for i, (model_name, pred_alignment_file) in enumerate(zip(model_names, pred_alignment_files)):
     discovered_word_file = 'tdev2/WDE/share/discovered_words_%s_%s.class' % (args.dataset, model_name)
     alignment_to_word_classes(pred_alignment_file, phone_corpus, word_class_file=discovered_word_file, include_null=True)
@@ -58,11 +58,8 @@ if 1 in tasks:
   gold = Gold(wrd_path=wrd_path, 
                 phn_path=phn_path) 
   
-  if args.dataset == 'mscoco2k' or args.dataset == 'mscoco20k':
-    with open(args.exp_dir+'model_names.txt', 'r') as f:
-      model_names = f.read().strip().split()
-  else:
-    model_names = ['enriched'] #['nmt-novt', 'nmt-novc']
+  with open(args.exp_dir+'model_names.txt', 'r') as f:
+    model_names = f.read().strip().split()
   disc_clsfiles = ['tdev2/WDE/share/discovered_words_%s_%s.class' % (args.dataset, model_name) for model_name in model_names]
 
   for model_name, disc_clsfile in zip(model_names, disc_clsfiles):

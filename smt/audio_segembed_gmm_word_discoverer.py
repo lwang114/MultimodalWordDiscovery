@@ -103,13 +103,16 @@ class SegEmbedGMMWordDiscoverer:
         landmarks = np.load(landmarkFile)
         #XXX XXX
         for lm_id in sorted(landmarks, key=lambda x:int(x.split('_')[-1])):
-          lm = np.insert(landmarks[lm_id], 0, 0)
-          self.landmarks.append(lm)
+          lm = landmarks[lm_id]
+          if lm[0] != 0:
+            self.landmarks.append(np.insert(lm, 0, 0))
+          else:
+            self.landmarks.append(lm)
+
           segmentation = []
           for b in lm:
             segmentation.append(b)
           self.segmentations.append(segmentation)
-
       else:
         # Initialize every frame as a segment
         self.segmentations = []
@@ -126,8 +129,7 @@ class SegEmbedGMMWordDiscoverer:
         self.embeddingTable.append(embedTable)
         
         # TODO: Use embed table instead of raw feature to compute this
-        
-        print(i, self.segmentations[i], len(fSen)) 
+        # print(i, self.segmentations[i], len(fSen)) 
         self.embeddings.append(self.getSentEmbeds(fSen, self.segmentations[i]))
       
       self.acoustic_model = self.acoustic_model(
@@ -152,7 +154,7 @@ class SegEmbedGMMWordDiscoverer:
         print('GMM training takes %0.5f s to finish' % (time.time() - begin_time)) 
 
         begin_time = time.time()        
-        self.segmentStep()
+        # self.segmentStep()
         print('Segment step takes %0.5f s to finish' % (time.time() - begin_time))
  
         if writeModel:

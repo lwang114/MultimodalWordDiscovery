@@ -294,14 +294,17 @@ def _findWords(alignment):
   return boundaries
 
 if __name__ == '__main__':
-  tasks = [0]
+  tasks = [0, 1]
   parser = argparse.ArgumentParser()
   parser.add_argument('--exp_dir', '-e', type=str, default='./', help='Experiment Directory')
-  parser.add_argument('--dataset', '-d', choices=['flickr', 'mscoco2k', 'mscoco20k'], help='Dataset')
+  parser.add_argument('--dataset', '-d', choices=['flickr', 'flickr_audio', 'mscoco2k', 'mscoco20k'], help='Dataset')
   args = parser.parse_args()
 
   if args.dataset == 'flickr':
     gold_json = '../data/flickr30k/phoneme_level/flickr30k_gold_alignment.json'
+    concept2idx_file = '../data/flickr30k/concept2idx.json'
+  elif args.dataset == 'flickr_audio':
+    gold_json = '../data/flickr30k/audio_level/flickr30k_gold_alignment.json'
     concept2idx_file = '../data/flickr30k/concept2idx.json'
   elif args.dataset == 'mscoco2k' or args.dataset == 'mscoco20k':
     gold_json = '../data/mscoco/%s_gold_alignment.json' % args.dataset
@@ -314,10 +317,27 @@ if __name__ == '__main__':
   with open(args.exp_dir+'model_names.txt', 'r') as f:
     model_names = f.read().strip().split()
 
+  if 0 in tasks:
+    with open(gold_json, 'r') as f:
+      gold_dict = json.load(f)
+    
+    with open(concept2idx_file, 'r') as f:
+      concept2idx = json.load(f)
+ 
+    majority_dict = []
+    for g in gold_dict:
+      p = {}
+      p['image_concepts'] = [concept2idx[c] for c in g['image_concepts']]
+      p['alignment'] = [0]*len(g['alignment'])
+      p['index'] = g['index']
+      majority_dict.append(p)
+    
+    with open('%s_%s_pred_alignment.json' % (args.exp_dir + args.dataset, 'majority'), 'w') as f:
+      json.dump(majority_dict, f, indent=4, sort_keys=True)
   #----------------------------------#
   # Clustering and Alignment Metrics #
   #----------------------------------#
-  if 0 in tasks:
+  if 1 in tasks:
     for model_name in model_names:
       pred_json = '%s_%s_pred_alignment.json' % (args.exp_dir + args.dataset, model_name) 
       with open(pred_json, 'r') as f:   
@@ -325,7 +345,7 @@ if __name__ == '__main__':
 
       with open(gold_json, 'r') as f:
         gold_dict = json.load(f)
-      
+            
       with open(concept2idx_file, 'r') as f:
         concept2idx = json.load(f)
 
@@ -335,7 +355,7 @@ if __name__ == '__main__':
         pred.append(p['image_concepts'])
         gold.append([concept2idx[str(c)] for c in g['image_concepts']])
  
+      print('Accuracy: ', accuracy(pred_dict, gold_dict))
+      boundary_retrieval_metrics(pred_dict, gold_dict, debug=False)
       cluster_confusion_matrix(gold, pred, file_prefix='%s_%s_image_confusion_matrix' % (args.exp_dir + args.dataset, model_name))
       cluster_confusion_matrix(gold, pred, alignment=gold_dict, file_prefix='%s_%s_audio_confusion_matrix' % (args.exp_dir + args.dataset, model_name))
-
-      boundary_retrieval_metrics(pred_dict, gold_dict, debug=False)

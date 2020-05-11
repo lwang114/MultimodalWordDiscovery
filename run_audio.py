@@ -162,8 +162,7 @@ if start < 2 and end >= 2:
       model = GMMWordDiscoverer(args.num_mixtures, src_file, trg_file,
                                 contextWidth=args.context_width)
     elif args.smt_model == "kmeans":
-      acoustic_model = KMeansWordDiscoverer(fCorpus=self.embeddings, tCorpus=self.tCorpus, numMixtures=self.numMixtures, centroidFile=centroidFile)
-      model = KMeansWordDiscoverer(acoustic_model, args.num_mixtures, src_file, trg_file, 
+      model = KMeansWordDiscoverer(args.num_mixtures, src_file, trg_file, 
                                   contextWidth=args.context_width)
     elif args.smt_model == "segembed-kmeans":
       # TODO

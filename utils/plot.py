@@ -465,24 +465,24 @@ def plot_F1_score_histogram(pred_file, gold_file, concept2idx_file, draw_plot=Fa
  
   concept_order = np.argsort(-f1_scores)
   print(out_file)
-  print('Top.5 discovered concepts:')
+  print('Top.10 discovered concepts:')
   n_top = 0
   for c in concept_order.tolist():
     if count_concepts[c] < 10:
       continue
     n_top += 1
     print(concept_names[c], f1_scores[c])
-    if n_top >= 5:
+    if n_top >= 10:
       break
 
-  print('Top.5 difficult concepts:')
+  print('Top.10 difficult concepts:')
   n_top = 0
   for c in concept_order.tolist()[::-1]:
     if count_concepts[c] < 10:
       continue
     n_top += 1
     print(concept_names[c], f1_scores[c])
-    if n_top >= 5:
+    if n_top >= 10:
       break
 
   # Compute the F1 histogram
@@ -490,7 +490,7 @@ def plot_F1_score_histogram(pred_file, gold_file, concept2idx_file, draw_plot=Fa
     plt.figure()
     plt.hist(f1_scores, bins='auto', density=True)  
     plt.xlabel('F1 score')
-    plt.ylabel('Percent of concepts')
+    plt.ylabel('Number of concepts')
     plt.title('Histogram of concept-level F1 scores')
     if out_file:
       plt.savefig(out_file)
@@ -517,11 +517,14 @@ if __name__ == '__main__':
   tasks = [2]
   parser = argparse.ArgumentParser()
   parser.add_argument('--exp_dir', '-e', type=str, default='./', help='Experiment Directory')
-  parser.add_argument('--dataset', '-d', choices=['flickr', 'mscoco2k', 'mscoco20k'], help='Dataset')
+  parser.add_argument('--dataset', '-d', choices=['flickr', 'flickr_audio', 'mscoco2k', 'mscoco20k'], help='Dataset')
   args = parser.parse_args()
 
   if args.dataset == 'flickr':
     gold_json = '../data/flickr30k/phoneme_level/flickr30k_gold_alignment.json'
+    concept2idx_file = '../data/flickr30k/concept2idx.json'
+  if args.dataset == 'flickr_audio':
+    gold_json = '../data/flickr30k/audio_level/flickr30k_gold_alignment.json'
     concept2idx_file = '../data/flickr30k/concept2idx.json'
   elif args.dataset == 'mscoco2k' or args.dataset == 'mscoco20k':
     gold_json = '../data/mscoco/%s_gold_alignment.json' % args.dataset
@@ -590,6 +593,7 @@ if __name__ == '__main__':
     hists = []
 
     fig, ax = plt.subplots() 
+    model_names_display = []
     for model_name in model_names:
       pred_json = '%s_%s_pred_alignment.json' % (args.exp_dir + args.dataset, model_name) 
       print(pred_json)
@@ -603,6 +607,16 @@ if __name__ == '__main__':
       elif model_name.split()[0] == 'clda':
         print(model_name)
         model_name = 'CorrLDA' 
+      elif model_name.split()[0] == 'segembed_hmm':
+        model_name = 'Segmental HMM'
+      elif model_name.split()[0] == 'segembed_gmm':
+        model_name = 'Segmental GMM'
+      elif model_name.split()[0] == 'kmeans':
+        model_name = 'KMeans'
+      elif model_name.split()[0] == 'gmm':
+        model_name = 'GMM'
+     
+      model_names_display.append(model_name)
       feat_name = pred_json.split('_')[-2]
       if len(model_name.split('_')) > 1 and model_name.split('_')[1] == 'vgg16':
         print(feat_name)
@@ -630,7 +644,7 @@ if __name__ == '__main__':
       ax.set_title('Histogram of concept-level F1 scores')
       ax.set_xticks(bins[:-1])
       ax.set_xticklabels([str('%.1f' % v) for v in bins[:-1].tolist()])
-      ax.legend(model_names, loc='best')
+      ax.legend(model_names_display, loc='best')
       plt.savefig(args.exp_dir + 'f1_histogram_combined')
       plt.close()
   if 3 in tasks:
