@@ -47,6 +47,7 @@ class Flickr_Preprocessor(object):
 
     f_ty = open(self.phrase_type_file, 'r')
     phrase_types = f_ty.read().strip().split('\n')
+    print(len(phrase_types))
     f_ty.close()
     if split_file:
       f_split = open(split_file, 'r')
@@ -61,41 +62,43 @@ class Flickr_Preprocessor(object):
     phrases = []
     bboxes = []
     img_concepts = []
-    i = 0
+    i = -1
+    i_ex = 0
     for line in f_ins:
       parts = line.split()
       img_id = parts[0].split('_')[0]
       capt_id = parts[0]
-      print(capt_id)
-      if i == 0:
+      if i == -1:
         cur_capt_id = capt_id
-      i += 1
       # XXX
-      # if i > 30:
-      #   break 
+      # if i < 24935 * 5:
+      #   i += 1
+      # continue 
+      i += 1
+
+      phrase = parts[1:-4]
+      bbox = parts[-4:]
+      phones = []
+      for word in phrase:
+        g2p_result = os.popen('phonetisaurus-g2pfst --model=g2ps/models/english_4_2_2.fst --word=%s' % word).read().strip().split()[2:]
+        # with open('g2p_out.txt', 'r') as f_g2p:
+        #   g2p_result = f_g2p.read().strip().split()[2:]
+          
+        phones += [ph if ph[0] != '\u02c8' else ph[1:] for ph in g2p_result]
+
       if capt_id == cur_capt_id:
-        phrase = parts[1:-4]
-        bboxes.append(parts[-4:])
-        phones = []
-        for word in phrase:
-          os.system('phonetisaurus-g2pfst --model=g2ps/models/english_4_2_2.fst --word=%s 1>g2p_out.txt' % word)
-          with open('g2p_out.txt', 'r') as f_g2p:
-            g2p_result = f_g2p.read().strip().split()[2:]
-            
-          phones += [ph if ph[0] != '\u02c8' else ph[1:] for ph in g2p_result]
-        print(phones)
         phrases.append([phrase, phones])
-        print(phrase_types[i])
+        bboxes.append(bbox)
         img_concepts.append(phrase_types[i].split()[1])
-        
       else:
         # Add train/test split information
         if img_id in test_ids:
           is_train = False
         else:
           is_train = True
-        print(is_train)
+        print(i, i_ex, is_train, phrase_types[i])
         pair = {
+                  'index': i_ex,
                   'image_id': img_id,
                   'image_filename:': capt_id.split('.')[0] + '.jpg',
                   'capt_id': capt_id, 
@@ -104,10 +107,11 @@ class Flickr_Preprocessor(object):
                   'is_train': is_train,
                   'image_concepts': img_concepts
                  }
+        i_ex += 1
         pairs.append(pair)
-        phrases = []
-        bboxes = []
-        img_concepts = []
+        phrases = [phrase, phones]
+        bboxes = [bbox]
+        img_concepts = [phrase_types[i].split()[1]]
         cur_capt_id = capt_id
     f_ins.close()
     
@@ -354,7 +358,7 @@ def compute_word_similarity(word_senses1, word_senses2, sim_type='wup+res', pos=
   return max(scores)
 
 if __name__ == '__main__':
-  tasks = [2] 
+  tasks = [1] 
   preproc = Flickr_Preprocessor('../data/flickr30k/flickr30k_phrases_bboxes.txt', '../data/flickr30k/flickr30k_phrase_types.txt', None, concept_class_file='../data/flickr30k/flickr_classnames_original.txt')
   
   if 0 in tasks:
