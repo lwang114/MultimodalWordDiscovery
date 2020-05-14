@@ -1,0 +1,11 @@
+{
+    "animals": 4,
+    "bodyparts": 7,
+    "clothing": 3,
+    "instruments": 8,
+    "notvisual": 6,
+    "other": 2,
+    "people": 0,
+    "scene": 1,
+    "vehicles": 5
+}

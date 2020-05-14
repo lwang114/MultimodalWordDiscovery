@@ -6,6 +6,7 @@ from torch.utils.data import Dataset, DataLoader
 import json
 from PIL import Image
 
+NONVISUAL = 'notvisual'
 class FlickrRegionDataset(Dataset):
   def __init__(self, image_root_path, bbox_file, label_file, class2idx_file, transform=None):
     # Inputs:
@@ -19,15 +20,19 @@ class FlickrRegionDataset(Dataset):
     self.bboxes = []
     self.image_root_path = image_root_path 
     with open(bbox_file, 'r') as fb:
-      for line in fb:
-        parts = line.strip().split()
+      lines_fb = fb.read().strip().split('\n')
+        
+    with open(label_file, 'r') as fl:
+      lines_fl = fl.read().strip().split('\n')
+      
+      for line_fb, line_fl in zip(lines_fb, lines_fl):
+        label = line_fl.split()[-1]
+        if label == NONVISUAL:
+          continue
+        parts = line_fb.strip().split()
         k, box = parts[0], parts[-4:]
         self.image_keys.append('_'.join(k.split('_')[:-1]))
         self.bboxes.append(box)
-    
-    with open(label_file, 'r') as fl:
-      for line in fl:
-        label = line.split()[-1]
         self.class_labels.append(label)
 
     with open(class2idx_file, 'r') as f:
