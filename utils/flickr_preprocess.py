@@ -13,6 +13,7 @@ import os
 DEBUG = True
 NULL = 'NULL'
 PUNCT = [',', '\'', '\"', '/', '?', '>', '<', '#', '%', '&', '*']
+NONVISUAL = 'notvisual'
 
 class Flickr_Preprocessor(object):
   def __init__(self, instance_file, phrase_type_file, phone_segment_file, concept_class_file, word_segment_dir=None):
@@ -247,17 +248,67 @@ class Flickr_Preprocessor(object):
   def create_captions(self, data_file, out_file='flickr30k_captions'):
     word_captions = []
     phone_captions = [] 
-    with open(out_file+'_words.txt', 'w'),\
-         open(out_file+'_phones.txt', 'w') as fw, fp:
+    with open(data_file, 'w') as f:
+      data_info = json.load(f)
+
+    with open(out_file+'_words_train.txt', 'w') as fwtr,\
+         open(out_file+'_phones_train.txt', 'w') as fptr,\
+         open(out_file+'_words_test.txt', 'w') as fwtx,\
+         open(out_file+'_phones_test.txt', 'w') as fptx:
       for i, datum_info in enumerate(data_info):
         phrases = datum_info['phrases']
+        img_concepts = datum_info['image_concepts']
+        phrases = [phr for i_phr, phr in enumerate(phrases) if img_concepts[i_phr] != NONVISUAL]
+        is_train = datum_info['is_train']
         word_caption = []
         phone_caption = []
         for i_phr, phrase in enumerate(phrases):
           word_caption += phrase[0]
           phone_caption += phrase[1]
-        fw.write('\n'.join(' '.join(word_caption)))
-        fp.write('\n'.join(' '.join(phone_caption)))      
+        if is_train:
+          fwtr.write('\n'.join(' '.join(word_caption)))
+          fptr.write('\n'.join(' '.join(phone_caption)))      
+        else:
+          fwtx.write('\n'.join(' '.join(word_caption)))
+          fptx.write('\n'.join(' '.join(phone_caption)))      
+  
+  def train_test_split(self, split_file, out_file='flickr30k_phrase'):
+    if split_file:
+      f_split = open(split_file, 'r')
+      test_files = f_split.read().strip().split('\n')
+      test_ids = [test_file.split('/')[-1].split('_')[0] for test_file in test_files]
+    else:
+      test_ids = []
+
+    f_ins = open(self.instance_file, 'r')
+    cur_capt_id = ''
+    i = 0
+    with open(out_file+'_bboxes_train.txt', 'w') as ftr,\
+         open(out_file+'_booxes_test.txt', 'w') as ftx:
+      for line in f_ins:
+        parts = line.split()
+        img_id = parts[0].split('_')[0]
+        capt_id = parts[0]
+        print(capt_id)
+         
+        if img_id in test_ids:
+          ftx.write(line+'\n')
+        else:
+          ftr.write(line+'\n')
+    
+    f_ty = open(self.phrase_type_file, 'r') 
+    with open(out_file+'types_train.txt', 'w') as ftr,
+         open(out_file+'types_test.txt', 'w') as ftx:
+      for line in f_ty:
+        parts = line.split()
+        img_id = parts[0].split('_')[0]
+        capt_id = parts[0]
+        print(capt_id)
+         
+        if img_id in test_ids:
+          ftx.write(line+'\n')
+        else:
+          ftr.write(line+'\n') 
 
 def compute_word_similarity(word_senses1, word_senses2, sim_type='wup+res', pos='n', ic=None):
   scores = []
