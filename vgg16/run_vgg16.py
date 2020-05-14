@@ -22,7 +22,7 @@ parser.add_argument('--batch_size', type=int, default=32)
 parser.add_argument('--momentum', type=float, default=0.9)
 parser.add_argument('--weight_decay', type=float, default=0.1)
 parser.add_argument('--lr_decay', type=int, default=10, help='Divide the learning rate by 10 every lr_decay epochs')
-parser.add_argument('--dataset', default='mscoco_130k', choices=['mscoco_130k', 'mscoco_2k', 'mscoco_train', 'cifar'], help='Data set used for training the model')
+parser.add_argument('--dataset', default='mscoco_130k', choices=['mscoco_130k', 'mscoco_2k', 'mscoco_train', 'cifar', 'flickr'], help='Data set used for training the model')
 parser.add_argument('--n_class', type=int, default=10)
 parser.add_argument('--n_epoch', type=int, default=20)
 parser.add_argument('--class2id_file', type=str, default=None)
@@ -55,9 +55,11 @@ elif args.dataset == 'mscoco_train':
   data_path = '/home/lwang114/data/mscoco/train2014/'
   args.class2id_file = 'mscoco_class2id.json'
   with open(args.class2id_file, 'r') as f:
-    class2idx = json.load(f)
-  
+    class2idx = json.load(f)  
   args.n_class = len(class2idx.keys())
+# TODO
+elif args.dataset == 'flickr':
+  data_path = '/home/lwang114/data/flickr'
 
 #------------------#
 # Network Training #
@@ -118,6 +120,9 @@ if 0 in tasks:
     
     trainset = MSCOCORegionDataset(data_path, train_label_file, class2idx_file=args.class2id_file, transform=transform_train) 
     testset = MSCOCORegionDataset(data_path, test_label_file, class2idx_file=args.class2id_file, transform=transform)   
+  # TODO
+  elif args.dataset == 'flickr':
+
 
   train_loader = torch.utils.data.DataLoader(trainset, batch_size=args.batch_size, shuffle=True, num_workers=0)
   test_loader = torch.utils.data.DataLoader(testset, batch_size=args.batch_size, shuffle=False, num_workers=0)
@@ -158,6 +163,8 @@ if 1 in tasks:
     print(args.n_class)
     test_label_file = '../data/mscoco/mscoco_subset_power_law_bboxes.txt'
     testset = MSCOCORegionDataset(data_path, test_label_file, class2idx_file=args.class2id_file, transform=transform) 
+  # TODO
+  elif args.dataset == 'flickr':
 
   test_loader = torch.utils.data.DataLoader(testset, batch_size=args.batch_size, shuffle=False, num_workers=2)
   
