@@ -199,9 +199,9 @@ class ImagePhoneBigramHMMWordDiscoverer:
         transCounts[len(vSen)] += self.updateTransitionCounts(forwardProbs, backwardProbs, vSen, aSen, debug=False)
         stateCounts = self.updateStateCounts(forwardProbs, backwardProbs) 
         aBigram = aSen[:-1, :, np.newaxis] * aSen[1:, np.newaxis, :]
-        for i_ph in self.audioFeatDim:
+        for i_ph in range(self.audioFeatDim):
           bigramCounts[:, i_ph] += np.sum(stateCounts[1:], axis=1).T @ aBigram[:, i_ph]
-        unigramCounts += np.sum(stateCounts[1:], axis=1).T @ aSen
+        unigramCounts += np.sum(stateCounts, axis=1).T @ aSen
         conceptCounts[ex] += self.updateConceptCounts(vSen, aSen)
         self.conceptCountsA[ex] += np.sum(stateCounts, axis=1)
       self.conceptCounts = conceptCounts
@@ -424,7 +424,7 @@ class ImagePhoneBigramHMMWordDiscoverer:
         probs_z_given_y_ik = deepcopy(probs_z_given_y)
         probs_z_given_y_ik[i] = 0.
         probs_z_given_y_ik[i, k] = 1.
-        probs_x_given_y_concat[0, i*self.nWords+k, :] = (probs_z_given_y_ik @ (self.unigramObs @ aSen.T)).T
+        probs_x_given_y_concat[0, i*self.nWords+k, :] = (probs_z_given_y_ik @ (self.unigramObs @ aSen[0].T)).T
         # TODO
         probs_x_given_y_concat[1:, i*self.nWords+k, :] = (probs_z_given_y_ik @ np.sum(self.bigramObs[:, np.argmax(aSen[:-1], axis=1)] * aSen[1:], axis=-1)).T
 
@@ -525,7 +525,7 @@ class ImagePhoneBigramHMMWordDiscoverer:
     # TODO
     probs_x_given_y = np.zeros((T, nState))
     probs_x_given_y[0] = probs_z_given_y @ (self.unigramObs @ aSen[0])
-    probs_x_given_y[1:] = (probs_z_given_y @ (self.np.sum(bigramObs[:, np.argmax(aSen[:-1], axis=-1)] * aSen[1:], axis=-1))).T 
+    probs_x_given_y[1:] = (probs_z_given_y @ (np.sum(self.bigramObs[:, np.argmax(aSen[:-1], axis=-1)] * aSen[1:], axis=-1))).T 
     if debug:
       print('probs_z_given_y: ', probs_z_given_y)
       print('probs_x_given_y: ', probs_x_given_y)
@@ -641,7 +641,7 @@ if __name__ == '__main__':
       f.write(audio_feats)
     np.savez('tiny.npz', **image_feats)
     modelConfigs = {'has_null': False, 'n_words': 3, 'momentum': 0., 'learning_rate': 0.01}
-    model = ImagePhoneHMMWordDiscoverer(speechFeatureFile, imageFeatureFile, modelConfigs, modelName='exp/jan_14_tiny/tiny')
+    model = ImagePhoneBigramHMMWordDiscoverer(speechFeatureFile, imageFeatureFile, modelConfigs, modelName='exp/jan_14_tiny/tiny')
     model.trainUsingEM(30, writeModel=True, debug=False)
     #model.simulatedAnnealing(numIterations=100, T0=1., debug=False) 
     model.printAlignment('exp/jan_14_tiny/tiny', debug=False)
@@ -691,18 +691,13 @@ if __name__ == '__main__':
   # Word discovery on MSCOCO #
   #--------------------------#
   if 2 in tasks:      
-    speechFeatureFile = '../data/mscoco/src_mscoco_subset_subword_level_power_law.txt'
-    #imageFeatureFile = '../data/mscoco/mscoco_subset_subword_level_concept_gaussian_vectors.npz'
-    #imageFeatureFile = '../data/mscoco/mscoco_subset_subword_level_concept_vectors.npz'
-    imageFeatureFile = '../data/mscoco/mscoco_vgg_penult.npz'
+    speechFeatureFile = '../data/mscoco/mscoco2k_phone_captions.txt'
+    imageFeatureFile = '../data/mscoco/mscoco_subset_2k_res34_embed512dim.npz'
     modelConfigs = {'has_null': False, 'n_words': 65, 'momentum': 0.0, 'learning_rate': 0.01, 'normalize_vfeat': False, 'step_scale': 5}
-    modelName = 'exp/jan_18_mscoco_vgg16_momentum%.1f_lr%.1f_stepscale%d_linear/image_phone' % (modelConfigs['momentum'], modelConfigs['learning_rate'], modelConfigs['step_scale']) 
-    print(modelName)
-    #model = ImagePhoneHMMWordDiscoverer(speechFeatureFile, imageFeatureFile, modelConfigs, modelName='exp/dec_30_mscoco/image_phone') 
-    model = ImagePhoneHMMWordDiscoverer(speechFeatureFile, imageFeatureFile, modelConfigs, modelName=modelName)
+    modelName = 'exp/may_14_mscoco_res34_momentum%.1f_lr%.1f_stepscale%d_gaussian/image_phone' % (modelConfigs['momentum'], modelConfigs['learning_rate'], modelConfigs['step_scale']) 
+    print(modelName) 
+    model = ImagePhoneBigramHMMWordDiscoverer(speechFeatureFile, imageFeatureFile, modelConfigs, modelName=modelName)
     model.trainUsingEM(20, writeModel=True, debug=False)
-    #model.simulatedAnnealing(numIterations=300, T0=50., debug=False)
-    #model.printAlignment('exp/dec_30_mscoco/image_phone_alignment', debug=False) 
     model.printAlignment(modelName+'_alignment', debug=False)
   #-----------------------------#
   # Word discovery on Flickr30k #
@@ -717,7 +712,7 @@ if __name__ == '__main__':
     print(modelName)
     #model = ImagePhoneHMMWordDiscoverer(speechFeatureFile, imageFeatureFile, modelConfigs, modelName='exp/dec_30_mscoco/image_phone') 
     model = ImagePhoneHMMWordDiscoverer(speechFeatureFile, imageFeatureFile, modelConfigs, modelName=modelName)
-    model.trainUsingEM(20, writeModel=True, debug=False)
+    model.trainUsingEM(20, writeModel=False, debug=False)
     #model.simulatedAnnealing(numIterations=30, T0=50., debug=False)
     #model.printAlignment('exp/dec_30_mscoco/image_phone_alignment', debug=False) 
     model.printAlignment(modelName+'_alignment', debug=False) 
