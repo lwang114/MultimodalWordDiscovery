@@ -9,6 +9,7 @@ from ImageModels import *
 import torchvision.transforms as transforms
 from traintest_vgg16 import *
 from mscoco_region_dataset import *
+from flickr_region_dataset import *
 import json
 import numpy as np
 import random
@@ -33,9 +34,14 @@ parser.add_argument('--random_crop', action='store_true', help='Use random cropp
 parser.add_argument('--print_class_accuracy', action='store_true', help='Print accuracy for each image class')
 parser.add_argument('--pretrain_model_file', type=str, default=None, help='Pretrained parameters file (used only in feature extraction)')
 parser.add_argument('--save_features', action='store_true', help='Save the hidden activations of the neural networks')
+parser.add_argument('--date', type=str, help='Date of the experiment')
 args = parser.parse_args()
 
-args.exp_dir = 'exp/jan_31_%s_%s_%s_lr_%s' % (args.image_model, args.dataset, args.optim, args.lr)
+if args.date:
+  args.exp_dir = 'exp/%s_%s_%s_lr_%s_%s' % (args.image_model, args.dataset, args.optim, args.lr, args.date)
+else:
+  args.exp_dir = 'exp/%s_%s_%s_lr_%s' % (args.image_model, args.dataset, args.optim, args.lr)
+
 transform = transforms.Compose(
   [transforms.Scale(256),
    transforms.CenterCrop(224),
@@ -57,9 +63,12 @@ elif args.dataset == 'mscoco_train':
   with open(args.class2id_file, 'r') as f:
     class2idx = json.load(f)  
   args.n_class = len(class2idx.keys())
-# TODO
 elif args.dataset == 'flickr':
-  data_path = '/home/lwang114/data/flickr'
+  data_path = '/home/lwang114/data/flickr/Flicker8k_Dataset/'
+  args.class2id_file = 'flickr_class2id.json'
+  with open(args.class2id_file, 'r') as f:
+    class2idx = json.load(f)
+  args.n_class = len(class2idx.keys())
 
 #------------------#
 # Network Training #
@@ -76,20 +85,12 @@ if 0 in tasks:
     label_file = '../data/mscoco/mscoco_subset_130k_image_bboxes_balanced.txt'
     train_label_file = '../data/mscoco/mscoco_subset_130k_image_bboxes_balanced_train.txt'
     test_label_file = '../data/mscoco/mscoco_subset_130k_image_bboxes_balanced_test.txt'
-    args.class2id_file = 'mscoco_class2id.json'
-    with open(args.class2id_file, 'r') as f:
-      class2idx = json.load(f)
-    args.n_class = len(class2idx.keys())
     trainset = MSCOCORegionDataset(data_path, train_label_file, class2idx_file=args.class2id_file, transform=transform) 
     testset = MSCOCORegionDataset(data_path, test_label_file, class2idx_file=args.class2id_file, transform=transform)   
   elif args.dataset == 'mscoco_train':
     data_path = '/home/lwang114/data/mscoco/'
     train_label_file = '../data/mscoco/mscoco_image_subset_260k_image_bboxes_balanced.txt'
     test_label_file = '../data/mscoco/mscoco_subset_130k_image_bboxes_balanced.txt'
-    args.class2id_file = 'mscoco_class2id.json'
-    with open(args.class2id_file, 'r') as f:
-      class2idx = json.load(f)
-    args.n_class = len(class2idx.keys())
     if args.random_crop:
       transform_train = transforms.Compose(
         [transforms.RandomSizedCrop(224),
@@ -105,10 +106,6 @@ if 0 in tasks:
     data_path = '/home/lwang114/data/mscoco/val2014/'
     train_label_file = '/home/lwang114/data/mscoco/mscoco_image_subset_image_bboxes_balanced_train.txt'
     test_label_file = '/home/lwang114/data/mscoco/mscoco_image_subset_image_bboxes_balanced_test.txt'
-    args.class2id_file = 'mscoco_class2id.json'
-    with open(args.class2id_file, 'r') as f:
-      class2idx = json.load(f)
-    args.n_class = len(class2idx.keys())
     if args.random_crop:
       transform_train = transforms.Compose(
         [transforms.RandomSizedCrop(224),
@@ -117,12 +114,17 @@ if 0 in tasks:
         )        
     else:
       transform_train = transform
-    
+   
     trainset = MSCOCORegionDataset(data_path, train_label_file, class2idx_file=args.class2id_file, transform=transform_train) 
     testset = MSCOCORegionDataset(data_path, test_label_file, class2idx_file=args.class2id_file, transform=transform)   
-  # TODO
   elif args.dataset == 'flickr':
+    train_region_file = '../data/flickr30k/flickr30k_phrase_bboxes_train.txt'
+    test_region_file = '../data/flickr30k/flickr30k_phrase_bboxes_test.txt'
+    train_label_file = '../data/flickr30k/flickr30k_phrase_types_train.txt'
+    test_label_file = '../data/flickr30k/flickr30k_phrase_types_test.txt'
 
+    trainset = FlickrRegionDataset(data_path, train_region_file, train_label_file, class2idx_file=args.class2id_file, transform=transform_train)
+    testset = FlickrRegionDataset(data_path, test_region_file, test_label_file, class2idx_file=args.class2id_file, transform=transform)
 
   train_loader = torch.utils.data.DataLoader(trainset, batch_size=args.batch_size, shuffle=True, num_workers=0)
   test_loader = torch.utils.data.DataLoader(testset, batch_size=args.batch_size, shuffle=False, num_workers=0)
@@ -140,12 +142,14 @@ if 0 in tasks:
 if 1 in tasks:
   if args.pretrain_model_file is not None:
     pretrain_model_file = args.pretrain_model_file
-  else:
+  elif args.dataset.split('_')[0] == 'mscoco':
     pretrain_model_file = 'exp/vgg16_mscoco_train_sgd_lr_0.001/image_model.1.pth'
-  
+    pretrained = True
+  else:
+    pretrained = False
+
   if args.dataset == 'mscoco_130k':
     data_path = '/home/lwang114/data/mscoco/val2014/'
-    args.class2id_file = 'mscoco_class2id.json'
     with open(args.class2id_file, 'r') as f:
       class2idx = json.load(f)
   
@@ -155,7 +159,6 @@ if 1 in tasks:
     testset = MSCOCORegionDataset(data_path, test_label_file, class2idx_file=args.class2id_file, transform=transform) 
   elif args.dataset == 'mscoco_2k':
     data_path = '/home/lwang114/data/mscoco/val2014/'
-    args.class2id_file = 'mscoco_class2id.json'
     with open(args.class2id_file, 'r') as f:
       class2idx = json.load(f)
   
@@ -163,13 +166,15 @@ if 1 in tasks:
     print(args.n_class)
     test_label_file = '../data/mscoco/mscoco_subset_power_law_bboxes.txt'
     testset = MSCOCORegionDataset(data_path, test_label_file, class2idx_file=args.class2id_file, transform=transform) 
-  # TODO
   elif args.dataset == 'flickr':
+    test_region_file = '../data/flickr30k/flickr30k_phrases_bboxes.txt'
+    test_label_file = '../data/flickr30k/flickr30k_phrase_types.txt'
+    testset = FlickrRegionDataset(data_path, test_region_file, test_label_file, class2idx_file=args.class2id_file, transform=transform)
 
   test_loader = torch.utils.data.DataLoader(testset, batch_size=args.batch_size, shuffle=False, num_workers=2)
   
   if args.image_model == 'res34':
-    image_model = Resnet34(args.n_class, pretrained=True)
+    image_model = Resnet34(args.n_class, pretrained=pretrained)
   else:
     image_model = VGG16(n_class=args.n_class, pretrained=True)
     image_model.load_state_dict(torch.load(pretrain_model_file))

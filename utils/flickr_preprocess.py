@@ -26,7 +26,12 @@ class Flickr_Preprocessor(object):
     self.concept_class_file = concept_class_file
     with open(self.concept_class_file, 'r') as f:
       self.concept_names = f.read().strip().split('\n')
-      self.word2concept = {}
+      self.concept2ids = {c:i for i, c in enumerate(self.concept_names)}
+    
+    with open('flickr_type2idx.json', 'w') as f:
+      json.dump(self.concept2ids, f, indent=4, sort_keys=True)
+
+    self.word2concept = {}
     self.concept2word = {c:[] for c in self.concept_names}
 
   # TODO Process the phone segment file 
@@ -284,31 +289,42 @@ class Flickr_Preprocessor(object):
     cur_capt_id = ''
     i = 0
     with open(out_file+'_bboxes_train.txt', 'w') as ftr,\
-         open(out_file+'_booxes_test.txt', 'w') as ftx:
+         open(out_file+'_bboxes_test.txt', 'w') as ftx:
       for line in f_ins:
-        parts = line.split()
+        # XXX
+        # if i > 10:
+        #   break
+        # i += 1
+        
+        parts = line.strip().split()
         img_id = parts[0].split('_')[0]
         capt_id = parts[0]
-        print(capt_id)
+        print(capt_id, parts[-1])
          
         if img_id in test_ids:
-          ftx.write(line+'\n')
+          ftx.write(line)
         else:
-          ftr.write(line+'\n')
+          ftr.write(line)
     
     f_ty = open(self.phrase_type_file, 'r') 
-    with open(out_file+'types_train.txt', 'w') as ftr,
-         open(out_file+'types_test.txt', 'w') as ftx:
+    i = 0
+    with open(out_file+'_types_train.txt', 'w') as ftr,\
+         open(out_file+'_types_test.txt', 'w') as ftx:
       for line in f_ty:
+        # XXX
+        # if i > 10:
+        #   break
+        # i += 1
+        
         parts = line.split()
         img_id = parts[0].split('_')[0]
         capt_id = parts[0]
         print(capt_id)
          
         if img_id in test_ids:
-          ftx.write(line+'\n')
+          ftx.write(line)
         else:
-          ftr.write(line+'\n') 
+          ftr.write(line) 
 
 def compute_word_similarity(word_senses1, word_senses2, sim_type='wup+res', pos='n', ic=None):
   scores = []
@@ -338,10 +354,12 @@ def compute_word_similarity(word_senses1, word_senses2, sim_type='wup+res', pos=
   return max(scores)
 
 if __name__ == '__main__':
-  tasks = [1] 
-  preproc = Flickr_Preprocessor('../data/flickr30k/flickr30k_phrases_bboxes.txt', '../data/flickr30k/flickr30k_phrase_types.txt', None, concept_class_file='../data/flickr30k/flickr_classnames.txt')
+  tasks = [2] 
+  preproc = Flickr_Preprocessor('../data/flickr30k/flickr30k_phrases_bboxes.txt', '../data/flickr30k/flickr30k_phrase_types.txt', None, concept_class_file='../data/flickr30k/flickr_classnames_original.txt')
   
   if 0 in tasks:
     preproc.extract_word_to_concept_map()
   if 1 in tasks:
     preproc.extract_info(word2concept_file='../data/flickr30k/word2concept.json', split_file='../data/flickr30k/flickr8k_test.txt')
+  if 2 in tasks:
+    preproc.train_test_split(split_file='../data/flickr30k/flickr8k_test.txt')

@@ -25,13 +25,14 @@ class FlickrRegionDataset(Dataset):
     with open(label_file, 'r') as fl:
       lines_fl = fl.read().strip().split('\n')
       
+      # XXX
       for line_fb, line_fl in zip(lines_fb, lines_fl):
         label = line_fl.split()[-1]
         if label == NONVISUAL:
           continue
         parts = line_fb.strip().split()
-        k, box = parts[0], parts[-4:]
-        self.image_keys.append('_'.join(k.split('_')[:-1]))
+        k, box = parts[0].split('.')[0], parts[-4:]
+        self.image_keys.append(k)
         self.bboxes.append(box)
         self.class_labels.append(label)
 
