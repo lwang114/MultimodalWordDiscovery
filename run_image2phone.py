@@ -1,7 +1,7 @@
 from hmm_dnn.image_phone_hmm_word_discoverer import *
 from hmm_dnn.image_phone_hmm_dnn_word_discoverer import *
 from hmm_dnn.image_phone_gaussian_hmm_word_discoverer import *
-from clda.image_phone_word_discoverer import *
+# from clda.image_phone_word_discoverer import *
 from utils.clusteval import *
 from utils.postprocess import *
 from utils.plot import *
@@ -28,46 +28,49 @@ args = parser.parse_args()
 if args.dataset == 'mscoco2k':
   dataDir = 'data/mscoco/'
   phoneCaptionFile = dataDir + 'mscoco2k_phone_captions.txt' 
-  speechFeatureFile = 'tdnn/exp/blstm2_mscoco_train_sgd_lr_0.00010_feb28/phone_features_discrete.txt' # XXX dataDir + 'src_mscoco_subset_subword_level_power_law.txt'
-  imageConceptFile = dataDir + 'trg_mscoco_subset_subword_level_power_law.txt'
+  speechFeatureFile = dataDir + 'mscoco2k_phone_captions.txt'
+  # 'tdnn/exp/blstm2_mscoco_train_sgd_lr_0.00010_feb28/phone_features_discrete.txt' # XXX 
+  imageConceptFile = dataDir + 'mscoco2k_image_captions.txt'
   if args.feat_type == 'synthetic':
-    imageFeatureFile = dataDir + 'mscoco_subset_subword_level_concept_gaussian_vectors.npz'
+    imageFeatureFile = dataDir + 'mscoco2k_concept_gaussian_vectors.npz'
   elif args.feat_type == 'vgg16_penult':
-    imageFeatureFile = dataDir + 'mscoco_vgg_penult.npz'
+    imageFeatureFile = dataDir + 'mscoco2k_vgg_penult.npz'
   elif args.feat_type == 'res34':
-    imageFeatureFile = dataDir + 'mscoco_subset_2k_res34_embed512dim.npz'
+    imageFeatureFile = dataDir + 'mscoco2k_res34_embed512dim.npz'
   
   conceptIdxFile = dataDir + 'concept2idx.json'
-  goldAlignmentFile = dataDir + 'mscoco_gold_alignment_power_law.json'
+  goldAlignmentFile = dataDir + 'mscoco2k_gold_alignment.json'
   nWords = 65
 elif args.dataset == 'mscoco20k':
   dataDir = 'data/mscoco/'
   phoneCaptionFile = dataDir + 'mscoco20k_phone_captions.txt' 
-  speechFeatureFile = dataDir + 'src_mscoco_subset_130k_power_law_phone_captions.txt'
-  imageConceptFile = dataDir + 'trg_mscoco_subset_130k_power_law_phone_captions.txt'
+  speechFeatureFile = dataDir + 'mscoco20k_phone_captions.txt'
+  imageConceptFile = dataDir + 'mscoco20k_phone_captions.txt'
   if args.feat_type == 'synthetic':
-    imageFeatureFile = dataDir + 'mscoco_subset_130k_power_law_concept_gaussian_vectors.npz'
+    imageFeatureFile = dataDir + 'mscoco20k_concept_gaussian_vectors.npz'
   elif args.feat_type == 'vgg16_penult':
-    imageFeatureFile = dataDir + 'mscoco_subset_130k_vgg16_penult.npz'
+    imageFeatureFile = dataDir + 'mscoco20k_vgg16_penult.npz'
   elif args.feat_type == 'res34':
-    imageFeatureFile = dataDir + 'mscoco_subset_130k_res34_embed512dim.npz'
+    imageFeatureFile = dataDir + 'mscoco20k_res34_embed512dim.npz'
 
   conceptIdxFile = dataDir + 'concept2idx.json'
-  # TODO: Generate this
-  goldAlignmentFile = dataDir + 'mscoco_gold_alignment_130k_power_law.json'
+  goldAlignmentFile = dataDir + 'mscoco20k_gold_alignment.json'
   nWords = 65
+# TODO: Change the filenames
 elif args.dataset == 'flickr':
-  dataDir = 'data/flickr30k/phoneme_level/'
-  speechFeatureFile = dataDir + 'flickr30k_no_NULL_top_100.txt'
-  imageConceptFile = dataDir + 'flickr30k_no_NULL_top_100_trg.txt'
+  dataDir = 'data/flickr30k/'
+  speechFeatureFile = dataDir + 'flickr30k_captions_words.txt'
+  # TODO Generate this file
+  # imageConceptFile = dataDir + 'flickr30k'
   if args.feat_type == 'synthetic':
-    imageFeatureFile = dataDir + 'flickr30k_no_NULL_top_100_gaussian'
-  elif args.feat_type == 'vgg16':
-    imageFeatureFile = dataDir + 'flickr30k_no_NULL_top_100_vgg_penult.npz'
+    imageFeatureFile = dataDir + 'flickr30k_synethetic_embeds.npz'
+  elif args.feat_type == 'res34':
+    imageFeatureFile = dataDir + 'flickr30k_res34_embeds.npz'
   
-  conceptIdxFile = 'data/flickr30k/concept2idx_no_NULL_top_100.json'
-  goldAlignmentFile = dataDir + 'flickr30k_no_NULL_top_100_gold_alignment.json'
-  nWords = 100
+  conceptIdxFile = 'data/flickr30k/concept2idx.json'
+  goldAlignmentFile = dataDir + 'flickr30k_gold_alignment.json'
+  # XXX
+  nWords = 50
 else:
   raise ValueError('Dataset unspecified or invalid dataset')
 
@@ -104,10 +107,10 @@ modelName = expDir + 'image_phone'
 print('Experiment directory: ', expDir)
    
 # XXX
-nReps = 5
-SNRs = [40] #[40, 30, 20, 10, 5] 
+nReps = 1
+SNRs = [] #[40, 30, 20, 10, 5] 
 
-tasks = [3]
+tasks = [1]
 #-------------------------------#
 # Feature extraction for MSCOCO #
 #-------------------------------#
@@ -133,25 +136,27 @@ if 0 in tasks:
   permute = False
   centroids = 10 * np.random.normal(size=(nTypes, imgFeatDim)) 
   
-  for snr in SNRs:      
-    for rep in range(nReps):
-      noiseLevel = 10 * 10. ** (-snr / 20.) 
-      for ex, (vSenStr, align_info) in enumerate(zip(vCorpusStr, gold_info)):
-        N = len(vSenStr)
-        alignment = align_info['alignment']
+  if len(SNRs) > 0:
+    for snr in SNRs:      
+      for rep in range(nReps):
+        noiseLevel = 10 * 10. ** (-snr / 20.) 
+        for ex, (vSenStr, align_info) in enumerate(zip(vCorpusStr, gold_info)):
+          N = len(vSenStr)
+          alignment = align_info['alignment']
+
+          if args.feat_type == 'synthetic':
+            vSen = np.zeros((N, imgFeatDim))
+            for i in range(N):
+              vWord = vSenStr[i]
+              vSen[i] = centroids[concept2idx[vWord]] + noiseLevel * np.random.normal(size=(imgFeatDim,)) 
+                  
+          vCorpus['arr_'+str(ex)] = vSen
 
         if args.feat_type == 'synthetic':
-          vSen = np.zeros((N, imgFeatDim))
-          for i in range(N):
-            vWord = vSenStr[i]
-            vSen[i] = centroids[concept2idx[vWord]] + noiseLevel * np.random.normal(size=(imgFeatDim,)) 
-                
-        vCorpus['arr_'+str(ex)] = vSen
+          np.savez(imageFeatureFile + '_SNR_{}dB_{}.npz'.format(snr, rep), **vCorpus)
+          with open(conceptIdxFile, 'w') as f:
+            json.dump(concept2idx, f, indent=4, sort_keys=True)
 
-      if args.feat_type == 'synthetic':
-        np.savez(imageFeatureFile + '_SNR_{}dB_{}.npz'.format(snr, rep), **vCorpus)
-        with open(conceptIdxFile, 'w') as f:
-          json.dump(concept2idx, f, indent=4, sort_keys=True)
 
 #----------------#
 # Model Training #
@@ -160,7 +165,7 @@ if 1 in tasks:
   print('Start training the model ...')
   #model = ImagePhoneHMMWordDiscoverer(speechFeatureFile, imageFeatureFile, modelConfigs, modelName='exp/dec_30_mscoco/image_phone') 
   begin_time = time.time()
-  if args.feat_type == 'synthetic':
+  if args.feat_type == 'synthetic' and len(SNRs) > 0:
     for snr in SNRs:
       for rep in range(nReps):
         modelName = expDir + 'image_phone_{}dB_{}'.format(snr, rep)
@@ -182,11 +187,12 @@ if 1 in tasks:
     elif args.model_type == 'two-layer':
       model = ImagePhoneHMMDNNWordDiscoverer(speechFeatureFile, imageFeatureFile, modelConfigs, modelName=modelName)
 
-    model.trainUsingEM(20, writeModel=True, debug=False)
+    model.trainUsingEM(20, writeModel=False, debug=False)
     print('Take %.5s s to finish training the model !' % (time.time() - begin_time))
     #model.simulatedAnnealing(numIterations=100, T0=1., debug=False)
     model.printAlignment(modelName+'_alignment', debug=False) 
     print('Take %.5s s to finish decoding !' % (time.time() - begin_time))
+    # model.printModel(modelName)
 
 #------------#
 # Evaluation #
@@ -251,8 +257,8 @@ if 2 in tasks:
 if 3 in tasks:
   start_time = time.time()
   filePrefix = expDir + '_'.join(['image2phone', args.dataset, args.model_type, args.feat_type])
-  alignment_to_word_classes(goldAlignmentFile, phoneCaptionFile, word_class_file='_'.join([filePrefix, 'words.class']), include_null=True)
-  alignment_to_word_units(predAlignmentFile, phoneCaptionFile, word_unit_file='_'.join([filePrefix, 'word_units.wrd']), phone_unit_file='_'.join([filePrefix, 'phone_units.phn']), include_null=True) 
+  alignment_to_word_classes(goldAlignmentFile, phoneCaptionFile, imageConceptFile, word_class_file='_'.join([filePrefix, 'words.class']), include_null=True)
+  alignment_to_word_units(predAlignmentFile, phoneCaptionFile, imageConceptFile, word_unit_file='_'.join([filePrefix, 'word_units.wrd']), phone_unit_file='_'.join([filePrefix, 'phone_units.phn']), include_null=True) 
   print('Finish converting files for ZSRC evaluations after %.5f s' % (time.time() - start_time))
 
 #---------------#

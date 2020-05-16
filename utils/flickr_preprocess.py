@@ -99,9 +99,9 @@ class Flickr_Preprocessor(object):
         print(i, i_ex, is_train, phrase_types[i])
         pair = {
                   'index': i_ex,
-                  'image_id': img_id,
-                  'image_filename:': capt_id.split('.')[0] + '.jpg',
-                  'capt_id': capt_id, 
+                  'image_id': cur_capt_id.split('.')[0].split('_')[0],
+                  'image_filename:': cur_capt_id.split('.')[0] + '.jpg',
+                  'capt_id': cur_capt_id, 
                   'phrases': phrases,
                   'bbox': bboxes,
                   'is_train': is_train,
@@ -109,7 +109,7 @@ class Flickr_Preprocessor(object):
                  }
         i_ex += 1
         pairs.append(pair)
-        phrases = [phrase, phones]
+        phrases = [[phrase, phones]]
         bboxes = [bbox]
         img_concepts = [phrase_types[i].split()[1]]
         cur_capt_id = capt_id
@@ -254,32 +254,55 @@ class Flickr_Preprocessor(object):
     with open(out_file, 'w') as f:
       json.dump(align_info, f, indent=4, sort_keys=True)
 
-  def create_captions(self, data_file, out_file='flickr30k_captions'):
+  def create_captions(self, data_file, out_file='flickr30k_captions', split=False):
     word_captions = []
     phone_captions = [] 
-    with open(data_file, 'w') as f:
+    with open(data_file, 'r') as f:
       data_info = json.load(f)
 
-    with open(out_file+'_words_train.txt', 'w') as fwtr,\
-         open(out_file+'_phones_train.txt', 'w') as fptr,\
-         open(out_file+'_words_test.txt', 'w') as fwtx,\
-         open(out_file+'_phones_test.txt', 'w') as fptx:
-      for i, datum_info in enumerate(data_info):
-        phrases = datum_info['phrases']
-        img_concepts = datum_info['image_concepts']
-        phrases = [phr for i_phr, phr in enumerate(phrases) if img_concepts[i_phr] != NONVISUAL]
-        is_train = datum_info['is_train']
-        word_caption = []
-        phone_caption = []
-        for i_phr, phrase in enumerate(phrases):
-          word_caption += phrase[0]
-          phone_caption += phrase[1]
-        if is_train:
-          fwtr.write('\n'.join(' '.join(word_caption)))
-          fptr.write('\n'.join(' '.join(phone_caption)))      
-        else:
-          fwtx.write('\n'.join(' '.join(word_caption)))
-          fptx.write('\n'.join(' '.join(phone_caption)))      
+    if split:
+      with open(out_file+'_words_train.txt', 'w') as fwtr,\
+           open(out_file+'_phones_train.txt', 'w') as fptr,\
+           open(out_file+'_words_test.txt', 'w') as fwtx,\
+           open(out_file+'_phones_test.txt', 'w') as fptx:
+        for i, datum_info in enumerate(data_info):
+          phrases = datum_info['phrases']
+          img_concepts = datum_info['image_concepts']
+          # print(len(phrases), len(img_concepts))
+          # print(phrases)
+          # print(img_concepts)
+          phrases = [phr for i_phr, phr in enumerate(phrases) if img_concepts[i_phr] != NONVISUAL]
+          is_train = datum_info['is_train']
+          word_caption = []
+          phone_caption = []
+          for i_phr, phrase in enumerate(phrases):
+            word_caption += phrase[0]
+            phone_caption += phrase[1]
+          if is_train:
+            fwtr.write(' '.join(word_caption)+'\n')
+            fptr.write(' '.join(phone_caption)+'\n') 
+          else:
+            fwtx.write(' '.join(word_caption)+'\n')
+            fptx.write(' '.join(phone_caption)+'\n') 
+    else:
+      with open(out_file+'_words.txt', 'w') as fw,\
+           open(out_file+'_phones.txt', 'w') as fp:
+        for i, datum_info in enumerate(data_info):
+          phrases = datum_info['phrases']
+          img_concepts = datum_info['image_concepts']
+          # print(len(phrases), len(img_concepts))
+          # print(phrases)
+          # print(img_concepts)
+          phrases = [phr for i_phr, phr in enumerate(phrases) if img_concepts[i_phr] != NONVISUAL]
+          is_train = datum_info['is_train']
+          word_caption = []
+          phone_caption = []
+          for i_phr, phrase in enumerate(phrases):
+            word_caption += phrase[0]
+            phone_caption += phrase[1]
+        
+          fw.write(' '.join(word_caption)+'\n')
+          fp.write(' '.join(phone_caption)+'\n')   
   
   def train_test_split(self, split_file, out_file='flickr30k_phrase'):
     if split_file:
@@ -329,6 +352,48 @@ class Flickr_Preprocessor(object):
           ftx.write(line)
         else:
           ftr.write(line) 
+  
+  def cleanup_datafile(self, data_file, out_file='flickr30k_info.json'):
+    with open(data_file, 'r') as f:
+      data_info = json.load(f)
+
+    new_data_info = []
+    prev_capt_id = ''
+    prev_img_file = ''
+    prev_img_id = ''
+
+    # XXX
+    for i, datum in enumerate(data_info):
+      if i == 0:
+        new_datum = {
+          'bbox': datum['bbox'],
+          'phrases': datum['phrases'],
+          'capt_id': '2571096893_694ce79768.jpg_1',
+          'image_concepts': datum['image_concepts'],
+          'image_filename': '2571096893_694ce79768.jpg',
+          'image_id': '2571096893',
+          'index': 0,
+          'is_train': True,
+          } 
+        new_data_info.append(new_datum)
+      else:
+        new_datum = {
+          'bbox': datum['bbox'],
+          'phrases': [[datum['phrases'][0], datum['phrases'][1]]] + datum['phrases'][2:],
+          'capt_id': prev_capt_id,
+          'image_concepts': datum['image_concepts'],
+          'image_filename': prev_img_file,
+          'image_id': prev_img_id,
+          'index': i,
+          'is_train': datum['is_train']
+          }
+        new_data_info.append(new_datum)
+      prev_capt_id = datum['capt_id']
+      prev_img_file = datum['image_filename:']
+      prev_img_id = datum['image_id']
+
+    with open(out_file, 'w') as f:
+      json.dump(new_data_info, f, indent=4, sort_keys=True)
 
 def compute_word_similarity(word_senses1, word_senses2, sim_type='wup+res', pos='n', ic=None):
   scores = []
@@ -358,12 +423,19 @@ def compute_word_similarity(word_senses1, word_senses2, sim_type='wup+res', pos=
   return max(scores)
 
 if __name__ == '__main__':
-  tasks = [1] 
+  tasks = [3] 
   preproc = Flickr_Preprocessor('../data/flickr30k/flickr30k_phrases_bboxes.txt', '../data/flickr30k/flickr30k_phrase_types.txt', None, concept_class_file='../data/flickr30k/flickr_classnames_original.txt')
-  
+  data_file = '../data/flickr30k/flickr30k_info.json'
+
   if 0 in tasks:
     preproc.extract_word_to_concept_map()
   if 1 in tasks:
     preproc.extract_info(word2concept_file='../data/flickr30k/word2concept.json', split_file='../data/flickr30k/flickr8k_test.txt')
   if 2 in tasks:
     preproc.train_test_split(split_file='../data/flickr30k/flickr8k_test.txt')
+  if 3 in tasks:
+    preproc.create_captions(data_file)
+  if 4 in tasks:
+    preproc.create_gold_alignment(data_file)
+  if 5 in tasks:
+    preproc.cleanup_datafile(data_file)

@@ -52,17 +52,9 @@ class ImagePhoneGaussianHMMWordDiscoverer:
     nImages = 0
 
     vNpz = np.load(imageFeatFile)
-    vCorpus = [vNpz[k] for k in sorted(vNpz.keys(), key=lambda x:int(x.split('_')[-1]))]
-    if self.normalize_vfeat:
-      vCorpus = [(vSen.T / np.linalg.norm(vSen, ord=2, axis=-1)).T for vSen in vCorpus]  
-      if debug:
-        print(np.linalg.norm(vCorpus[0], ord=2, axis=-1))
-    if debug:
-      print(len(vCorpus))
-      print(vCorpus[0].shape)
-    
     # XXX
-    self.vCorpus = [vNpz[k] for k in sorted(vNpz, key=lambda x:int(x.split('_')[-1]))]
+    self.vCorpus = [vNpz[k] for k in sorted(vNpz.keys(), key=lambda x:int(x.split('_')[-1]))[:30]]
+    
     if self.hasNull:
       # Add a NULL concept vector
       self.vCorpus = [np.concatenate((np.zeros((1, self.imageFeatDim)), vfeat), axis=0) for vfeat in self.vCorpus]   
@@ -92,7 +84,7 @@ class ImagePhoneGaussianHMMWordDiscoverer:
     self.audioFeatDim = nTypes
 
     # XXX
-    for aSenStr in aCorpusStr:
+    for aSenStr in aCorpusStr[:30]:
       T = len(aSenStr)
       aSen = np.zeros((T, self.audioFeatDim))
       for t, phn in enumerate(aSenStr):
