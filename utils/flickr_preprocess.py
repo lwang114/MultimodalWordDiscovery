@@ -59,17 +59,12 @@ class Flickr_Preprocessor(object):
 
     f_ins = open(self.instance_file, 'r')
     cur_capt_id = ''
-    phrases = []
-    bboxes = []
-    img_concepts = []
     i = -1
     i_ex = 0
     for line in f_ins:
       parts = line.split()
       img_id = parts[0].split('_')[0]
       capt_id = parts[0]
-      if i == -1:
-        cur_capt_id = capt_id
       # XXX
       # if i < 24935 * 5:
       #   i += 1
@@ -86,33 +81,30 @@ class Flickr_Preprocessor(object):
           
         phones += [ph if ph[0] != '\u02c8' else ph[1:] for ph in g2p_result]
 
-      if capt_id == cur_capt_id:
-        phrases.append([phrase, phones])
-        bboxes.append(bbox)
-        img_concepts.append(phrase_types[i].split()[1])
-      else:
+      if capt_id != cur_capt_id:
         # Add train/test split information
         if img_id in test_ids:
           is_train = False
         else:
           is_train = True
         print(i, i_ex, is_train, phrase_types[i])
-        pair = {
+        pairs.append({
                   'index': i_ex,
-                  'image_id': cur_capt_id.split('.')[0].split('_')[0],
-                  'image_filename:': cur_capt_id.split('.')[0] + '.jpg',
-                  'capt_id': cur_capt_id, 
-                  'phrases': phrases,
-                  'bbox': bboxes,
+                  'image_id': capt_id.split('.')[0].split('_')[0],
+                  'image_filename:': capt_id.split('.')[0] + '.jpg',
+                  'capt_id': capt_id, 
+                  'phrases': []
+                  'bbox': [],
                   'is_train': is_train,
-                  'image_concepts': img_concepts
-                 }
+                  'image_concepts': []
+                 })
         i_ex += 1
-        pairs.append(pair)
-        phrases = [[phrase, phones]]
-        bboxes = [bbox]
-        img_concepts = [phrase_types[i].split()[1]]
         cur_capt_id = capt_id
+
+      pairs[i_ex-1]['phrases'].append([phrase, phones])
+      pairs[i_ex-1]['bbox'].append(bbox)
+      pairs[i_ex-1]['image_concepts'].append(phrase_types[i].split()[1])
+      
     f_ins.close()
     
     with open(out_file, 'w') as f:

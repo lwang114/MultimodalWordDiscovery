@@ -207,3 +207,39 @@ if 2 in tasks:
         weight_dict['arr_'+str(i)] = p.cpu().detach().numpy()
         i += 1
     np.savez('%s/classifier_weights.npz' % args.exp_dir, **weight_dict)
+
+#------------------------------#
+# Image Feature Postprocessing #
+#------------------------------#
+if 3 in tasks:
+  test_region_file = '../data/flickr30k/flickr30k_phrase_types.txt'
+  image_feat_file = args.exp_dir + 'embed1_all.npz'
+  new_image_feat_file = args.exp_dir + 'embed1_all_processed.npz'
+  new_image_label_file = args.exp_dir + 'image_labels.txt'
+
+  image_feats = np.load(image_feat_file)
+  f = open(test_region_file, 'r')
+  new_image_feats = {}
+  new_image_labels = []
+  i_old = 0
+  i_new = 0
+  prev_img_id = ''
+  for line in f:
+    img_id = line.split()[0].split('_')[0]
+    label = line.split()[-1]
+    if img_id != prev_img_id:
+      new_image_feats['arr_' + str(i_new)] = []
+      new_image_labels.append('')
+      i_new += 1
+      prev_img_id = img_id
+    feat_id = 'arr_' + str(i_old)
+    image_feat = image_feats[feat_id]
+    new_image_feats['arr_' + str(i_new - 1)].append(image_feat)    
+    new_image_labels[i_new - 1] += label + ' '
+    i_old += 1
+
+  f.close()
+  
+  np.savez(new_image_feat_file, **new_image_feats)
+  with open(new_image_label_file, 'w') as f:
+    f.write('\n'.join(new_image_labels))
