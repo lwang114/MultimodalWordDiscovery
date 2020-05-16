@@ -66,9 +66,9 @@ class Flickr_Preprocessor(object):
       img_id = parts[0].split('_')[0]
       capt_id = parts[0]
       # XXX
-      # if i < 24935 * 5:
-      #   i += 1
-      # continue 
+      if i < 24935 * 5:
+        i += 1
+        continue 
       i += 1
 
       phrase = parts[1:-4]
@@ -93,7 +93,7 @@ class Flickr_Preprocessor(object):
                   'image_id': capt_id.split('.')[0].split('_')[0],
                   'image_filename:': capt_id.split('.')[0] + '.jpg',
                   'capt_id': capt_id, 
-                  'phrases': []
+                  'phrases': [],
                   'bbox': [],
                   'is_train': is_train,
                   'image_concepts': []
@@ -415,7 +415,7 @@ def compute_word_similarity(word_senses1, word_senses2, sim_type='wup+res', pos=
   return max(scores)
 
 if __name__ == '__main__':
-  tasks = [3] 
+  tasks = [1] 
   preproc = Flickr_Preprocessor('../data/flickr30k/flickr30k_phrases_bboxes.txt', '../data/flickr30k/flickr30k_phrase_types.txt', None, concept_class_file='../data/flickr30k/flickr_classnames_original.txt')
   data_file = '../data/flickr30k/flickr30k_info.json'
 
