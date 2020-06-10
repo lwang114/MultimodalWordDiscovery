@@ -1,5 +1,6 @@
 # MultimodalWordDiscovery
-This repository contains the code for the submission ``An HMM-DNN Translation Model for Multimodal Word Discovery from Image Regions and Phone Sequences''.
+This repository contains the code for the submission ``A DNN-HMM-DNN Hybrid Model for Discovering Word-like Units from
+Spoken Captions and Image Regions''.
 
 ### How to run it
 Requirement: Pytorch 0.3 for pretraining the VGG 16/Res 34 net
