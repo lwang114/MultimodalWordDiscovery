@@ -1,6 +1,6 @@
 # MultimodalWordDiscovery
-This repository contains the code for the paper [``A DNN-HMM-DNN Hybrid Model for Discovering Word-like Units from
-Spoken Captions and Image Regions''](https://www.researchgate.net/publication/343218251_A_DNN-HMM-DNN_Hybrid_Model_for_Discovering_Word-like_Units_from_Spoken_Captions_and_Image_Regions).
+This repository contains the code for the paper ["A DNN-HMM-DNN Hybrid Model for Discovering Word-like Units from
+Spoken Captions and Image Regions"](https://www.researchgate.net/publication/343218251_A_DNN-HMM-DNN_Hybrid_Model_for_Discovering_Word-like_Units_from_Spoken_Captions_and_Image_Regions).
 
 ### How to run it
 Requirement: Pytorch 0.3 for pretraining the VGG 16/Res 34 net
