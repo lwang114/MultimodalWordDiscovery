@@ -5,7 +5,7 @@ Spoken Captions and Image Regions''](https://www.researchgate.net/publication/34
 ### How to run it
 Requirement: Pytorch 0.3 for pretraining the VGG 16/Res 34 net
   
-1. Download the MSCOCO 2k, MSCOCO 20k image features from [here](https://drive.google.com/file/d/14iShQBAc_Y1-QnPfB3Sit2YC6ZnuMJIM/view?usp=sharing) and put them under the directory data/mscoco
+1. Download the MSCOCO 2k image features from [here](https://drive.google.com/file/d/14iShQBAc_Y1-QnPfB3Sit2YC6ZnuMJIM/view?usp=sharing) and the MSCOCO 2k phone sequence from [here](https://drive.google.com/file/d/12pqSzroLjQ9hoTEZqePOZUr0EmQCDwSa/view?usp=sharing), and put them under the directory data/mscoco
 2. Download the pretrained image classifier weights from [here](https://drive.google.com/file/d/1nHXpvYrOgjpu63B4Ylckrf_iMuSTDIix/view?usp=sharing)
 3. Example: Run the linear softmax model with Res 34 image features on MSCOCO 2k: 
 ```
